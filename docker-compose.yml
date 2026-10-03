@@ -2,6 +2,12 @@
 # Usage: docker compose up -d db
 #   DATABASE_URL=postgres://blade:blade@localhost:5433/bladeandbrush npm run db:migrate
 #   DATABASE_URL=postgres://blade:blade@localhost:5433/bladeandbrush npm run server
+#
+# API in Docker (hackathon-friendly, no cloud deploy needed):
+#   docker compose up --build api
+#   DATABASE_URL=postgres://blade:blade@localhost:5433/bladeandbrush npm run db:migrate
+# The game talks to it at http://localhost:3001/api
+# (VITE_GALLERY_API=http://localhost:3001/api npm run dev).
 services:
   db:
     image: postgres:16
@@ -13,6 +19,18 @@ services:
       POSTGRES_DB: bladeandbrush
     volumes:
       - gallery-pgdata:/var/lib/postgresql/data
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    ports:
+      - '3001:3001'
+    environment:
+      DATABASE_URL: postgres://blade:blade@db:5432/bladeandbrush
+      PORT: '3001'
+    depends_on:
+      - db
 
 volumes:
   gallery-pgdata:

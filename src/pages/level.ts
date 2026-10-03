@@ -69,7 +69,10 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
   const banner = h('div', { class: 'hud-banner', hidden: true, role: 'status' }, h('p', {}, 'Out of ink.'), retry);
   const reveal = h('span', { class: 'reveal-fill' });
   const revealBar = h('div', { class: 'reveal-bar', 'aria-hidden': 'true' }, reveal);
-  const frame = h('div', { class: 'frame' }, canvas, hudTool, banner, revealBar);
+  // the red seal pressed onto the painting when the poem is complete
+  const stamp = h('div', { class: 'stamp', 'aria-hidden': 'true' }, seal('完成', 'stamp-seal'));
+  let winTimer = 0;
+  const frame = h('div', { class: 'frame' }, canvas, hudTool, banner, revealBar, stamp);
   let tip = '';
 
   function regenerate(): void {
@@ -79,6 +82,8 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
     driver = new ActionDriver();
     used = 0;
     won = false;
+    clearTimeout(winTimer);
+    stamp.classList.remove('on');
     complete?.close();
     banner.hidden = true;
     fx.attach(world);
@@ -150,17 +155,23 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
   setRadius(radius);
 
   // ---- poem, goals, ink ----
-  const poem = h('p', { class: 'poem level-poem' });
-  level.poem.forEach((line, i) => {
-    if (i) poem.append(h('br'));
-    poem.append(line);
-  });
-  const goalRows = level.goals.map((g) => {
+  // Each poem line is a verse tied to the goal at the same position. A line with no goal of its own lights
+  // up when every goal is met, and a goal with no line is listed by its description.
+  const verses = Array.from({ length: Math.max(level.poem.length, level.goals.length) }, (_, i) => {
+    const goal = level.goals[i];
+    const line = level.poem[i];
     const fill = h('span', { class: 'goal-fill' });
-    const row = h('li', { class: 'goal' }, h('span', { class: 'goal-text' }, describeGoal(g)), h('span', { class: 'goal-bar' }, fill));
-    return { g, row, fill };
+    const row = h(
+      'li',
+      { class: 'verse' },
+      h('span', { class: 'verse-text' }, line ?? describeGoal(goal)),
+      line !== undefined && goal ? h('span', { class: 'verse-goal' }, describeGoal(goal)) : '',
+      goal ? h('span', { class: 'goal-bar' }, fill) : '',
+    );
+    return { goal, row, fill };
   });
-  const goalList = h('ul', { class: 'goals' }, ...goalRows.map((r) => r.row));
+  const poemBar = (inkNode: HTMLElement) =>
+    h('div', { class: 'poem-bar' }, h('ol', { class: 'verses' }, ...verses.map((v) => v.row)), inkNode);
   const pips = Array.from({ length: level.actionBudget }, () => h('i', { class: 'pip' }));
   const inkCount = h('span', { class: 'ink-count' });
   const ink = h('div', { class: 'ink', role: 'img' }, h('span', { class: 'ink-label' }, 'Ink'), h('span', { class: 'pips' }, ...pips), inkCount);
@@ -198,16 +209,21 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
   function checkGoals(): void {
     const result = scan(world);
     let all = true;
-    for (const r of goalRows) {
-      const { pass, progress } = evaluateGoal(result, r.g);
+    for (const v of verses) {
+      if (!v.goal) continue;
+      const { pass, progress } = evaluateGoal(result, v.goal);
       all &&= pass;
-      r.row.classList.toggle('met', pass);
-      r.fill.style.width = `${Math.round(progress * 100)}%`;
+      v.row.classList.toggle('met', pass);
+      v.fill.style.width = `${Math.round(progress * 100)}%`;
     }
+    for (const v of verses) if (!v.goal) v.row.classList.toggle('met', all);
     if (all && changed() && !won) {
       won = true;
-      complete!.node.hidden = false;
-      requestAnimationFrame(() => complete!.open());
+      stamp.classList.add('on'); // the seal lands first, then the scroll unrolls
+      winTimer = window.setTimeout(() => {
+        complete!.node.hidden = false;
+        complete!.open();
+      }, 1100);
     }
   }
 
@@ -243,7 +259,7 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
     tuning.append(h('details', {}, h('summary', {}, g.name), rows));
   }
 
-  stage.append(frame, status, complete.node);
+  stage.append(poemBar(ink), frame, status, complete.node);
   root.replaceChildren(
     levelHeader(level.id),
     h(
@@ -253,8 +269,7 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
       h(
         'aside',
         { class: 'controls' },
-        panel('Poem', poem, goalList, ink),
-        panel('Abilities', bar.node, h('label', { class: 'row brush-row' }, h('span', {}, 'Brush size'), radiusInput, radiusDot)),
+                panel('Abilities', bar.node, h('label', { class: 'row brush-row' }, h('span', {}, 'Brush size'), radiusInput, radiusDot)),
         panel(
           'Painting',
           paramRows,
@@ -301,6 +316,7 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
   return () => {
     stop();
     fx.detach();
+    clearTimeout(winTimer);
     removeEventListener('keydown', onKey);
   };
 }

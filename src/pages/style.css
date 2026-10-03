@@ -992,51 +992,6 @@ input[type='number'] {
 
 /* ---------- Level page ---------- */
 
-.level-poem {
-  margin: 0 0 10px;
-  font-size: 16px;
-  text-align: center;
-}
-
-.goals {
-  margin: 0 0 10px;
-  padding: 0;
-  list-style: none;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  font-size: 13px;
-}
-
-.goal-text::before {
-  content: '◇ ';
-  color: var(--ink-soft);
-}
-
-.goal.met .goal-text::before {
-  content: '◆ ';
-  color: var(--seal);
-}
-
-.goal-bar {
-  display: block;
-  height: 3px;
-  margin-top: 3px;
-  background: var(--ink-faint);
-}
-
-.goal-fill {
-  display: block;
-  height: 100%;
-  width: 0;
-  background: var(--ink-soft);
-  transition: width 0.4s;
-}
-
-.goal.met .goal-fill {
-  background: var(--seal);
-}
-
 .ink {
   margin: 0;
   font-size: 13px;
@@ -1385,4 +1340,146 @@ input[type='number'] {
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   align-items: start;
   gap: 14px;
+}
+
+/* ---------- Level page: poem bar and win stamp ---------- */
+
+.stage {
+  --verse-green: #2f7d4f;
+}
+
+.poem-bar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px 24px;
+  flex-wrap: wrap;
+  padding: 10px 16px 12px;
+  margin-bottom: 8px;
+  background: rgba(255, 252, 244, 0.55);
+  border: 1px solid var(--line);
+  border-top: 4px solid var(--silk);
+}
+
+.verses {
+  flex: 1 1 420px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 8px 22px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.verse {
+  position: relative;
+  display: grid;
+  gap: 2px;
+  padding: 2px 4px 2px 22px;
+  color: var(--ink);
+  background: linear-gradient(90deg, rgba(47, 125, 79, 0.16), rgba(47, 125, 79, 0.04)) no-repeat 0 0 / 0% 100%;
+  transition: background-size 0.9s var(--ease-scroll), color 0.5s;
+}
+
+.verse::before {
+  content: '◇';
+  position: absolute;
+  left: 4px;
+  top: 2px;
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+
+.verse-text {
+  font: 400 19px/1.35 var(--font-brush);
+  letter-spacing: 0.06em;
+}
+
+.verse-goal {
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+
+.verse .goal-bar {
+  height: 3px;
+  margin-top: 3px;
+  background: var(--ink-faint);
+}
+
+.verse .goal-fill {
+  background: var(--ink-soft);
+  transition: width 0.4s, background-color 0.4s;
+}
+
+.verse.met {
+  color: var(--verse-green);
+  background-size: 100% 100%;
+}
+
+.verse.met::before {
+  content: '✓';
+  font-weight: 700;
+  color: var(--verse-green);
+}
+
+.verse.met .verse-goal {
+  color: var(--verse-green);
+}
+
+.verse.met .goal-fill {
+  width: 100% !important;
+  background: var(--verse-green);
+}
+
+.poem-bar .ink {
+  flex: 0 1 auto;
+  margin-top: 4px;
+}
+
+.stamp {
+  position: absolute;
+  right: 6%;
+  bottom: 14%;
+  opacity: 0;
+  pointer-events: none;
+  transform-origin: 50% 50%;
+}
+
+.stamp.on {
+  animation: stamp-down 0.55s cubic-bezier(0.2, 0.9, 0.3, 1.15) forwards;
+}
+
+.stamp-seal {
+  min-width: 64px;
+  padding: 8px 9px;
+  font-size: 36px;
+  gap: 2px;
+  mix-blend-mode: multiply;
+  box-shadow:
+    inset 0 0 0 3px var(--seal),
+    inset 0 0 0 5px rgba(255, 247, 238, 0.7),
+    0 0 0 2px rgba(181, 38, 43, 0.25);
+}
+
+/* an ink ring spreads out from where the seal lands */
+.stamp.on::after {
+  content: '';
+  position: absolute;
+  inset: -6px;
+  border: 2px solid rgba(181, 38, 43, 0.55);
+  border-radius: 6px;
+  animation: stamp-ring 0.8s 0.3s ease-out forwards;
+  opacity: 0;
+}
+
+@keyframes stamp-down {
+  0% { opacity: 0; transform: rotate(-14deg) scale(2.6); }
+  55% { opacity: 1; transform: rotate(-9deg) scale(0.9); }
+  75% { transform: rotate(-9deg) scale(1.04); }
+  100% { opacity: 0.94; transform: rotate(-9deg) scale(1); }
+}
+
+@keyframes stamp-ring {
+  from { opacity: 0.8; transform: scale(1); }
+  to { opacity: 0; transform: scale(1.5); }
 }

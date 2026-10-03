@@ -95,7 +95,7 @@ describe('rigid pieces', () => {
     world.forCircle(30, 26, 4, (x, y) => world.el[y * world.w + x] === El.EMPTY && world.set(x, y, LEAF));
     const leaves = count(world, LEAF);
     const top = rowsOf(world, LEAF).top;
-    stroke(world, 'null', [[30, 44]], { radius: 2 });
+    stroke(world, 'null', [[24, 44], [36, 44]], { radius: 2 });
     run(world, 200);
     expect(count(world, LEAF)).toBe(leaves);
     expect(rowsOf(world, LEAF).top).toBeGreaterThan(top + 3);

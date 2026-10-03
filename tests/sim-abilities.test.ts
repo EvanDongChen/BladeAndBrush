@@ -9,12 +9,49 @@ import { step } from '../src/sim/step';
 import { blueprintWorld } from './helpers';
 import { boxWorld, count, fillRect, run, stroke } from './sim-helpers';
 
+describe('every ability is a skill shot', () => {
+  const ids = ['slash', 'fire', 'water', 'null', 'push'];
+  const scene = () => {
+    const world = boxWorld(96, 48);
+    fillRect(world, 10, 30, 30, 46, El.ROCK);
+    fillRect(world, 40, 38, 55, 46, El.TREE);
+    fillRect(world, 60, 42, 80, 46, El.ROCK);
+    return world;
+  };
+
+  for (const id of ids) {
+    it(id + ': nothing happens while aiming or on a plain click', () => {
+      const world = scene();
+      const before = world.el.slice();
+      const driver = new ActionDriver();
+      const tick = () => {
+        driver.apply(world);
+        step(world);
+      };
+      driver.begin(id, { x: 5, y: 40, speed: 0 }, { radius: 5 });
+      tick();
+      driver.move({ x: 50, y: 40, speed: 20 });
+      tick();
+      driver.move({ x: 90, y: 44, speed: 20 });
+      tick();
+      expect(world.el).toEqual(before); // aiming
+      driver.end();
+
+      const clicked = scene();
+      stroke(clicked, id, [[45, 40]], { radius: 5 });
+      run(clicked, 5);
+      expect(clicked.el).toEqual(before); // a click is cancelled
+    });
+  }
+});
+
 describe('fire ability', () => {
-  it('lights trees, not rock', () => {
+  it('a line of fire lights trees, not rock', () => {
     const world = boxWorld();
     fillRect(world, 10, 40, 20, 46, El.TREE);
     fillRect(world, 30, 40, 40, 46, El.ROCK);
-    stroke(world, 'fire', [[15, 43], [35, 43]], { radius: 3 });
+    stroke(world, 'fire', [[8, 43], [42, 43]], { radius: 3 });
+    run(world, 2);
     expect(count(world, El.FIRE)).toBeGreaterThan(5);
     expect(count(world, El.ROCK)).toBe(64 + 11 * 7);
     run(world, 800);
@@ -24,13 +61,15 @@ describe('fire ability', () => {
 });
 
 describe('water ability', () => {
-  it('pours more the longer it is held', () => {
+  it('drops a sheet of water along the line; a longer line drops more', () => {
     const short = boxWorld();
     const long = boxWorld();
-    stroke(short, 'water', [[30, 5]], { radius: 3 }, 10);
-    stroke(long, 'water', [[30, 5]], { radius: 3 }, 60);
+    stroke(short, 'water', [[10, 5], [20, 5]], { radius: 3 });
+    stroke(long, 'water', [[10, 5], [50, 5]], { radius: 3 });
+    run(short, 3);
+    run(long, 3);
     expect(count(short, El.WATER)).toBeGreaterThan(10);
-    expect(count(long, El.WATER)).toBeGreaterThan(count(short, El.WATER) * 3);
+    expect(count(long, El.WATER)).toBeGreaterThan(count(short, El.WATER) * 2);
   });
 });
 
@@ -38,24 +77,21 @@ describe('push ability', () => {
   const xRange = (world: World, el: number) => {
     let min = Infinity;
     let max = -1;
-    let sum = 0;
-    let n = 0;
     for (let i = 0; i < world.size - world.w; i++) {
       if (world.el[i] !== el) continue;
       const x = i % world.w;
       min = Math.min(min, x);
       max = Math.max(max, x);
-      sum += x;
-      n++;
     }
-    return { min, max, mean: sum / n };
+    return { min, max };
   };
 
-  it('a drag flings loose earth far along the drag, and it lands back as earth', () => {
+  it('flings loose earth far along the line, and it lands back as earth', () => {
     const world = boxWorld(200, 64);
     fillRect(world, 20, 50, 34, 62, EARTH);
     const earth = count(world, EARTH);
-    stroke(world, 'push', [[16, 56, 0], [24, 56, 20], [32, 56, 20], [40, 56, 20]], { radius: 7 });
+    stroke(world, 'push', [[14, 56], [40, 56]], { radius: 7 });
+    run(world, 1);
     expect(count(world, DEBRIS)).toBeGreaterThan(0);
     run(world, 300);
     expect(count(world, DEBRIS)).toBe(0);
@@ -67,7 +103,8 @@ describe('push ability', () => {
     const world = boxWorld(200, 64);
     fillRect(world, 30, 20, 37, 62, El.ROCK); // pillar standing on the floor
     const rock = count(world, El.ROCK);
-    stroke(world, 'push', [[24, 24, 0], [30, 24, 20], [36, 24, 20]], { radius: 6 });
+    stroke(world, 'push', [[22, 24], [40, 24]], { radius: 6 });
+    run(world, 1);
     expect(bodyCount(world)).toBeGreaterThan(0);
     run(world, 400);
     expect(bodyCount(world)).toBe(0);
@@ -80,28 +117,13 @@ describe('push ability', () => {
     fillRect(world, 60, 30, 199, 62, El.ROCK); // a big block
     const rock = count(world, El.ROCK);
     const before = world.el.slice();
-    stroke(world, 'push', [[64, 33]], { radius: 10 }); // click-blast at its corner
+    stroke(world, 'push', [[50, 33], [75, 33]], { radius: 10 }); // into its corner
     run(world, 400);
     expect(count(world, DEBRIS)).toBe(0);
     expect(count(world, El.ROCK)).toBe(rock);
     let outside = 0;
     for (let i = 0; i < world.size; i++) if (world.el[i] === El.ROCK && before[i] !== El.ROCK) outside++;
     expect(outside).toBeGreaterThan(20);
-  });
-
-  it('a click without dragging blasts outward in every direction', () => {
-    const world = boxWorld(200, 64);
-    fillRect(world, 90, 50, 110, 62, EARTH);
-    fillRect(world, 60, 40, 140, 49, El.WATER);
-    const before = world.countByElement().slice();
-    stroke(world, 'push', [[100, 52]], { radius: 8 });
-    run(world, 400);
-    const after = world.countByElement();
-    expect(after[EARTH]).toBe(before[EARTH]);
-    expect(after[El.WATER]).toBe(before[El.WATER]);
-    const spread = xRange(world, EARTH);
-    expect(spread.min).toBeLessThan(85);
-    expect(spread.max).toBeGreaterThan(115);
   });
 });
 
@@ -129,7 +151,8 @@ describe('determinism with every ability', () => {
       [4, () => driver.move({ x: 260, y: 236, speed: 11 })],
       [5, () => driver.end()],
       [10, () => driver.begin('water', { x: 160, y: 60, speed: 0 }, { radius: 5 })],
-      [70, () => driver.end()],
+      [11, () => driver.move({ x: 300, y: 50, speed: 9 })],
+      [12, () => driver.end()],
       [80, () => driver.begin('fire', { x: 500, y: 230, speed: 0 }, { radius: 6 })],
       [82, () => driver.move({ x: 700, y: 230, speed: 20 })],
       [83, () => driver.end()],
@@ -137,14 +160,17 @@ describe('determinism with every ability', () => {
       [91, () => driver.move({ x: 860, y: 190, speed: 4 })],
       [92, () => driver.end()],
       [95, () => driver.begin('null', { x: 400, y: 220, speed: 0 }, { radius: 6 })],
-      [96, () => driver.end()],
+      [96, () => driver.move({ x: 440, y: 200, speed: 9 })],
+      [97, () => driver.end()],
     ];
     for (let t = 0; t < 300; t++) {
       for (const [at, fn] of script) if (at === t) fn();
       tick(live, driver);
     }
     expect(driver.uses).toBe(5);
-    expect(count(live, El.STAIN) + count(live, El.ASH) + count(live, El.SMOKE)).toBeGreaterThan(0);
+    const untouched = blueprintWorld(5);
+    while (untouched.tick < live.tick) step(untouched);
+    expect(live.hash()).not.toBe(untouched.hash()); // the abilities really did something
 
     const log = JSON.parse(JSON.stringify(driver.log)) as ActionLog;
     const replayed = blueprintWorld(5);

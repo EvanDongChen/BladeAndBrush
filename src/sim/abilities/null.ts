@@ -1,20 +1,16 @@
-import { registerAbility, type AbilityArgs, type PointerSample } from '../../core/abilities';
 import { El } from '../../core/elements';
-import type { World } from '../../core/world';
 import { markUnsupported } from '../behaviors/rigid';
 import { forCapsule } from '../brush';
+import { registerLineAbility } from '../lineAbility';
 
-/** Quietly erase everything under the brush: smooth edge, no splatter, no CUT flag. */
-function erase(world: World, a: PointerSample, b: PointerSample, args: AbilityArgs): void {
-  forCapsule(world, a.x, a.y, b.x, b.y, Math.max(1, args.radius ?? 4), (x, y) => world.set(x, y, El.EMPTY));
-  markUnsupported(world);
-}
-
-registerAbility({
+/** Aim a line, release to quietly erase the strip: smooth edge, no splatter, no CUT flag. */
+registerLineAbility({
   id: 'null',
   name: 'Null',
   icon: '無',
-  begin: (world, s, args) => erase(world, s, s, args),
-  move: (world, from, to, args) => erase(world, from, to, args),
-  end: () => {},
+  color: '90, 90, 110',
+  apply: (world, ax, ay, bx, by, r) => {
+    forCapsule(world, ax, ay, bx, by, r, (x, y) => world.set(x, y, El.EMPTY));
+    markUnsupported(world);
+  },
 });

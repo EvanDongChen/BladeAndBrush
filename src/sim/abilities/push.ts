@@ -1,34 +1,25 @@
-import { registerAbility, type AbilityArgs, type PointerSample } from '../../core/abilities';
 import type { World } from '../../core/world';
 import { launchBody, markUnsupported } from '../behaviors/rigid';
 import { DEBRIS } from '../elements/debris';
+import { registerLineAbility } from '../lineAbility';
 import { K_LIQUID, K_POWDER, KIND, RIGID } from '../physics';
 import { defineTunables } from '../tunables';
 
 export const pushTunables = defineTunables(
   'push',
   {
-    /** Launch speed per unit of pointer speed (cells per tick). */
-    power: 0.6,
-    /** Slowest launch, even for a slow drag. */
-    minSpeed: 3,
-    /** Fastest launch. */
-    maxSpeed: 11,
+    /** Launch speed along the line (cells per tick). */
+    speed: 9,
     /** Extra upward kick, so things arc instead of skidding. */
     lift: 2.5,
-    /** Launch speed of a click without dragging (a blast outward in every direction). */
-    blast: 11,
     /** Rough size of the chunks rock breaks into (cells across). */
     chunk: 6,
     /** How much speed a thrown chunk keeps when it hits rock (it rebounds out of the surface). */
     rebound: 0.75,
   },
   {
-    power: [0, 2, 0.05],
-    minSpeed: [0, 12, 0.5],
-    maxSpeed: [1, 12, 0.5],
+    speed: [1, 12, 0.5],
     lift: [0, 6, 0.25],
-    blast: [0, 12, 0.5],
     chunk: [2, 30, 1],
     rebound: [0, 1, 0.05],
   },
@@ -40,20 +31,11 @@ const clamp = (v: number) => Math.max(-12, Math.min(12, Math.round(v)));
  * Fling everything under the brush. Loose material (earth, ash, water) flies as DEBRIS and lands
  * back as itself; rock, wood and leaves break into a few chunks that fly as rigid pieces (chunks
  * walled in by solid rock burst into flying rubble instead, which sprays out of the crater).
- * Directional (dirx, diry) for a drag, or outward from the center for a blast.
+ Everything is thrown along (ux, uy).
  */
-function shove(world: World, cx: number, cy: number, r: number, dirx: number, diry: number, speed: number, radial: boolean): void {
+function shove(world: World, cx: number, cy: number, r: number, ux: number, uy: number, speed: number): void {
   const { el, aux, w, rng } = world;
   const lift = pushTunables.lift;
-  const away = (x: number, y: number): [number, number] => {
-    if (!radial) return [dirx, diry];
-    const d = Math.hypot(x - cx, y - cy);
-    if (d < 0.5) {
-      const a = rng.range(0, Math.PI * 2);
-      return [Math.cos(a), Math.sin(a)];
-    }
-    return [(x - cx) / d, (y - cy) / d];
-  };
 
   const solids: number[] = [];
   world.forCircle(cx, cy, r, (x, y) => {
@@ -61,7 +43,6 @@ function shove(world: World, cx: number, cy: number, r: number, dirx: number, di
     const e = el[i];
     const k = KIND[e];
     if (k === K_POWDER || k === K_LIQUID) {
-      const [ux, uy] = away(x, y);
       const v = speed * rng.range(0.7, 1.2);
       world.set(x, y, DEBRIS, { aux: e, life: aux[i], vx: clamp(ux * v), vy: clamp(uy * v - lift * rng.range(0.5, 1.5)) });
     } else if (RIGID[e]) {
@@ -91,7 +72,6 @@ function shove(world: World, cx: number, cy: number, r: number, dirx: number, di
     }
     for (let s = 0; s < k; s++) {
       if (groups[s].length === 0) continue;
-      const [ux, uy] = away(seeds[s] % w, (seeds[s] / w) | 0);
       const v = speed * rng.range(0.8, 1.2);
       launchBody(world, groups[s], ux * v + rng.range(-0.5, 0.5), uy * v - lift * rng.range(0.5, 1.5), pushTunables.rebound, true);
     }
@@ -99,37 +79,19 @@ function shove(world: World, cx: number, cy: number, r: number, dirx: number, di
   markUnsupported(world);
 }
 
-let start: PointerSample | null = null;
-let moved = false;
-
-const radius = (args: AbilityArgs) => Math.max(1, args.radius ?? 4);
-
-/** Drag to fling things along the drag (faster swipe, farther throw). Click to blast outward. */
-registerAbility({
+/**
+ * Aim a line, release to send a shockwave along it: everything in the strip is flung in the
+ * line's direction. Rock breaks into flying chunks (or rubble if walled in); earth and water spray.
+ */
+registerLineAbility({
   id: 'push',
   name: 'Push',
   icon: '推',
-  begin: (_world, s) => {
-    start = s;
-    moved = false;
-  },
-  move: (world, from, to, args) => {
-    const dx = to.x - from.x;
-    const dy = to.y - from.y;
-    const len = Math.hypot(dx, dy);
-    if (len < 0.5) return;
-    moved = true;
-    const { power, minSpeed, maxSpeed } = pushTunables;
-    const speed = Math.max(minSpeed, Math.min(maxSpeed, to.speed * power));
-    // a fast swipe moves many cells per tick: hit everything along the way, nearest first
-    const r = radius(args);
+  color: '40, 40, 40',
+  apply: (world, ax, ay, bx, by, r, ux, uy) => {
+    // hit everything along this stretch, nearest first
+    const len = Math.hypot(bx - ax, by - ay);
     const n = Math.max(1, Math.ceil(len / Math.max(1, r * 0.6)));
-    for (let k = 1; k <= n; k++) {
-      shove(world, from.x + (dx * k) / n, from.y + (dy * k) / n, r, dx / len, dy / len, speed, false);
-    }
-  },
-  end: (world, args) => {
-    if (start && !moved) shove(world, start.x, start.y, radius(args), 0, 0, pushTunables.blast, true);
-    start = null;
+    for (let k = 0; k <= n; k++) shove(world, ax + ((bx - ax) * k) / n, ay + ((by - ay) * k) / n, r, ux, uy, pushTunables.speed);
   },
 });

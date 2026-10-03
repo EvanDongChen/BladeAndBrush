@@ -129,6 +129,7 @@ describe('null', () => {
     let cuts = 0;
     world.events.on('cut', () => cuts++);
     stroke(world, 'null', [[10, 30], [80, 40, 15]], { radius: 4 });
+    run(world, 3);
     expect(count(world, El.ROCK)).toBeLessThan(rockBefore - 300);
     expect(cutCells(world)).toBe(0);
     expect(cuts).toBe(0);

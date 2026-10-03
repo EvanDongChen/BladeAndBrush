@@ -1,5 +1,3 @@
-import { registerAbility, type AbilityArgs } from '../../core/abilities';
-import { registerPass } from '../../core/behaviors';
 import { flagOn } from '../../core/config';
 import { Flag } from '../../core/constants';
 import { El } from '../../core/elements';
@@ -7,18 +5,13 @@ import { createNoise } from '../../core/noise';
 import type { World } from '../../core/world';
 import { markUnsupported } from '../behaviors/rigid';
 import { forCapsule } from '../brush';
+import { registerLineAbility } from '../lineAbility';
 import { CUTTABLE } from '../physics';
 import { defineTunables } from '../tunables';
 
 export const slashTunables = defineTunables(
   'slash',
   {
-    /** Longest possible slash (cells), like a skill shot's range. */
-    range: 360,
-    /** Shorter aims than this are cancelled (a plain click does not slash). */
-    minLength: 6,
-    /** How fast the cut travels along the line once released (cells per tick). */
-    sweep: 48,
     /** How ragged the cut edge is, as a fraction of the radius. */
     roughness: 0.35,
     /** Noise frequency of the ragged edge (higher = finer teeth). */
@@ -31,9 +24,6 @@ export const slashTunables = defineTunables(
     maxSplats: 40,
   },
   {
-    range: [20, 960, 10],
-    minLength: [0, 40, 1],
-    sweep: [4, 400, 4],
     roughness: [0, 0.9, 0.05],
     grain: [0.05, 1, 0.05],
     splatChance: [0, 1, 0.01],
@@ -43,69 +33,12 @@ export const slashTunables = defineTunables(
 );
 
 const edgeNoise = createNoise(0x5a5);
-
-export interface Aim {
-  x0: number;
-  y0: number;
-  x1: number;
-  y1: number;
-}
-
-/** Where a slash aimed from (x0, y0) toward (x, y) actually ends: clamped to the range. */
-export function aimEnd(x0: number, y0: number, x: number, y: number): Aim {
-  const dx = x - x0;
-  const dy = y - y0;
-  const len = Math.hypot(dx, dy);
-  const k = len > slashTunables.range ? slashTunables.range / len : 1;
-  return { x0, y0, x1: x0 + dx * k, y1: y0 + dy * k };
-}
+const clamp = (v: number) => Math.max(-12, Math.min(12, v));
 
 /**
- * Skill-shot preview: the exact strip the slash will cut, drawn on the grid-resolution canvas.
- * Pages call this while the pointer is held with the slash tool.
- */
-export function drawSlashAim(g: CanvasRenderingContext2D, aim: Aim, radius: number): void {
-  const { x0, y0, x1, y1 } = aim;
-  const len = Math.hypot(x1 - x0, y1 - y0);
-  const ok = len >= slashTunables.minLength;
-  g.save();
-  g.lineCap = 'round';
-  // the strip that will be cut
-  g.strokeStyle = ok ? 'rgba(178, 34, 34, 0.18)' : 'rgba(80, 80, 80, 0.15)';
-  g.lineWidth = Math.max(1, radius * 2);
-  g.beginPath();
-  g.moveTo(x0, y0);
-  g.lineTo(x1, y1);
-  g.stroke();
-  // the blade's path
-  g.strokeStyle = ok ? 'rgba(178, 34, 34, 0.9)' : 'rgba(80, 80, 80, 0.6)';
-  g.lineWidth = 1;
-  g.setLineDash([4, 3]);
-  g.beginPath();
-  g.moveTo(x0, y0);
-  g.lineTo(x1, y1);
-  g.stroke();
-  g.setLineDash([]);
-  // arrow head
-  if (ok) {
-    const ux = (x1 - x0) / len;
-    const uy = (y1 - y0) / len;
-    const s = Math.max(4, radius * 1.5);
-    g.fillStyle = 'rgba(178, 34, 34, 0.9)';
-    g.beginPath();
-    g.moveTo(x1, y1);
-    g.lineTo(x1 - ux * s - uy * s * 0.6, y1 - uy * s + ux * s * 0.6);
-    g.lineTo(x1 - ux * s + uy * s * 0.6, y1 - uy * s - ux * s * 0.6);
-    g.closePath();
-    g.fill();
-  }
-  g.restore();
-}
-
-/**
- * Clear a jagged groove along a segment: every cell inside a noisy radius becomes EMPTY with the
- * CUT flag (so the frontier reveal never refills it). Cut solid material (rock, tree, earth...)
- * emits 'cut' and sometimes throws a SPLAT droplet away from the line.
+ * Clear a jagged groove along a stretch of the line: every cell inside a noisy radius becomes
+ * EMPTY with the CUT flag (so the frontier reveal never refills it). Cut solid material (rock,
+ * tree, earth...) emits 'cut' and sometimes throws a SPLAT droplet away from the line.
  */
 function carve(world: World, ax: number, ay: number, bx: number, by: number, r: number, speed: number): void {
   const { roughness, grain, splatChance, maxSplats } = slashTunables;
@@ -144,70 +77,11 @@ function carve(world: World, ax: number, ay: number, bx: number, by: number, r: 
   markUnsupported(world);
 }
 
-const clamp = (v: number) => Math.max(-12, Math.min(12, v));
-
-// ---- released slashes travel along their line over a few ticks ----
-
-interface Sweep {
-  aim: Aim;
-  r: number;
-  /** Cells of the line already cut. */
-  done: number;
-}
-
-const sweeps = new WeakMap<World, Sweep[]>();
-
-registerPass({
-  name: 'slashSweep',
-  phase: 'pre',
-  order: 5,
-  run: (world) => {
-    const list = sweeps.get(world);
-    if (!list || list.length === 0) return;
-    const speed = Math.max(1, slashTunables.sweep);
-    let keep = 0;
-    for (const sw of list) {
-      const { x0, y0, x1, y1 } = sw.aim;
-      const len = Math.hypot(x1 - x0, y1 - y0);
-      const from = sw.done;
-      const to = Math.min(len, from + speed);
-      const t0 = len > 0 ? from / len : 0;
-      const t1 = len > 0 ? to / len : 1;
-      carve(world, x0 + (x1 - x0) * t0, y0 + (y1 - y0) * t0, x0 + (x1 - x0) * t1, y0 + (y1 - y0) * t1, sw.r, speed);
-      sw.done = to;
-      if (to < len) list[keep++] = sw;
-    }
-    list.length = keep;
-  },
-});
-
-// ---- the ability: press to set the start, drag to aim, release to slash ----
-
-let aiming: { x0: number; y0: number; x: number; y: number; r: number } | null = null;
-
-const radius = (args: AbilityArgs) => Math.max(1, args.radius ?? 4);
-
-registerAbility({
+/** Aim a line, release to cut a ragged groove along it, throwing ink. */
+registerLineAbility({
   id: 'slash',
   name: 'Slash',
   icon: '斬',
-  begin: (_world, s, args) => {
-    aiming = { x0: s.x, y0: s.y, x: s.x, y: s.y, r: radius(args) };
-  },
-  move: (_world, _from, to) => {
-    if (aiming) (aiming.x = to.x), (aiming.y = to.y);
-  },
-  end: (world, args) => {
-    const a = aiming;
-    aiming = null;
-    if (!a) return;
-    const aim = aimEnd(a.x0, a.y0, a.x, a.y);
-    if (Math.hypot(aim.x1 - aim.x0, aim.y1 - aim.y0) < slashTunables.minLength) return; // cancelled
-    let list = sweeps.get(world);
-    if (!list) sweeps.set(world, (list = []));
-    list.push({ aim, r: radius(args), done: 0 });
-  },
-  drawCursor: (g) => {
-    if (aiming) drawSlashAim(g, aimEnd(aiming.x0, aiming.y0, aiming.x, aiming.y), aiming.r);
-  },
+  color: '178, 34, 34',
+  apply: (world, ax, ay, bx, by, r, _ux, _uy, speed) => carve(world, ax, ay, bx, by, r, speed),
 });

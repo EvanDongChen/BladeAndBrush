@@ -1,6 +1,6 @@
 :root {
-  --paper: #eee6d4;
-  --paper-2: #e4dac4;
+  --paper: #faf8f2;
+  --paper-2: #f1ebdd;
   --ink: #2e2b28;
   --ink-soft: #6b645c;
   --seal: #b22222;
@@ -196,4 +196,188 @@ button.on {
 
 .poem {
   font-family: 'Noto Serif SC', 'Songti SC', serif;
+}
+
+/* Home landing (index.html). Additive only; shared classes above stay untouched. */
+
+.home {
+  width: 100%;
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 24px 32px;
+}
+
+.home-hero {
+  text-align: center;
+  padding: 28px 16px 12px;
+  border: 1px solid var(--line);
+  border-top: 3px double var(--ink-soft);
+  border-bottom: 3px double var(--ink-soft);
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.home-kicker {
+  margin: 0 0 8px;
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+.home-title {
+  margin: 0;
+  font-family: 'Noto Serif SC', 'Songti SC', serif;
+  font-size: 56px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.home-tag {
+  margin: 10px auto 0;
+  max-width: 52ch;
+  font-family: 'Noto Serif SC', 'Songti SC', serif;
+  font-size: 16px;
+}
+
+.home-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 16px 0 4px;
+  color: var(--ink-soft);
+}
+
+.home-divider::before,
+.home-divider::after {
+  content: '';
+  flex: 1;
+  border-top: 1px solid var(--line);
+}
+
+.home-divider span {
+  font-family: 'Noto Serif SC', 'Songti SC', serif;
+}
+
+.home-steps {
+  margin: 4px 0 8px;
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.home-note {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+
+.home-block {
+  border: 1px solid var(--line);
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.home-h {
+  margin: 0 0 8px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-soft);
+}
+
+.home-levels {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 10px;
+}
+
+.home-card {
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--seal);
+  padding: 8px 10px;
+  background: var(--paper);
+}
+
+.home-card h4 {
+  margin: 0 0 4px;
+  font-family: 'Noto Serif SC', 'Songti SC', serif;
+  font-size: 16px;
+}
+
+.home-poem {
+  margin: 0 0 6px;
+}
+
+.home-goals {
+  margin: 0 0 6px;
+  padding-left: 18px;
+  font: 12px ui-monospace, Consolas, monospace;
+}
+
+.home-meta {
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+
+.home-cta {
+  display: inline-block;
+  border: 1px solid var(--ink-soft);
+  padding: 3px 8px;
+  color: var(--ink);
+  text-decoration: none;
+  background: var(--paper);
+}
+
+.home-cta:hover {
+  background: var(--paper-2);
+}
+
+.home-cta-alt {
+  margin-left: 6px;
+}
+
+.home-links {
+  margin: 4px 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.home-foot {
+  text-align: center;
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+
+.home-foot a {
+  color: var(--ink-soft);
+}
+
+.home-nav {
+  width: 100%;
+  max-width: 1280px;
+  margin: 0 auto;
+}
+
+.home-nav h1 {
+  font-family: 'Noto Serif SC', 'Songti SC', serif;
+  letter-spacing: 0.02em;
+}
+
+.home-nav nav a[aria-current='page'] {
+  color: var(--ink);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.gallery-thumb {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--line);
+  background: var(--paper-2);
 }

@@ -1342,98 +1342,131 @@ input[type='number'] {
   gap: 14px;
 }
 
-/* ---------- Level page: poem bar and win stamp ---------- */
+/* ---------- Level page: poem on the painting, and the win stamp ---------- */
 
 .stage {
   --verse-green: #2f7d4f;
 }
 
-.poem-bar {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 8px 24px;
-  flex-wrap: wrap;
-  padding: 10px 16px 12px;
-  margin-bottom: 8px;
-  background: rgba(255, 252, 244, 0.55);
-  border: 1px solid var(--line);
-  border-top: 4px solid var(--silk);
-}
-
-.verses {
-  flex: 1 1 420px;
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
-  gap: 8px 22px;
+/* vertical columns of brush script, first line on the right, like an inscription on a scroll painting */
+.inscription {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  max-height: calc(100% - 32px);
   margin: 0;
   padding: 0;
   list-style: none;
+  writing-mode: vertical-rl;
+  display: flex;
+  gap: 10px;
+  pointer-events: auto;
 }
 
 .verse {
   position: relative;
-  display: grid;
-  gap: 2px;
-  padding: 2px 4px 2px 22px;
+  padding: 8px 8px 8px 11px;
   color: var(--ink);
-  background: linear-gradient(90deg, rgba(47, 125, 79, 0.16), rgba(47, 125, 79, 0.04)) no-repeat 0 0 / 0% 100%;
-  transition: background-size 0.9s var(--ease-scroll), color 0.5s;
+  background: rgba(246, 240, 225, 0.82);
+  border-right: 3px solid var(--silk);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
+  transition: color 0.5s, background-color 0.6s, border-color 0.6s;
 }
 
-.verse::before {
-  content: '◇';
+/* the green wash fills the column from the top once the line is met */
+.verse::after {
+  content: '';
   position: absolute;
-  left: 4px;
-  top: 2px;
-  font-size: 13px;
-  color: var(--ink-soft);
+  inset: 0;
+  background: linear-gradient(180deg, rgba(47, 125, 79, 0.28), rgba(47, 125, 79, 0.12));
+  transform-origin: top;
+  transform: scaleY(0);
+  transition: transform 0.9s var(--ease-scroll);
+  pointer-events: none;
 }
 
 .verse-text {
-  font: 400 19px/1.35 var(--font-brush);
-  letter-spacing: 0.06em;
+  position: relative;
+  z-index: 1;
+  font: 400 21px/1.3 var(--font-brush);
+  letter-spacing: 0.12em;
 }
 
-.verse-goal {
-  font-size: 12px;
+.verse-text::before {
+  content: '◇';
+  display: block;
+  margin-block-end: 4px;
+  font: 12px var(--font-serif);
   color: var(--ink-soft);
 }
 
+/* progress runs down the left edge of the column */
 .verse .goal-bar {
-  height: 3px;
-  margin-top: 3px;
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
   background: var(--ink-faint);
 }
 
 .verse .goal-fill {
+  display: block;
+  width: 100%;
+  height: var(--p, 0%);
   background: var(--ink-soft);
-  transition: width 0.4s, background-color 0.4s;
+  transition: height 0.4s, background-color 0.4s;
+}
+
+/* what the line asks for, shown beside the column on hover */
+.verse-goal {
+  position: absolute;
+  right: calc(100% + 10px);
+  top: 0;
+  z-index: 3;
+  writing-mode: horizontal-tb;
+  white-space: nowrap;
+  padding: 2px 8px;
+  font: 12px var(--font-serif);
+  color: var(--ink);
+  background: rgba(246, 240, 225, 0.95);
+  border: 1px solid var(--line);
+  opacity: 0;
+  transform: translateX(6px);
+  transition: opacity 0.2s, transform 0.2s;
+  pointer-events: none;
+}
+
+.verse:hover .verse-goal,
+.verse:focus-within .verse-goal {
+  opacity: 1;
+  transform: none;
 }
 
 .verse.met {
   color: var(--verse-green);
-  background-size: 100% 100%;
+  border-right-color: var(--verse-green);
 }
 
-.verse.met::before {
+.verse.met::after {
+  transform: scaleY(1);
+}
+
+.verse.met .verse-text::before {
   content: '✓';
   font-weight: 700;
   color: var(--verse-green);
 }
 
-.verse.met .verse-goal {
-  color: var(--verse-green);
-}
-
 .verse.met .goal-fill {
-  width: 100% !important;
+  height: 100%;
   background: var(--verse-green);
 }
 
-.poem-bar .ink {
-  flex: 0 1 auto;
-  margin-top: 4px;
+@media (max-width: 640px) {
+  .verse-text {
+    font-size: 17px;
+  }
 }
 
 .stamp {

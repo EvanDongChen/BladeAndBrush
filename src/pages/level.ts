@@ -160,18 +160,17 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
   const verses = Array.from({ length: Math.max(level.poem.length, level.goals.length) }, (_, i) => {
     const goal = level.goals[i];
     const line = level.poem[i];
-    const fill = h('span', { class: 'goal-fill' });
     const row = h(
       'li',
-      { class: 'verse' },
+      { class: 'verse', title: goal ? describeGoal(goal) : undefined },
       h('span', { class: 'verse-text' }, line ?? describeGoal(goal)),
       line !== undefined && goal ? h('span', { class: 'verse-goal' }, describeGoal(goal)) : '',
-      goal ? h('span', { class: 'goal-bar' }, fill) : '',
+      goal ? h('span', { class: 'goal-bar' }, h('span', { class: 'goal-fill' })) : '',
     );
-    return { goal, row, fill };
+    return { goal, row };
   });
-  const poemBar = (inkNode: HTMLElement) =>
-    h('div', { class: 'poem-bar' }, h('ol', { class: 'verses' }, ...verses.map((v) => v.row)), inkNode);
+  // the poem is written on the painting itself, in vertical columns read right to left
+  frame.append(h('ol', { class: 'inscription', 'aria-label': 'Poem' }, ...verses.map((v) => v.row)));
   const pips = Array.from({ length: level.actionBudget }, () => h('i', { class: 'pip' }));
   const inkCount = h('span', { class: 'ink-count' });
   const ink = h('div', { class: 'ink', role: 'img' }, h('span', { class: 'ink-label' }, 'Ink'), h('span', { class: 'pips' }, ...pips), inkCount);
@@ -214,7 +213,7 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
       const { pass, progress } = evaluateGoal(result, v.goal);
       all &&= pass;
       v.row.classList.toggle('met', pass);
-      v.fill.style.width = `${Math.round(progress * 100)}%`;
+      v.row.style.setProperty('--p', `${Math.round(progress * 100)}%`);
     }
     for (const v of verses) if (!v.goal) v.row.classList.toggle('met', all);
     if (all && changed() && !won) {
@@ -259,7 +258,7 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
     tuning.append(h('details', {}, h('summary', {}, g.name), rows));
   }
 
-  stage.append(poemBar(ink), frame, status, complete.node);
+  stage.append(frame, status, complete.node);
   root.replaceChildren(
     levelHeader(level.id),
     h(
@@ -269,7 +268,7 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
       h(
         'aside',
         { class: 'controls' },
-                panel('Abilities', bar.node, h('label', { class: 'row brush-row' }, h('span', {}, 'Brush size'), radiusInput, radiusDot)),
+                panel('Abilities', bar.node, ink, h('label', { class: 'row brush-row' }, h('span', {}, 'Brush size'), radiusInput, radiusDot)),
         panel(
           'Painting',
           paramRows,

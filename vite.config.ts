@@ -3,8 +3,12 @@ import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
 
 const page = (name: string) => fileURLToPath(new URL(`./${name}.html`, import.meta.url));
+const onWindowsDriveInWsl = process.platform === 'linux' && /^\/mnt\/[a-z]\//.test(process.cwd());
 
 export default defineConfig({
+  server: {
+    watch: onWindowsDriveInWsl ? { usePolling: true, interval: 300 } : undefined,
+  },
   build: {
     rollupOptions: {
       input: {

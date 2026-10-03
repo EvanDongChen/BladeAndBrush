@@ -58,10 +58,18 @@ export class Renderer {
   readonly toggles = new Map<string, boolean>();
   private sorted: Layer[] = [];
   private sortedVersion = -1;
+  /** Cell-resolution canvas for the pixel layers when scale > 1 (upscaled onto the main canvas). */
+  private small: HTMLCanvasElement | null = null;
+  private smallG: CanvasRenderingContext2D | null = null;
 
+  /**
+   * `scale` = canvas pixels per cell. Pixel layers still write one pixel per cell; canvas layers
+   * draw in cell coordinates (the context is pre-scaled). Scale 1 is the original behavior.
+   */
   constructor(
     readonly canvas: HTMLCanvasElement,
     dims: LevelDims,
+    readonly scale = 1,
   ) {
     const g = canvas.getContext('2d');
     if (!g) throw new Error('Canvas 2D context not available');
@@ -70,10 +78,16 @@ export class Renderer {
   }
 
   resize(dims: LevelDims): void {
-    this.canvas.width = dims.w;
-    this.canvas.height = dims.h;
+    this.canvas.width = dims.w * this.scale;
+    this.canvas.height = dims.h * this.scale;
     this.image = this.g.createImageData(dims.w, dims.h);
     this.pixels = new Uint32Array(this.image.data.buffer);
+    if (this.scale !== 1) {
+      this.small = document.createElement('canvas');
+      this.small.width = dims.w;
+      this.small.height = dims.h;
+      this.smallG = this.small.getContext('2d');
+    }
   }
 
   isOn(layer: Layer): boolean {
@@ -81,14 +95,23 @@ export class Renderer {
   }
 
   draw(world: World, state: RenderState = {}): void {
-    if (world.w !== this.canvas.width || world.h !== this.canvas.height) this.resize(world);
+    if (world.w * this.scale !== this.canvas.width || world.h * this.scale !== this.canvas.height) this.resize(world);
     if (this.sortedVersion !== layers.version) {
       this.sorted = layers.all().sort(byOrder);
       this.sortedVersion = layers.version;
     }
     const rc: RenderCtx = { ...state, g: this.g, world, pixels: this.pixels };
     for (const l of this.sorted) if (l.kind === 'pixels' && this.isOn(l)) l.draw(rc);
-    this.g.putImageData(this.image, 0, 0);
+    if (this.scale === 1 || !this.small || !this.smallG) {
+      this.g.putImageData(this.image, 0, 0);
+    } else {
+      this.smallG.putImageData(this.image, 0, 0);
+      this.g.setTransform(1, 0, 0, 1, 0, 0);
+      this.g.imageSmoothingEnabled = false;
+      this.g.drawImage(this.small, 0, 0, this.canvas.width, this.canvas.height);
+    }
+    this.g.setTransform(this.scale, 0, 0, this.scale, 0, 0);
     for (const l of this.sorted) if (l.kind === 'canvas' && this.isOn(l)) l.draw(rc);
+    this.g.setTransform(1, 0, 0, 1, 0, 0);
   }
 }

@@ -16,6 +16,7 @@ import { step } from '../sim/step';
 import { tunables } from '../sim/tunables';
 import { Fx } from './fx';
 import { arsenal } from './arsenal';
+import { swordCursor } from './swords';
 import { button, h, handscroll, panel, seal, startLoop, toCell } from './ui';
 
 /** A panel that starts rolled up (secondary controls the player rarely needs). */
@@ -138,6 +139,7 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
     hudGlyph.textContent = a?.icon ?? '';
     hudName.textContent = a?.name ?? '';
     stage.style.setProperty('--blade', lineColor(id));
+    canvas.style.cursor = swordCursor(id);
   });
   const radiusDot = h('span', { class: 'brush-dot', 'aria-hidden': 'true' });
   const radiusInput = h('input', { type: 'range', min: 1, max: 24, step: 1, value: radius, 'aria-label': 'Brush size' });

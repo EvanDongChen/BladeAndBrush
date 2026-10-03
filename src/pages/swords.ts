@@ -1,7 +1,7 @@
 /**
- * Inline SVG swords for the arsenal cards. Each blade is shaded in two faces split by a ridge line,
+ * Inline SVG swords, used as the play-field cursor. Each blade is shaded in two faces split by a ridge line,
  * with a gradient along its length, a wavy temper line and a specular streak, which is what gives the
- * flat drawing its faux-3D look. The cards tilt and sway them with CSS. Presentation only.
+ * flat drawing its faux-3D look. Presentation only.
  */
 
 type Fx = 'flame' | 'wave' | 'ghost' | 'none';
@@ -79,4 +79,14 @@ export function swordSvg(id: string): string {
   <rect x="16.5" y="83" width="2.6" height="27" rx="1.3" fill="#fff" opacity=".18"/>
   <ellipse cx="20" cy="112" rx="4.6" ry="3" fill="url(#${u}g)" stroke="rgba(0,0,0,.5)" stroke-width=".7"/>
 </svg>`;
+}
+
+/**
+ * CSS cursor value for an ability: its sword angled up-left with the blade tip at the hotspot, so
+ * the point of the sword is where a slash starts. Falls back to a crosshair.
+ */
+export function swordCursor(id: string): string {
+  const inner = swordSvg(id).replace(/^<svg[^>]*>/, '').replace(/<\/svg>$/, '');
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64"><g transform="translate(7 5) rotate(-45) scale(0.5) translate(-20.6 -2)">${inner}</g></svg>`;
+  return `url("data:image/svg+xml,${encodeURIComponent(svg)}") 7 5, crosshair`;
 }

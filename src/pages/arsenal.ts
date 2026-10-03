@@ -5,7 +5,6 @@
  */
 import { activeAbilities, type AbilityId } from '../core/abilities';
 import { lineColor } from '../sim/lineAbility';
-import { swordSvg } from './swords';
 import { h } from './ui';
 
 interface ArsenalInfo {
@@ -35,12 +34,6 @@ export interface Arsenal {
   setSpent(spent: boolean): void;
 }
 
-function art(id: AbilityId): HTMLElement {
-  const box = h('span', { class: 'blade-art', 'aria-hidden': 'true' });
-  box.innerHTML = swordSvg(id);
-  return box;
-}
-
 export function arsenal(onPick: (id: AbilityId, tip: string) => void): Arsenal {
   const node = h('div', { class: 'arsenal', role: 'radiogroup', 'aria-label': 'Abilities' });
   const cards: { id: AbilityId; btn: HTMLButtonElement; tip: string }[] = [];
@@ -59,8 +52,8 @@ export function arsenal(onPick: (id: AbilityId, tip: string) => void): Arsenal {
         title: `${a.name} (${i + 1})`,
         style: `--blade: ${lineColor(a.id)}`,
       },
-      art(a.id),
-      h('span', { class: 'blade-name' }, h('span', { class: 'blade-glyph', 'aria-hidden': 'true' }, a.icon ?? ''), a.name),
+      h('span', { class: 'blade-glyph', 'aria-hidden': 'true' }, a.icon ?? a.name.slice(0, 1)),
+      h('span', { class: 'blade-name' }, a.name),
       h('span', { class: 'blade-verb' }, info?.verb ?? ''),
       h('kbd', { class: 'blade-key', 'aria-hidden': 'true' }, String(i + 1)),
     );

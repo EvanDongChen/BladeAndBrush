@@ -9,7 +9,9 @@ import { ActionDriver, type ActionLog } from '../core/replay';
 import { World } from '../core/world';
 import { Frontier } from '../gen/frontier';
 import { generate } from '../gen/generate';
+import { SCENES } from '../sim/scenes';
 import { step } from '../sim/step';
+import { tunables } from '../sim/tunables';
 import {
   abilityBar,
   button,
@@ -24,7 +26,8 @@ import {
   toCell,
 } from './ui';
 
-type Scene = 'blueprint' | 'empty';
+/** 'blueprint', 'empty', or the id of one of the hand-built SCENES. */
+type Scene = string;
 
 interface Recording {
   seed: number;
@@ -33,7 +36,8 @@ interface Recording {
   log: ActionLog;
   endTick: number;
   hash: number;
-  paramsChanged: boolean;
+  /** Params or tunables changed mid-recording (they are not in the log). */
+  untracked: boolean;
 }
 
 /** Person B's test page: paint elements, use abilities, step the sim, record and replay. */
@@ -59,6 +63,7 @@ export function mountSandbox(root: HTMLElement): () => void {
   function buildScene(s: number, sc: Scene, p: GenParams): World {
     const w = new World(DEFAULT_DIMS, s, p);
     if (sc === 'blueprint') new Frontier(generate(s, p)).revealAll(w);
+    else SCENES.find((x) => x.id === sc)?.build(w);
     return w;
   }
 
@@ -120,6 +125,7 @@ export function mountSandbox(root: HTMLElement): () => void {
     'select',
     {},
     h('option', { value: 'blueprint' }, 'Blueprint (seed + params)'),
+    ...SCENES.map((x) => h('option', { value: x.id }, x.name)),
     h('option', { value: 'empty' }, 'Empty'),
   );
   sceneSelect.addEventListener('change', () => {
@@ -148,12 +154,29 @@ export function mountSandbox(root: HTMLElement): () => void {
 
   const onParam = (key: string) => {
     world.params[key] = params[key]; // live for behaviors; the blueprint picks it up on Reset
-    if (recordingFrom) recordingFrom.paramsChanged = true;
+    if (recordingFrom) recordingFrom.untracked = true;
   };
+
+  // live feel knobs from sim/tunables (every behavior and ability registers its own)
+  const tuning = h('div', { class: 'registries' });
+  for (const g of tunables.all()) {
+    const rows = h('div', { class: 'rows' });
+    for (const [key, [min, max, stepSize]] of Object.entries(g.ranges)) {
+      const out = h('output', {}, String(g.values[key]));
+      const input = h('input', { type: 'range', min, max, step: stepSize, value: g.values[key], 'data-tunable': `.${key}` });
+      input.addEventListener('input', () => {
+        g.values[key] = Number(input.value);
+        out.textContent = input.value;
+        if (recordingFrom) recordingFrom.untracked = true;
+      });
+      rows.append(h('label', { class: 'row' }, h('span', {}, key), input, out));
+    }
+    tuning.append(h('details', {}, h('summary', {}, g.name), rows));
+  }
 
   const record = button('Record', () => {
     reset();
-    recordingFrom = { seed, scene, params: { ...params }, paramsChanged: false };
+    recordingFrom = { seed, scene, params: { ...params }, untracked: false };
     recording = null;
     recStatus.textContent = 'Recording… (starts from a fresh scene)';
   });
@@ -180,7 +203,7 @@ export function mountSandbox(root: HTMLElement): () => void {
     const ok = got === r.hash;
     recStatus.textContent =
       `Replayed to tick ${world.tick}: hash ${hex(got)} ${ok ? '✓ matches' : `✗ MISMATCH (expected ${hex(r.hash)})`}` +
-      (r.paramsChanged ? ' · params changed mid-recording, which is not logged' : '');
+      (r.untracked ? ' · params or tuning changed mid-recording, which is not logged' : '');
     driver = new ActionDriver(); // back to live input on the replayed world
   });
 
@@ -216,6 +239,7 @@ export function mountSandbox(root: HTMLElement): () => void {
         ),
         panel('Record / replay', h('div', { class: 'row' }, record, stopRec, replay), recStatus),
         panel('Params', paramSliders(params, onParam)),
+        panel('Tuning', tuning),
         panel('Cell counts', counts),
         panel('Layers', layerToggles(renderer)),
         panel('Registries', registryInspector()),

@@ -15,7 +15,19 @@ import { aimEnd, chargeOf, drawAim, isLineAbility } from '../sim/lineAbility';
 import { step } from '../sim/step';
 import { tunables } from '../sim/tunables';
 import { Fx } from './fx';
-import { abilityBar, button, h, handscroll, pageHeader, panel, startLoop, toCell } from './ui';
+import { abilityBar, button, h, handscroll, panel, seal, startLoop, toCell } from './ui';
+
+/** Header for players: no links to the workshops. */
+function levelHeader(sub: string): HTMLElement {
+  const brand = h(
+    'a',
+    { class: 'brand', href: './index.html' },
+    seal(),
+    h('span', { class: 'brand-name' }, 'Blade & Brush'),
+    h('span', { class: 'brand-sub' }, sub),
+  );
+  return h('header', { class: 'top' }, h('h1', {}, brand), h('nav', {}, h('a', { href: './index.html' }, 'All levels')));
+}
 
 /**
  * Player-facing level page: ?level=<id>. The player gets the abilities, a Regenerate button,
@@ -188,7 +200,7 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
   }
 
   root.replaceChildren(
-    pageHeader(level.id),
+    levelHeader(level.id),
     h(
       'main',
       { class: 'layout' },
@@ -240,7 +252,7 @@ function levelMissing(root: HTMLElement, id: string | null): void {
   const list = h('ul', { class: 'home-steps' });
   for (const l of levels.all()) list.append(h('li', {}, h('a', { href: `./level.html?level=${encodeURIComponent(l.id)}` }, l.id)));
   root.replaceChildren(
-    pageHeader('Level'),
+    levelHeader('Level'),
     h('main', { class: 'shell home' }, panel(id ? `No level called "${id}"` : 'Choose a level', list)),
   );
 }

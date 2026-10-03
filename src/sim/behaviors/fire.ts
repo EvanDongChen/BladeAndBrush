@@ -3,6 +3,7 @@ import { flagOn } from '../../core/config';
 import { Flag } from '../../core/constants';
 import { El } from '../../core/elements';
 import type { World } from '../../core/world';
+import { LEAF } from '../elements/leaf';
 import { STEAM } from '../elements/steam';
 import { at, FLAMMABILITY, NEIGHBORS4, NEIGHBORS8, REPLACEABLE } from '../physics';
 import { defineTunables } from '../tunables';
@@ -15,10 +16,14 @@ export const fireTunables = defineTunables(
     spread: 0.5,
     /** Average lifetime of a free flame (ticks). */
     flameLife: 22,
-    /** Average time a burning cell of fuel (e.g. wood) lasts (ticks). */
+    /** Average time a burning cell of wood (TREE) lasts (ticks). */
     burnLife: 70,
-    /** Chance that burnt-out fuel leaves ASH. */
+    /** Average time a burning leaf lasts (ticks): leaves flash and are gone. */
+    leafBurnLife: 16,
+    /** Chance that burnt-out wood leaves ASH. */
     ashChance: 0.35,
+    /** Chance that a burnt-out leaf leaves ASH (otherwise mostly smoke). */
+    leafAshChance: 0.05,
     /** Chance that a dying flame leaves SMOKE. */
     smokeChance: 0.45,
     /** Chance per tick that burning fuel throws a flame into the cell above. */
@@ -30,7 +35,9 @@ export const fireTunables = defineTunables(
     spread: [0, 2, 0.05],
     flameLife: [4, 120, 1],
     burnLife: [10, 250, 5],
+    leafBurnLife: [2, 120, 1],
     ashChance: [0, 1, 0.05],
+    leafAshChance: [0, 1, 0.05],
     smokeChance: [0, 1, 0.05],
     emberRate: [0, 1, 0.01],
     evaporate: [0, 1, 0.05],
@@ -42,7 +49,7 @@ export const fireTunables = defineTunables(
  * id that is burning (stays put, lasts longer, leaves ash).
  */
 function lifetime(world: World, fuel: number): number {
-  const base = fuel === 0 ? fireTunables.flameLife : fireTunables.burnLife;
+  const base = fuel === 0 ? fireTunables.flameLife : fuel === LEAF ? fireTunables.leafBurnLife : fireTunables.burnLife;
   return Math.max(2, Math.min(255, Math.round(base * world.rng.range(0.6, 1.4))));
 }
 
@@ -62,7 +69,7 @@ function burnOut(world: World, x: number, y: number, fuel: number): void {
   const r = world.rng;
   if (fuel !== 0) {
     if (world.events.has('burn')) world.events.emit('burn', { x, y, el: fuel });
-    if (r.chance(fireTunables.ashChance)) world.set(x, y, El.ASH, { aux: r.int(256) });
+    if (r.chance(fuel === LEAF ? fireTunables.leafAshChance : fireTunables.ashChance)) world.set(x, y, El.ASH, { aux: r.int(256) });
     else if (r.chance(fireTunables.smokeChance)) world.set(x, y, El.SMOKE);
     else world.set(x, y, El.EMPTY);
   } else {

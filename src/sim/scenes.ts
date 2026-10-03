@@ -1,6 +1,7 @@
 import { El } from '../core/elements';
 import type { World } from '../core/world';
 import { EARTH } from './elements/earth';
+import { LEAF } from './elements/leaf';
 
 /** Hand-built test scenes for the sandbox, so sim work never waits on the generator. */
 export interface Scene {
@@ -21,10 +22,12 @@ function ground(world: World, ground = 10): number {
   return top;
 }
 
-/** A small tree (trunk + round canopy) standing on row `base`. */
+/** A small tree (wooden trunk + leafy canopy) standing on row `base`. */
 function tree(world: World, x: number, base: number, height = 14): void {
   for (let y = base - height; y < base; y++) world.set(x, y, El.TREE, { aux: world.rng.int(256) });
-  world.forCircle(x, base - height, Math.max(3, height * 0.4), (cx, cy) => world.set(cx, cy, El.TREE, { aux: world.rng.int(256) }));
+  world.forCircle(x, base - height, Math.max(3, height * 0.4), (cx, cy) => {
+    if (world.el[cy * world.w + cx] !== El.TREE) world.set(cx, cy, LEAF, { aux: world.rng.int(256) });
+  });
 }
 
 export const SCENES: Scene[] = [

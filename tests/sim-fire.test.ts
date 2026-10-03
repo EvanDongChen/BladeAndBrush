@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { El } from '../src/core/elements';
+import { LEAF } from '../src/sim/elements/leaf';
 import { STEAM } from '../src/sim/elements/steam';
 import { boxWorld, count, fillRect, rowsOf, run } from './sim-helpers';
 
@@ -29,6 +30,30 @@ describe('fire', () => {
     expect(count(world, El.FIRE)).toBe(0);
     expect(count(world, El.ASH)).toBeGreaterThan(0);
     expect(ignites).toBeGreaterThan(100);
+  });
+
+  it('leaves catch and burn out faster than wood, and both burn', () => {
+    const world = boxWorld(64, 48);
+    fillRect(world, 4, 30, 24, 46, El.TREE); // wood
+    fillRect(world, 36, 30, 56, 46, LEAF); // leaves, same size, not touching the wood
+    world.set(3, 46, El.FIRE);
+    world.set(35, 46, El.FIRE);
+    // unburnt + still burning (a burning cell is FIRE with its fuel id in aux)
+    const fuel = (el: number) => {
+      let n = 0;
+      for (let i = 0; i < world.size; i++) if (world.el[i] === el || (world.el[i] === El.FIRE && world.aux[i] === el)) n++;
+      return n;
+    };
+    let leavesGone = -1;
+    let woodGone = -1;
+    for (let t = 0; t < 1500 && woodGone < 0; t++) {
+      run(world, 1);
+      if (leavesGone < 0 && fuel(LEAF) === 0) leavesGone = t;
+      if (woodGone < 0 && fuel(El.TREE) === 0) woodGone = t;
+    }
+    expect(leavesGone).toBeGreaterThan(0);
+    expect(woodGone).toBeGreaterThan(0);
+    expect(leavesGone).toBeLessThan(woodGone * 0.75);
   });
 
   it('water puts fire out and makes steam', () => {

@@ -1,6 +1,6 @@
 :root {
-  --paper: #f6f2e7;
-  --paper-2: #ece5d2;
+  --paper: #faf8f2;
+  --paper-2: #f1ebdd;
   --ink: #2e2b28;
   --ink-soft: #6b645c;
   --seal: #b22222;
@@ -201,8 +201,8 @@ button.on {
 /* Home landing (index.html). Additive only; shared classes above stay untouched. */
 
 .home {
-  max-width: 1120px;
-  padding: 16px 28px;
+  max-width: 1280px;
+  padding: 16px 32px;
 }
 
 .home-hero {

@@ -9,11 +9,14 @@ export function groundTop(h: number): number {
   return h - Math.max(2, Math.round(h * 0.06));
 }
 
-/** PHASE 0 STUB (art version): a low, gently wavy bank along the bottom. */
+/**
+ * PHASE 0 STUB (art version): a low, gently wavy bank along the bottom. Runs after the mountains
+ * (order 15) so the bank is in front of every mountain's foot; trees (20) then stand on it.
+ */
 registerFeature({
   name: 'ground',
   label: 'Ground (stub)',
-  order: 0,
+  order: 15,
   run: ({ bp, dims, noise, newStroke }) => {
     const { fg, fgPaint, u } = artOf(bp);
     const top = groundTop(dims.h);
@@ -22,6 +25,6 @@ registerFeature({
     for (let x = 0; x < u.artW; x++) tops[x] = top * u.k + (noise.fbm1(x * 0.004, 3) - 0.5) * u.k * 2;
     const shader = inkWash({ ink: [70, 66, 60], base: 0.12, edge: 0.45, edgeWidth: u.k * 2, speckle: 0.12, noise });
     fgPaint.fillColumns(0, tops, u.artH, shader, id);
-    rasterizeCoverage(bp, fg, u.k, id, El.ROCK, bp, [0, top - 2, dims.w - 1, dims.h - 1], false);
+    rasterizeCoverage(bp, fg, u.k, id, El.ROCK, bp, [0, top - 2, dims.w - 1, dims.h - 1], true);
   },
 });

@@ -10,6 +10,8 @@ describe('FAR_ROCK', () => {
 });
 
 import { defaultParams } from '../src/core/params';
+import { artOf } from '../src/gen/artState';
+import { groundTop } from '../src/gen/features/ground';
 import { generate } from '../src/gen/generate';
 
 describe('background plane', () => {
@@ -57,6 +59,21 @@ describe('mid row at low height', () => {
         prev = y;
       }
       expect(worst).toBeLessThan(12);
+    }
+  });
+});
+
+describe('ground bank', () => {
+  it('is drawn in front of every mountain: the art just under its edge is ground', () => {
+    const K = 4;
+    for (let s = 1; s <= 3; s++) {
+      const bp = generate(s, defaultParams(), { k: K, dims: { w: 320, h: 96 }, features: { stubTrees: false } });
+      const ground = [...bp.registry.strokes.values()].find((q) => q.kind === 'rock')!;
+      const own = artOf(bp).fg.own;
+      const aw = bp.w * K;
+      // The wavy top edge stays within +-K of groundTop * K, so this row is always inside the bank.
+      const y = groundTop(bp.h) * K + K - 1;
+      for (let x = 0; x < aw; x++) expect(own[y * aw + x]).toBe(ground.id);
     }
   });
 });

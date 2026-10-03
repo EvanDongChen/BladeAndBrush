@@ -3,6 +3,8 @@ import { flagOn } from '../../core/config';
 import { Flag } from '../../core/constants';
 import { El } from '../../core/elements';
 import type { World } from '../../core/world';
+import { BAMBOO } from '../elements/bamboo';
+import { HAY } from '../elements/hay';
 import { LEAF } from '../elements/leaf';
 import { STEAM } from '../elements/steam';
 import { at, FLAMMABILITY, NEIGHBORS4, NEIGHBORS8, REPLACEABLE, RIGID } from '../physics';
@@ -21,14 +23,26 @@ export const fireTunables = defineTunables(
     burnLife: 70,
     /** Average time a burning leaf lasts (ticks): leaves flash and are gone. */
     leafBurnLife: 16,
+    /** Average time a burning bamboo cell lasts (ticks): it burns hotter and faster than wood. */
+    bambooBurnLife: 40,
+    /** Average time burning hay lasts (ticks): it flares up and is gone. */
+    hayBurnLife: 16,
     /** Chance that burnt-out wood leaves ASH. */
     ashChance: 0.35,
+    /** Chance that burnt-out bamboo leaves ASH. */
+    bambooAshChance: 0.3,
+    /** Chance that burnt-out hay leaves ASH (it mostly goes up as smoke). */
+    hayAshChance: 0.03,
     /** Chance that a burnt-out leaf leaves ASH (otherwise mostly smoke). */
     leafAshChance: 0.05,
     /** Chance that a dying flame leaves SMOKE. */
     smokeChance: 0.45,
     /** Chance per tick that burning fuel throws a flame into the cell above. */
     emberRate: 0.12,
+    /** Same for burning bamboo, which pops and throws sparks. */
+    bambooEmberRate: 0.3,
+    /** Same for burning hay, which flares up. */
+    hayEmberRate: 0.25,
     /** Chance that water touching fire boils off into steam (the fire always goes out). */
     evaporate: 0.3,
   },
@@ -37,10 +51,16 @@ export const fireTunables = defineTunables(
     flameLife: [4, 120, 1],
     burnLife: [10, 250, 5],
     leafBurnLife: [2, 120, 1],
+    bambooBurnLife: [4, 200, 2],
+    hayBurnLife: [2, 120, 1],
     ashChance: [0, 1, 0.05],
+    bambooAshChance: [0, 1, 0.05],
+    hayAshChance: [0, 1, 0.01],
     leafAshChance: [0, 1, 0.05],
     smokeChance: [0, 1, 0.05],
     emberRate: [0, 1, 0.01],
+    bambooEmberRate: [0, 1, 0.01],
+    hayEmberRate: [0, 1, 0.01],
     evaporate: [0, 1, 0.05],
   },
 );
@@ -50,8 +70,22 @@ export const fireTunables = defineTunables(
  * id that is burning (stays put, lasts longer, leaves ash).
  */
 function lifetime(world: World, fuel: number): number {
-  const base = fuel === 0 ? fireTunables.flameLife : fuel === LEAF ? fireTunables.leafBurnLife : fireTunables.burnLife;
+  const t = fireTunables;
+  const base =
+    fuel === 0 ? t.flameLife : fuel === LEAF ? t.leafBurnLife : fuel === BAMBOO ? t.bambooBurnLife : fuel === HAY ? t.hayBurnLife : t.burnLife;
   return Math.max(2, Math.min(255, Math.round(base * world.rng.range(0.6, 1.4))));
+}
+
+/** Chance that a burnt-out cell of this fuel leaves ASH. Fuels not listed use the wood default. */
+function ashChanceOf(fuel: number): number {
+  const t = fireTunables;
+  return fuel === LEAF ? t.leafAshChance : fuel === BAMBOO ? t.bambooAshChance : fuel === HAY ? t.hayAshChance : t.ashChance;
+}
+
+/** Chance per tick that burning fuel throws a flame upward. */
+function emberRateOf(fuel: number): number {
+  const t = fireTunables;
+  return fuel === BAMBOO ? t.bambooEmberRate : fuel === HAY ? t.hayEmberRate : t.emberRate;
 }
 
 /**
@@ -71,7 +105,7 @@ function burnOut(world: World, x: number, y: number, fuel: number): void {
   if (fuel !== 0) {
     if (world.events.has('burn')) world.events.emit('burn', { x, y, el: fuel });
     if (RIGID[fuel]) markUnsupported(world); // a burnt trunk drops its canopy
-    if (r.chance(fuel === LEAF ? fireTunables.leafAshChance : fireTunables.ashChance)) world.set(x, y, El.ASH, { aux: r.int(256) });
+    if (r.chance(ashChanceOf(fuel))) world.set(x, y, El.ASH, { aux: r.int(256) });
     else if (r.chance(fireTunables.smokeChance)) world.set(x, y, El.SMOKE);
     else world.set(x, y, El.EMPTY);
   } else {
@@ -117,7 +151,7 @@ function updateFire(world: World, x: number, y: number): void {
 
   if (fuel !== 0) {
     // burning fuel stays put and throws flames upward
-    if (y > 0 && REPLACEABLE[el[i - w]] && rng.chance(fireTunables.emberRate)) {
+    if (y > 0 && REPLACEABLE[el[i - w]] && rng.chance(emberRateOf(fuel))) {
       world.set(x, y - 1, El.FIRE, { aux: 0, life: lifetime(world, 0) });
       world.flags[i - w] |= Flag.UPDATED;
     }

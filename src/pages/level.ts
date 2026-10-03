@@ -225,7 +225,7 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
   const stop = startLoop(
     clock,
     (dt) => {
-      renderer.draw(world, { cursor, frontierX: frontier.done ? undefined : frontier.x, art: bp.art });
+      renderer.draw(world, { cursor, frontierX: frontier.done ? undefined : frontier.x, art: bp.art ? { art: bp.art, el: bp.el } : undefined });
       fx.draw(renderer.g);
       if (down && cursor && isLineAbility(ability)) {
         const aim = aimEnd(pressedAt.x, pressedAt.y, cursor.x, cursor.y);

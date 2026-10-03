@@ -248,7 +248,7 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
     levelHeader(level.id),
     h(
       'main',
-      { class: 'layout' },
+      { class: 'layout level-layout' },
       stage,
       h(
         'aside',

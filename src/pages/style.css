@@ -1366,3 +1366,23 @@ input[type='number'] {
 }
 
 
+
+/* ---------- Level page: full-width scroll, controls beneath ---------- */
+
+.level-layout {
+  grid-template-columns: minmax(0, 1fr);
+  max-width: 1600px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.level-layout .stage {
+  position: static;
+}
+
+.level-layout .controls {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  align-items: start;
+  gap: 14px;
+}

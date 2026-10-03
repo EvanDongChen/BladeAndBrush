@@ -3,7 +3,7 @@ import type { AbilityId } from '../core/abilities';
 import { Clock } from '../core/clock';
 import { describeGoal, evaluateGoal } from '../core/goals';
 import { levels, type LevelDef } from '../core/levels';
-import { defaultParams, type GenParams } from '../core/params';
+import { defaultParams, params as paramDefs, type GenParams } from '../core/params';
 import { Renderer } from '../core/render';
 import { ActionDriver } from '../core/replay';
 import { World } from '../core/world';
@@ -13,6 +13,7 @@ import { scan } from '../gen/scan';
 import type { Blueprint } from '../core/blueprint';
 import { aimEnd, chargeOf, drawAim, isLineAbility } from '../sim/lineAbility';
 import { step } from '../sim/step';
+import { tunables } from '../sim/tunables';
 import { Fx } from './fx';
 import { abilityBar, button, h, handscroll, pageHeader, panel, startLoop, toCell } from './ui';
 
@@ -155,6 +156,38 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
     }
   }
 
+  // ---- params: the level decides which are visible or locked ----
+  const paramRows = h('div', { class: 'rows' });
+  for (const def of paramDefs.all()) {
+    const rule = level.params[def.key];
+    if (rule?.visible === false) continue;
+    const out = h('output', {}, String(params[def.key]));
+    const input = h('input', { type: 'range', min: def.min, max: def.max, step: def.step, value: params[def.key], disabled: rule?.locked });
+    input.addEventListener('input', () => {
+      params[def.key] = Number(input.value);
+      out.textContent = input.value;
+      world.params[def.key] = params[def.key]; // live for the sim; the painting changes on Regenerate
+    });
+    paramRows.append(h('label', { class: 'row' }, h('span', {}, def.label), input, out));
+  }
+
+  // ---- tuning: how each ability and behavior feels ----
+  const tuning = h('div', { class: 'registries' });
+  for (const g of tunables.all()) {
+    const rows = h('div', { class: 'rows' });
+    for (const [key, [min, max, stepSize]] of Object.entries(g.ranges)) {
+      const out = h('output', {}, String(g.values[key]));
+      const input = h('input', { type: 'range', min, max, step: stepSize, value: g.values[key] });
+      input.addEventListener('input', () => {
+        g.values[key] = Number(input.value);
+        out.textContent = input.value;
+        tuningTouched = true;
+      });
+      rows.append(h('label', { class: 'row' }, h('span', {}, key), input, out));
+    }
+    tuning.append(h('details', {}, h('summary', {}, g.name), rows));
+  }
+
   root.replaceChildren(
     pageHeader(level.id),
     h(
@@ -166,7 +199,13 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
         { class: 'controls' },
         panel('Poem', poem, goalList, ink),
         panel('Abilities', bar.node, h('label', { class: 'row' }, h('span', {}, 'Brush size'), radiusInput)),
-        panel('Painting', button('Regenerate', regenerate)),
+        panel(
+          'Painting',
+          paramRows,
+          h('p', { class: 'home-note' }, 'Shape changes apply when you regenerate.'),
+          button('Regenerate', regenerate),
+        ),
+        panel('Tuning', tuning),
       ),
     ),
   );

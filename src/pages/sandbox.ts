@@ -9,7 +9,7 @@ import { ActionDriver, type ActionLog } from '../core/replay';
 import { World } from '../core/world';
 import { Frontier } from '../gen/frontier';
 import { generate } from '../gen/generate';
-import { aimEnd, drawAim, isLineAbility } from '../sim/lineAbility';
+import { aimEnd, chargeOf, drawAim, isLineAbility } from '../sim/lineAbility';
 import { SCENES } from '../sim/scenes';
 import { step } from '../sim/step';
 import { tunables } from '../sim/tunables';
@@ -90,6 +90,7 @@ export function mountSandbox(root: HTMLElement): () => void {
   let down = false;
   let last = { x: 0, y: 0, t: 0 };
   let pressedAt = { x: 0, y: 0 }; // where the current press started (line abilities aim from here)
+  let pressedTick = 0; // sim tick at the press (charge is counted in sim ticks, like the ability does)
   let cursor: { x: number; y: number; r: number } | null = null;
 
   canvas.addEventListener('pointerdown', (e) => {
@@ -97,6 +98,7 @@ export function mountSandbox(root: HTMLElement): () => void {
     const p = toCell(canvas, e);
     down = true;
     pressedAt = p;
+    pressedTick = world.tick;
     cursor = { ...p, r: radius };
     last = { ...p, t: performance.now() };
     driver.begin(tool.ability, { ...p, speed: 0 }, args());
@@ -255,7 +257,7 @@ export function mountSandbox(root: HTMLElement): () => void {
   const stop = startLoop(clock, () => {
     renderer.draw(world, { cursor });
     // skill-shot preview: drawn from live pointer input, so it shows instantly (even when paused)
-    if (down && cursor && isLineAbility(tool.ability)) drawAim(renderer.g, tool.ability, aimEnd(pressedAt.x, pressedAt.y, cursor.x, cursor.y), radius);
+    if (down && cursor && isLineAbility(tool.ability)) drawAim(renderer.g, tool.ability, aimEnd(pressedAt.x, pressedAt.y, cursor.x, cursor.y), radius, chargeOf(world.tick - pressedTick));
     if (frame++ % 15 === 0) {
       world.countByElement(countBuf);
       for (const [id, dd] of countCells) dd.textContent = String(countBuf[id]);

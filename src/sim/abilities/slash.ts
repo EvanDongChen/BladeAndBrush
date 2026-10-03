@@ -40,10 +40,10 @@ const clamp = (v: number) => Math.max(-12, Math.min(12, v));
  * EMPTY with the CUT flag (so the frontier reveal never refills it). Cut solid material (rock,
  * tree, earth...) emits 'cut' and sometimes throws a SPLAT droplet away from the line.
  */
-function carve(world: World, ax: number, ay: number, bx: number, by: number, r: number, speed: number): void {
+function carve(world: World, ax: number, ay: number, bx: number, by: number, r: number, speed: number, power: number): void {
   const { roughness, grain, splatChance, maxSplats } = slashTunables;
   const splatter = flagOn('splatter');
-  const v = Math.max(1.5, Math.min(10, speed * slashTunables.splatSpeed));
+  const v = Math.max(1.5, Math.min(12, speed * slashTunables.splatSpeed * power));
   const { el, rng, w } = world;
   let splats = 0;
 
@@ -83,5 +83,5 @@ registerLineAbility({
   name: 'Slash',
   icon: '斬',
   color: '178, 34, 34',
-  apply: (world, ax, ay, bx, by, r, _ux, _uy, speed) => carve(world, ax, ay, bx, by, r, speed),
+  apply: (world, ax, ay, bx, by, r, _ux, _uy, speed, power) => carve(world, ax, ay, bx, by, r, speed, power),
 });

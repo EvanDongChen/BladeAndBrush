@@ -88,10 +88,10 @@ registerLineAbility({
   name: 'Push',
   icon: '推',
   color: '40, 40, 40',
-  apply: (world, ax, ay, bx, by, r, ux, uy) => {
+  apply: (world, ax, ay, bx, by, r, ux, uy, _speed, power) => {
     // hit everything along this stretch, nearest first
     const len = Math.hypot(bx - ax, by - ay);
     const n = Math.max(1, Math.ceil(len / Math.max(1, r * 0.6)));
-    for (let k = 0; k <= n; k++) shove(world, ax + ((bx - ax) * k) / n, ay + ((by - ay) * k) / n, r, ux, uy, pushTunables.speed);
+    for (let k = 0; k <= n; k++) shove(world, ax + ((bx - ax) * k) / n, ay + ((by - ay) * k) / n, r, ux, uy, Math.min(12, pushTunables.speed * power));
   },
 });

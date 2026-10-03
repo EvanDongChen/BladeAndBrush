@@ -19,9 +19,9 @@ registerLineAbility({
   name: 'Water',
   icon: '水',
   color: '50, 110, 170',
-  apply: (world, ax, ay, bx, by, r) => {
+  apply: (world, ax, ay, bx, by, r, _ux, _uy, _speed, power) => {
     const { el, rng, w } = world;
-    const p = waterAbilityTunables.density;
+    const p = Math.min(1, waterAbilityTunables.density * power);
     forCapsule(world, ax, ay, bx, by, r, (x, y) => {
       if (REPLACEABLE[el[y * w + x]] && rng.chance(p)) world.set(x, y, El.WATER, { aux: rng.int(256) });
     });

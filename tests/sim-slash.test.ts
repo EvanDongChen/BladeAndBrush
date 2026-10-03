@@ -96,6 +96,24 @@ describe('slash is a skill shot: aim, then release', () => {
     expect(cutAt(world, 118, 20)).toBe(false); // past the end
   });
 
+  it('holding before release charges it: a wider cut with more power', () => {
+    const fire = (holdTicks: number) => {
+      const world = boxWorld(128, 64);
+      fillRect(world, 0, 10, 127, 62, El.ROCK);
+      const before = count(world, El.ROCK);
+      let power = 0;
+      world.events.on('lineFire', (e) => (power = e.power));
+      stroke(world, 'slash', [[10, 35], [110, 35]], { radius: 3 }, holdTicks);
+      run(world, 5);
+      return { cut: before - count(world, El.ROCK), power };
+    };
+    const quick = fire(0);
+    const held = fire(60);
+    expect(quick.power).toBeLessThan(1.1);
+    expect(held.power).toBeCloseTo(1.6, 5);
+    expect(held.cut).toBeGreaterThan(quick.cut * 1.4);
+  });
+
   it('sweeps along the line over a few ticks', () => {
     const world = boxWorld(256, 64);
     fillRect(world, 0, 10, 255, 62, El.ROCK);

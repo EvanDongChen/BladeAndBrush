@@ -21,9 +21,10 @@ registerLineAbility({
   name: 'Fire',
   icon: '火',
   color: '214, 100, 30',
-  apply: (world, ax, ay, bx, by, r) => {
+  apply: (world, ax, ay, bx, by, r, _ux, _uy, _speed, power) => {
     const { el, rng, w } = world;
-    const { igniteChance, flameChance } = fireAbilityTunables;
+    const igniteChance = Math.min(1, fireAbilityTunables.igniteChance * power);
+    const flameChance = Math.min(1, fireAbilityTunables.flameChance * power);
     forCapsule(world, ax, ay, bx, by, r, (x, y) => {
       const e = el[y * w + x];
       if (FLAMMABILITY[e] > 0 ? rng.chance(igniteChance) : REPLACEABLE[e] && rng.chance(flameChance)) ignite(world, x, y);

@@ -102,7 +102,7 @@ export function makePlan(seed: number, params: GenParams, u: Units): Placement[]
       kind: 'far',
       x: Math.min(W, Math.max(0, x)),
       halfWidth: farRng.range(260, 420),
-      height: params.mountainHeight * lerp(140, 320, Math.min(1, Math.max(0, (score - 0.25) * 2))),
+      height: params.mountainHeight * lerp(260, 560, Math.min(1, Math.max(0, (score - 0.25) * 2))),
       depth: 'far',
       seed: 0,
     });

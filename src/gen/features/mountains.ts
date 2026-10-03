@@ -9,8 +9,8 @@ import { groundTop } from './ground';
 
 /** Look per depth row: nearer is darker and more strongly outlined. */
 const TONE = {
-  near: { ink: [38, 36, 34] as [number, number, number], base: 0.08, edge: 0.55, band: 0.22, outline: 150 },
-  mid: { ink: [96, 94, 90] as [number, number, number], base: 0.05, edge: 0.4, band: 0.15, outline: 90 },
+  near: { ink: [38, 36, 34] as [number, number, number], base: 0.08, edge: 0.55, band: 0.22, outline: 150, texture: 70, textureScale: 1, mist: 0 },
+  mid: { ink: [120, 122, 122] as [number, number, number], base: 0.04, edge: 0.35, band: 0.1, outline: 55, texture: 35, textureScale: 0.5, mist: 160 },
 };
 
 const DRAW_ORDER: Record<string, number> = { far: 0, mid: 1, near: 2 };
@@ -47,7 +47,11 @@ registerFeature({
       ids.push(id);
 
       const shader = contourWash({
-        ...tone,
+        ink: tone.ink,
+        base: tone.base,
+        edge: tone.edge,
+        band: tone.band,
+        mist: tone.mist > 0 ? { from: base - u.toArt(tone.mist), to: base } : undefined,
         edgeWidth: K * 3,
         bandWidth: K * 1.5,
         speckle: 0.14,
@@ -68,11 +72,11 @@ registerFeature({
       const win = 24;
       for (const layer of pr.layers) {
         for (let j = 0; j + win < layer.length; j += win) {
-          if (layer[j] >= base || !rng.chance(textureChance)) continue;
+          if (layer[j] >= base || !rng.chance(textureChance * tone.textureScale)) continue;
           const len = 16 + rng.int(33);
           const path: [number, number][] = [];
           for (let s = j; s < Math.min(layer.length, j + len); s += 2) if (layer[s] < base) path.push([pr.x0 + s, layer[s]]);
-          fgPaint.stroke(path, { width: K * 0.35, color: rgba(...tone.ink, 70), noise: 0.5 }, noise);
+          fgPaint.stroke(path, { width: K * 0.35, color: rgba(...tone.ink, tone.texture), noise: 0.5 }, noise);
         }
       }
 

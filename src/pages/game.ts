@@ -18,7 +18,7 @@ function hero(): HTMLElement {
       h('h2', { class: 'home-title' }, '斬山水'),
       h('span', { class: 'home-seal' }, '斬'),
     ),
-    h('p', { class: 'home-sub' }, 'Zhan-Shui · Blade and Brush'),
+    h('p', { class: 'home-sub' }, 'Blade & Brush · Zhan-Shui'),
     h('p', { class: 'home-tag' }, 'The painting draws itself. You carve it until it matches the poem.'),
     h('div', { class: 'home-divider', 'aria-hidden': 'true' }, h('span', {}, '山')),
   );

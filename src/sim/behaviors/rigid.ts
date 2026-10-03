@@ -122,56 +122,49 @@ export function launchBody(world: World, cells: number[], vx: number, vy: number
 // ---------------------------------------------------------------- detection
 
 let stack = new Int32Array(0);
-let seen = new Uint8Array(0);
+/** Per cell during detection: 0 = not free solid, 1 = free solid not yet visited, 2 = visited. */
+let cellState = new Uint8Array(0);
 
 function detect(world: World, s: State): void {
-  const { w, h, size } = world;
+  const { w, h, size, el, aux } = world;
   if (stack.length < size) {
     stack = new Int32Array(size);
-    seen = new Uint8Array(size);
-  } else seen.fill(0, 0, size);
+    cellState = new Uint8Array(size);
+  }
+  // locals for the hot loops (imported bindings can be slow to read in some module loaders)
+  const cell = cellState;
+  const rigid = RIGID;
+  const FIRE = El.FIRE;
   const { mark } = s;
-  const free = (i: number) => mark[i] === 0 && solidAt(world, i);
-
-  // 1. everything solid connected to the bottom row is anchored
-  let top = 0;
-  for (let x = 0; x < w; x++) {
-    const i = (h - 1) * w + x;
-    if (free(i)) {
-      seen[i] = 1;
-      stack[top++] = i;
-    }
-  }
-  const visit = (j: number) => {
-    if (!seen[j] && free(j)) {
-      seen[j] = 1;
-      stack[top++] = j;
-    }
-  };
-  while (top > 0) {
-    const i = stack[--top];
-    const x = i % w;
-    if (x > 0) visit(i - 1);
-    if (x < w - 1) visit(i + 1);
-    if (i >= w) visit(i - w);
-    if (i < size - w) visit(i + w);
+  for (let i = 0; i < size; i++) {
+    const e = el[i];
+    cell[i] = mark[i] === 0 && (rigid[e] === 1 || (e === FIRE && rigid[aux[i]] === 1)) ? 1 : 0;
   }
 
-  // 2. every other solid component becomes a falling body
-  for (let start = 0; start < size; start++) {
-    if (seen[start] || !free(start)) continue;
-    const cells: number[] = [];
-    seen[start] = 1;
+  /** Flood from `start` through free solid cells, collecting them into `out` if given. */
+  const flood = (start: number, out: number[] | null): void => {
+    let top = 0;
+    cell[start] = 2;
     stack[top++] = start;
     while (top > 0) {
       const i = stack[--top];
-      cells.push(i);
+      if (out) out.push(i);
       const x = i % w;
-      if (x > 0) visit(i - 1);
-      if (x < w - 1) visit(i + 1);
-      if (i >= w) visit(i - w);
-      if (i < size - w) visit(i + w);
+      if (x > 0 && cell[i - 1] === 1) (cell[i - 1] = 2), (stack[top++] = i - 1);
+      if (x < w - 1 && cell[i + 1] === 1) (cell[i + 1] = 2), (stack[top++] = i + 1);
+      if (i >= w && cell[i - w] === 1) (cell[i - w] = 2), (stack[top++] = i - w);
+      if (i < size - w && cell[i + w] === 1) (cell[i + w] = 2), (stack[top++] = i + w);
     }
+  };
+
+  // 1. everything solid connected to the bottom row is anchored
+  for (let i = (h - 1) * w; i < size; i++) if (cell[i] === 1) flood(i, null);
+
+  // 2. every other solid component becomes a falling body
+  for (let i = 0; i < size; i++) {
+    if (cell[i] !== 1) continue;
+    const cells: number[] = [];
+    flood(i, cells);
     launchBody(world, cells, 0, 0);
   }
   s.dirty = false;

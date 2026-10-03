@@ -1,9 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { rgba } from '../src/core/elements';
+import { createBlueprint } from '../src/core/blueprint';
+import { El, rgba } from '../src/core/elements';
 import { createNoise } from '../src/core/noise';
+import { defaultParams } from '../src/core/params';
+import { attachArt } from '../src/gen/artState';
 import { ArtBuffer } from '../src/gen/paint/artBuffer';
 import { PixelPainter } from '../src/gen/paint/painter';
 import { inkWash } from '../src/gen/paint/shaders';
+import { rasterizeCoverage } from '../src/gen/raster';
 import { units } from '../src/gen/units';
 
 const A = (c: number) => c >>> 24;
@@ -82,5 +86,34 @@ describe('inkWash', () => {
     const s = inkWash({ ink: [40, 40, 40], base: 0.2, edge: 0.6, edgeWidth: 4, speckle: 0, noise: createNoise(1) });
     expect(A(s(0, 0, 0))).toBe(255);
     expect(s(0, 0, 0) & 255).toBeLessThan(s(0, 0, 50) & 255);
+  });
+});
+
+describe('rasterizeCoverage', () => {
+  it('sets cells whose k x k block is at least half owned', () => {
+    const bp = createBlueprint(1, defaultParams(), { w: 3, h: 1 });
+    const { fg } = attachArt(bp, 2);
+    // art is 6 x 2; cell c covers columns 2c..2c+1 of both rows
+    fg.own[0] = 5;
+    fg.own[1] = 5; // cell 0: 2 of 4 -> set
+    fg.own[2] = 5; // cell 1: 1 of 4 -> not set
+    fg.own[4] = 5;
+    fg.own[5] = 5;
+    fg.own[10] = 5; // cell 2: 3 of 4 -> set
+    const bb = rasterizeCoverage(bp, fg, 2, 5, El.ROCK, bp, [0, 0, 2, 0], false);
+    expect(Array.from(bp.el)).toEqual([El.ROCK, El.EMPTY, El.ROCK]);
+    expect(bp.owner[2]).toBe(5);
+    expect(bb).toEqual([0, 0, 2, 0]);
+  });
+
+  it('does not overwrite a filled cell unless asked', () => {
+    const bp = createBlueprint(1, defaultParams(), { w: 1, h: 1 });
+    const { fg } = attachArt(bp, 1);
+    bp.el[0] = El.ROCK;
+    fg.own[0] = 9;
+    expect(rasterizeCoverage(bp, fg, 1, 9, El.TREE, bp, [0, 0, 0, 0], false)).toBeNull();
+    expect(bp.el[0]).toBe(El.ROCK);
+    rasterizeCoverage(bp, fg, 1, 9, El.TREE, bp, [0, 0, 0, 0], true);
+    expect(bp.el[0]).toBe(El.TREE);
   });
 });

@@ -1342,105 +1342,92 @@ input[type='number'] {
   gap: 14px;
 }
 
-/* ---------- Level page: poem on the painting, and the win stamp ---------- */
+/* ---------- Level page: goals on the painting, and the win stamp ---------- */
 
 .stage {
   --verse-green: #2f7d4f;
 }
 
-/* vertical columns of brush script, first line on the right, like an inscription on a scroll painting */
+/* the level's goals as a checklist in the top-right corner of the scroll */
 .inscription {
   position: absolute;
   top: 16px;
   right: 16px;
-  max-height: calc(100% - 32px);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 5px;
+  max-width: min(46%, 380px);
   margin: 0;
   padding: 0;
   list-style: none;
-  writing-mode: vertical-rl;
-  display: flex;
-  gap: 10px;
-  pointer-events: auto;
+  pointer-events: none;
 }
 
 .verse {
   position: relative;
-  padding: 8px 8px 8px 11px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  padding: 4px 12px 5px 10px;
+  text-align: right;
   color: var(--ink);
-  background: rgba(246, 240, 225, 0.82);
+  background: rgba(246, 240, 225, 0.86);
   border-right: 3px solid var(--silk);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
-  transition: color 0.5s, background-color 0.6s, border-color 0.6s;
+  overflow: hidden;
+  transition: color 0.4s, border-color 0.4s;
 }
 
-/* the green wash fills the column from the top once the line is met */
+/* the green wash sweeps in from the left once the goal is met */
 .verse::after {
   content: '';
   position: absolute;
   inset: 0;
-  background: linear-gradient(180deg, rgba(47, 125, 79, 0.28), rgba(47, 125, 79, 0.12));
-  transform-origin: top;
-  transform: scaleY(0);
-  transition: transform 0.9s var(--ease-scroll);
+  background: linear-gradient(90deg, rgba(47, 125, 79, 0.28), rgba(47, 125, 79, 0.1));
+  transform-origin: left;
+  transform: scaleX(0);
+  transition: transform 0.8s var(--ease-scroll);
   pointer-events: none;
 }
 
 .verse-text {
   position: relative;
   z-index: 1;
-  font: 400 21px/1.3 var(--font-brush);
-  letter-spacing: 0.12em;
+  font: 400 19px/1.3 var(--font-brush);
+  letter-spacing: 0.06em;
 }
 
 .verse-text::before {
   content: '◇';
-  display: block;
-  margin-block-end: 4px;
+  margin-right: 8px;
   font: 12px var(--font-serif);
   color: var(--ink-soft);
 }
 
-/* progress runs down the left edge of the column */
+.verse-goal {
+  position: relative;
+  z-index: 1;
+  font-size: 11px;
+  color: var(--ink-soft);
+}
+
+/* progress along the bottom edge */
 .verse .goal-bar {
   position: absolute;
   left: 0;
-  top: 0;
+  right: 0;
   bottom: 0;
-  width: 3px;
+  height: 2px;
   background: var(--ink-faint);
 }
 
 .verse .goal-fill {
   display: block;
-  width: 100%;
-  height: var(--p, 0%);
+  height: 100%;
+  width: var(--p, 0%);
   background: var(--ink-soft);
-  transition: height 0.4s, background-color 0.4s;
-}
-
-/* what the line asks for, shown beside the column on hover */
-.verse-goal {
-  position: absolute;
-  right: calc(100% + 10px);
-  top: 0;
-  z-index: 3;
-  writing-mode: horizontal-tb;
-  white-space: nowrap;
-  padding: 2px 8px;
-  font: 12px var(--font-serif);
-  color: var(--ink);
-  background: rgba(246, 240, 225, 0.95);
-  border: 1px solid var(--line);
-  opacity: 0;
-  transform: translateX(6px);
-  transition: opacity 0.2s, transform 0.2s;
-  pointer-events: none;
-}
-
-.verse:hover .verse-goal,
-.verse:focus-within .verse-goal {
-  opacity: 1;
-  transform: none;
+  transition: width 0.4s, background-color 0.4s;
 }
 
 .verse.met {
@@ -1449,7 +1436,7 @@ input[type='number'] {
 }
 
 .verse.met::after {
-  transform: scaleY(1);
+  transform: scaleX(1);
 }
 
 .verse.met .verse-text::before {
@@ -1458,14 +1445,24 @@ input[type='number'] {
   color: var(--verse-green);
 }
 
+.verse.met .verse-goal {
+  color: var(--verse-green);
+}
+
 .verse.met .goal-fill {
-  height: 100%;
+  width: 100%;
   background: var(--verse-green);
 }
 
 @media (max-width: 640px) {
+  .inscription {
+    top: 10px;
+    right: 10px;
+    max-width: 58%;
+  }
+
   .verse-text {
-    font-size: 17px;
+    font-size: 15px;
   }
 }
 

@@ -169,8 +169,8 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
     );
     return { goal, row };
   });
-  // the poem is written on the painting itself, in vertical columns read right to left
-  frame.append(h('ol', { class: 'inscription', 'aria-label': 'Poem' }, ...verses.map((v) => v.row)));
+  // the goals are written on the painting itself, top right
+  frame.append(h('ol', { class: 'inscription', 'aria-label': 'Goals' }, ...verses.map((v) => v.row)));
   const pips = Array.from({ length: level.actionBudget }, () => h('i', { class: 'pip' }));
   const inkCount = h('span', { class: 'ink-count' });
   const ink = h('div', { class: 'ink', role: 'img' }, h('span', { class: 'ink-label' }, 'Ink'), h('span', { class: 'pips' }, ...pips), inkCount);

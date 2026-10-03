@@ -5,7 +5,7 @@ import { makePlan, minGap, type Placement } from '../src/gen/plan';
 import { units } from '../src/gen/units';
 
 const u = units(DEFAULT_DIMS, 2);
-const p = (over: Partial<GenParams> = {}): GenParams => ({ ...defaultParams(), ...over });
+const p = (over: Record<string, number> = {}): GenParams => ({ ...defaultParams(), ...over });
 const peaks = (pl: Placement[], depth: string) => pl.filter((q) => q.kind === 'peak' && q.depth === depth);
 
 describe('makePlan', () => {

@@ -1066,3 +1066,303 @@ input[type='number'] {
 .stage .handscroll {
   margin: 26px 0 8px;
 }
+
+/* ---------- Level page: arsenal (weapon rack) ---------- */
+
+.arsenal {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.blade {
+  --blade: 40, 40, 40;
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: 0;
+  padding: 8px 4px 6px;
+  overflow: hidden;
+  text-align: center;
+  background: rgba(255, 252, 244, 0.6);
+  border: 1px solid var(--line);
+  border-bottom: 3px solid rgba(var(--blade), 0.55);
+  border-radius: 2px;
+  transition: transform 0.15s, box-shadow 0.2s, border-color 0.2s, background-color 0.2s;
+}
+
+/* a wash of the blade's colour rising from the bottom edge, like ink in paper */
+.blade::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to top, rgba(var(--blade), 0.16), transparent 70%);
+  opacity: 0;
+  transition: opacity 0.2s;
+  pointer-events: none;
+}
+
+.blade:hover {
+  background-color: rgba(255, 252, 244, 0.95);
+  transform: translateY(-2px);
+}
+
+.blade:hover::before {
+  opacity: 0.6;
+}
+
+.blade.on {
+  background-color: #fffaf0;
+  border-color: rgb(var(--blade));
+  border-bottom-width: 3px;
+  box-shadow: 0 0 0 1px rgb(var(--blade)), 0 4px 10px rgba(var(--blade), 0.25);
+  color: var(--ink);
+}
+
+.blade.on:hover {
+  background-color: #fffaf0;
+}
+
+.blade.on::before {
+  opacity: 1;
+}
+
+.blade-glyph {
+  position: relative;
+  font: 400 34px/1.15 var(--font-brush);
+  color: rgb(var(--blade));
+  transition: transform 0.2s var(--ease-scroll);
+}
+
+.blade.on .blade-glyph {
+  transform: scale(1.12) rotate(-4deg);
+}
+
+.blade-name {
+  position: relative;
+  font: 600 13px var(--font-serif);
+  letter-spacing: 0.06em;
+}
+
+.blade-verb {
+  position: relative;
+  font-size: 11px;
+  color: var(--ink-soft);
+  letter-spacing: 0.1em;
+  min-height: 1.4em;
+}
+
+.blade-key {
+  position: absolute;
+  top: 3px;
+  left: 4px;
+  font: 10px var(--font-mono);
+  color: var(--ink-soft);
+  opacity: 0.7;
+}
+
+/* the selected card carries a small red seal mark */
+.blade.on::after {
+  content: '';
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 7px;
+  height: 7px;
+  background: var(--seal);
+  border-radius: 1px;
+}
+
+.arsenal.spent .blade {
+  filter: grayscale(0.8);
+  opacity: 0.6;
+}
+
+.brush-row {
+  margin-top: 4px;
+}
+
+.brush-dot {
+  --d: 10px;
+  flex: 0 0 30px;
+  display: grid;
+  place-items: center;
+}
+
+.brush-dot::after {
+  content: '';
+  width: min(var(--d), 30px);
+  height: min(var(--d), 30px);
+  border-radius: 50%;
+  background: var(--ink);
+  opacity: 0.85;
+  transition: width 0.12s, height 0.12s;
+}
+
+/* ---------- Level page: ink pips ---------- */
+
+.ink {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+}
+
+.ink-label {
+  font: 600 13px var(--font-serif);
+  letter-spacing: 0.1em;
+  color: var(--ink-soft);
+}
+
+.pips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  flex: 1;
+}
+
+/* each pip is an ink drop: a circle with one pointed corner */
+.pip {
+  width: 11px;
+  height: 11px;
+  background: var(--ink);
+  border-radius: 0 50% 50% 50%;
+  transform: rotate(45deg);
+  transition: background-color 0.4s, opacity 0.4s, transform 0.4s;
+}
+
+.pip.spent {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--ink-soft);
+  opacity: 0.45;
+  transform: rotate(45deg) scale(0.8);
+}
+
+.ink-count {
+  font: 12px var(--font-mono);
+  color: var(--ink-soft);
+}
+
+/* ---------- Level page: stage HUD ---------- */
+
+.stage {
+  --blade: 40, 40, 40;
+}
+
+.frame {
+  position: relative;
+}
+
+.frame canvas.grid {
+  border-color: var(--silk);
+  transition: box-shadow 0.3s;
+}
+
+.hud-tool {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 12px 3px 6px;
+  background: rgba(246, 240, 225, 0.88);
+  border: 1px solid var(--line);
+  border-left: 3px solid rgb(var(--blade));
+  border-radius: 2px;
+  pointer-events: none;
+  backdrop-filter: blur(2px);
+}
+
+.hud-glyph {
+  font: 400 24px/1 var(--font-brush);
+  color: rgb(var(--blade));
+}
+
+.hud-tool strong {
+  font: 600 13px var(--font-serif);
+  letter-spacing: 0.08em;
+}
+
+.hud-banner {
+  position: absolute;
+  inset: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: rgba(246, 240, 225, 0.72);
+  backdrop-filter: blur(1.5px);
+  animation: hud-in 0.5s var(--ease-scroll);
+}
+
+.hud-banner[hidden] {
+  display: none;
+}
+
+.hud-banner p {
+  margin: 0;
+  font: 400 40px/1.1 var(--font-brush);
+  color: var(--seal);
+}
+
+.hud-retry {
+  padding: 6px 22px;
+  font-size: 15px;
+  letter-spacing: 0.1em;
+  color: #fff7ee;
+  background-color: var(--seal);
+  border-color: var(--seal-dark);
+}
+
+.hud-retry:hover {
+  background-color: var(--seal-dark);
+}
+
+.reveal-bar {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 8px;
+  height: 3px;
+  background: var(--ink-faint);
+  transition: opacity 0.6s 0.3s;
+  pointer-events: none;
+}
+
+.reveal-bar.done {
+  opacity: 0;
+}
+
+.reveal-fill {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: var(--seal);
+}
+
+.status {
+  min-height: 1.5em;
+  font: 13px var(--font-serif);
+  letter-spacing: 0.03em;
+}
+
+@keyframes hud-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@media (max-width: 640px) {
+  .hud-tool {
+    top: 12px;
+    left: 12px;
+  }
+
+  .arsenal {
+    grid-template-columns: repeat(auto-fill, minmax(70px, 1fr));
+  }
+}
+
+

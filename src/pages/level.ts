@@ -1,5 +1,5 @@
 import './bootstrap';
-import type { AbilityId } from '../core/abilities';
+import { activeAbilities, type AbilityId } from '../core/abilities';
 import { Clock } from '../core/clock';
 import { describeGoal, evaluateGoal } from '../core/goals';
 import { levels, type LevelDef } from '../core/levels';
@@ -11,11 +11,19 @@ import { Frontier } from '../gen/frontier';
 import { generate } from '../gen/generate';
 import { scan } from '../gen/scan';
 import type { Blueprint } from '../core/blueprint';
-import { aimEnd, chargeOf, drawAim, isLineAbility } from '../sim/lineAbility';
+import { aimEnd, chargeOf, drawAim, isLineAbility, lineColor } from '../sim/lineAbility';
 import { step } from '../sim/step';
 import { tunables } from '../sim/tunables';
 import { Fx } from './fx';
-import { abilityBar, button, h, handscroll, panel, seal, startLoop, toCell } from './ui';
+import { arsenal } from './arsenal';
+import { button, h, handscroll, panel, seal, startLoop, toCell } from './ui';
+
+/** A panel that starts rolled up (secondary controls the player rarely needs). */
+function rolledPanel(title: string, ...children: (Node | string)[]): HTMLElement {
+  const p = panel(title, ...children);
+  p.querySelector<HTMLButtonElement>('.panel-toggle')?.click();
+  return p;
+}
 
 /** Header for players: no links to the workshops. */
 function levelHeader(sub: string): HTMLElement {
@@ -52,6 +60,17 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
   const renderer = new Renderer(canvas, level.dims);
   const fx = new Fx();
   const status = h('div', { class: 'status' });
+  const stage = h('div', { class: 'stage' });
+  // on-canvas HUD: the selected blade, the painting-reveal bar, and the retry banner when the ink runs out
+  const hudGlyph = h('span', { class: 'hud-glyph', 'aria-hidden': 'true' });
+  const hudName = h('strong', {});
+  const hudTool = h('div', { class: 'hud-tool' }, hudGlyph, hudName);
+  const retry = button('Regenerate', () => regenerate(), { class: 'hud-retry' });
+  const banner = h('div', { class: 'hud-banner', hidden: true, role: 'status' }, h('p', {}, 'Out of ink.'), retry);
+  const reveal = h('span', { class: 'reveal-fill' });
+  const revealBar = h('div', { class: 'reveal-bar', 'aria-hidden': 'true' }, reveal);
+  const frame = h('div', { class: 'frame' }, canvas, hudTool, banner, revealBar);
+  let tip = '';
 
   function regenerate(): void {
     bp = generate(level.seed, params, { features: level.featuresEnabled });
@@ -61,6 +80,7 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
     used = 0;
     won = false;
     complete?.close();
+    banner.hidden = true;
     fx.attach(world);
     clock.reset();
   }
@@ -111,10 +131,23 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
   canvas.addEventListener('pointerleave', () => (cursor = null));
 
   // ---- controls ----
-  const bar = abilityBar((id) => (ability = id));
-  bar.node.querySelector('button')?.click(); // start with the first ability selected
-  const radiusInput = h('input', { type: 'range', min: 1, max: 24, step: 1, value: radius });
-  radiusInput.addEventListener('input', () => (radius = Number(radiusInput.value)));
+  const bar = arsenal((id, text) => {
+    ability = id;
+    tip = text;
+    const a = activeAbilities(false).find((x) => x.id === id);
+    hudGlyph.textContent = a?.icon ?? '';
+    hudName.textContent = a?.name ?? '';
+    stage.style.setProperty('--blade', lineColor(id));
+  });
+  const radiusDot = h('span', { class: 'brush-dot', 'aria-hidden': 'true' });
+  const radiusInput = h('input', { type: 'range', min: 1, max: 24, step: 1, value: radius, 'aria-label': 'Brush size' });
+  const setRadius = (r: number) => {
+    radius = Math.max(1, Math.min(24, r));
+    radiusInput.value = String(radius);
+    radiusDot.style.setProperty('--d', `${6 + radius}px`);
+  };
+  radiusInput.addEventListener('input', () => setRadius(Number(radiusInput.value)));
+  setRadius(radius);
 
   // ---- poem, goals, ink ----
   const poem = h('p', { class: 'poem level-poem' });
@@ -128,7 +161,18 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
     return { g, row, fill };
   });
   const goalList = h('ul', { class: 'goals' }, ...goalRows.map((r) => r.row));
-  const ink = h('p', { class: 'ink' });
+  const pips = Array.from({ length: level.actionBudget }, () => h('i', { class: 'pip' }));
+  const inkCount = h('span', { class: 'ink-count' });
+  const ink = h('div', { class: 'ink', role: 'img' }, h('span', { class: 'ink-label' }, 'Ink'), h('span', { class: 'pips' }, ...pips), inkCount);
+  let shownInk = -1;
+  const showInk = () => {
+    const left = Math.max(0, level.actionBudget - used);
+    if (left === shownInk) return;
+    shownInk = left;
+    pips.forEach((p, i) => p.classList.toggle('spent', i >= left));
+    inkCount.textContent = `${left} / ${level.actionBudget}`;
+    ink.setAttribute('aria-label', `Ink left: ${left} of ${level.actionBudget}`);
+  };
 
   const next = levels.all()[levels.all().findIndex((l) => l.id === level.id) + 1];
   complete = handscroll(
@@ -199,29 +243,31 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
     tuning.append(h('details', {}, h('summary', {}, g.name), rows));
   }
 
+  stage.append(frame, status, complete.node);
   root.replaceChildren(
     levelHeader(level.id),
     h(
       'main',
       { class: 'layout' },
-      h('div', { class: 'stage' }, canvas, status, complete.node),
+      stage,
       h(
         'aside',
         { class: 'controls' },
         panel('Poem', poem, goalList, ink),
-        panel('Abilities', bar.node, h('label', { class: 'row' }, h('span', {}, 'Brush size'), radiusInput)),
+        panel('Abilities', bar.node, h('label', { class: 'row brush-row' }, h('span', {}, 'Brush size'), radiusInput, radiusDot)),
         panel(
           'Painting',
           paramRows,
           h('p', { class: 'home-note' }, 'Shape changes apply when you regenerate.'),
           button('Regenerate', regenerate),
         ),
-        panel('Tuning', tuning),
+        rolledPanel('Tuning', tuning),
       ),
     ),
   );
 
-  let frame = 0;
+  bar.selectIndex(0); // start with the first ability selected
+  let frames = 0;
   const stop = startLoop(
     clock,
     (dt) => {
@@ -231,20 +277,31 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
         const aim = aimEnd(pressedAt.x, pressedAt.y, cursor.x, cursor.y);
         drawAim(renderer.g, ability, aim, radius, chargeOf(world.tick - pressedTick));
       }
-      ink.textContent = `Ink left: ${level.actionBudget - used} of ${level.actionBudget}`;
-      if (frame++ % 10 === 0 && frontier.done) checkGoals();
-      status.textContent = !frontier.done
-        ? 'The landscape is painting itself…'
-        : used >= level.actionBudget && !won
-          ? 'Out of ink. Regenerate to try again.'
-          : `tick ${world.tick}`;
+      showInk();
+      if (frames++ % 10 === 0 && frontier.done) checkGoals();
+      const spent = frontier.done && used >= level.actionBudget && !won;
+      bar.setSpent(spent);
+      banner.hidden = !spent;
+      revealBar.classList.toggle('done', frontier.done);
+      reveal.style.width = `${Math.round((frontier.x / level.dims.w) * 100)}%`;
+      status.textContent = !frontier.done ? 'The landscape is painting itself…' : spent ? 'Out of ink. Regenerate to try again.' : tip;
       fx.endFrame(canvas, dt);
     },
     () => fx.shouldAdvance(),
   );
+  const onKey = (e: KeyboardEvent) => {
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    const t = e.target as HTMLElement | null;
+    if (t && (t.tagName === 'INPUT' || t.tagName === 'SELECT' || t.tagName === 'TEXTAREA')) return;
+    if (/^[1-9]$/.test(e.key)) bar.selectIndex(Number(e.key) - 1);
+    else if (e.key === '[') setRadius(radius - 1);
+    else if (e.key === ']') setRadius(radius + 1);
+  };
+  addEventListener('keydown', onKey);
   return () => {
     stop();
     fx.detach();
+    removeEventListener('keydown', onKey);
   };
 }
 

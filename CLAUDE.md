@@ -1,0 +1,64 @@
+# Zhan-Shui (斬山水): notes for Claude Code
+
+The full design is in [PLAN.md](PLAN.md). Phase 0 (the shared scaffold) is done. Work now happens on two branches, `feat/generator` (Person A) and `feat/abilities` (Person B).
+
+## Ownership
+
+| Area | Owner | Notes |
+|---|---|---|
+| `src/gen/`, `src/pages/generator.ts` | **Person A** | generator, frontier reveal, scanner, metrics |
+| `src/sim/`, `src/pages/sandbox.ts` | **Person B** | step loop, behaviors, abilities, sim elements |
+| `src/core/` | **shared contract** | changes need a heads-up to the other person and must be small PRs |
+| `src/pages/bootstrap.ts`, `ui.ts`, `game.ts`, `style.css`, `src/levels/` | shared | integration comes later |
+
+- Only edit the files your person owns. If a change needs `src/core/`, keep it as small as possible, tell the other person, and land it as its own small PR.
+
+## Rules
+
+- **Determinism:** no `Math.random`, `Date.now`, `performance.now` or `new Date()` inside `src/core/`, `src/gen/` or `src/sim/`. All randomness comes from the seeded RNG (`core/rng.ts`, or `world.rng` in the sim) and all noise from `core/noise.ts`. Sim time is `world.tick`. ESLint enforces this and runs in `npm test`. Pages may read the wall clock, e.g. to compute pointer speed at capture time; that value is stored in the action log.
+- **Import boundaries** (enforced by ESLint in `npm test`): `core` imports nothing outside `core`. `gen` and `sim` never import each other; they talk only through `core` types (`World`, `Blueprint`, `EventBus`, registries). `levels` and `audio` import only `core`. `pages` may import everything.
+- **Element ids are append-only.** Never renumber or reuse an id. Ranges: 0-8 built in, 9-31 Person B, 32-63 Person A, 64+ future. `registerElement` throws at startup on a duplicate id or name.
+- **shan-shui-inf is reference reading only.** No code is copied, vendored or imported from https://github.com/LingDong-/shan-shui-inf. Read it to understand the techniques, then write original code that targets our architecture (cells plus `DrawCmd`s). Do not paste or transliterate its functions. It is credited in the README as the inspiration.
+- **Perf:** typed arrays in hot loops, no per-cell objects, no allocations per tick, one `putImageData` per frame.
+- Event listeners must never mutate the World, because that would break replay.
+
+## Running
+
+```sh
+npm install
+npm run dev        # http://localhost:5173/  (game shell)
+                   # http://localhost:5173/generator.html  (Person A's test page)
+                   # http://localhost:5173/sandbox.html    (Person B's test page)
+npm test           # typecheck + lint (boundaries, determinism) + vitest
+npm run test:watch # vitest only, watch mode
+npm run build      # typecheck + production build to dist/
+```
+
+## Adding things: one new file, zero edits to shared code
+
+Every file in these folders is auto-imported by `src/pages/bootstrap.ts` (`import.meta.glob`). Each file registers itself.
+
+| To add a... | Drop a file in | That calls |
+|---|---|---|
+| element | `src/sim/elements/` (or `src/gen/elements/` for ids 32-63) | `registerElement({ id, name, kind, color, ... })` from `core/elements` |
+| behavior | `src/sim/behaviors/` | `registerBehavior(El.X, fn)` or `registerPass({...})` from `core/behaviors` |
+| ability | `src/sim/abilities/` | `registerAbility({ id, name, icon, begin, move, end })` from `core/abilities` |
+| generator feature | `src/gen/features/` | `registerFeature({ name, order, run(ctx) })` from `core/features` |
+| scan metric | `src/gen/metrics/` | `registerMetric(name, (world, ctx) => number)` from `core/scan` |
+| goal type | `src/levels/goals/` | `registerGoal(type, (scan, args) => ({ pass, progress }))` from `core/goals` |
+| level | `src/levels/` | `registerLevel({ id, poem, dims, seed, params, goals, actionBudget })` from `core/levels` |
+| render layer | `src/core/layers/` | `registerLayer({ name, order, kind: 'pixels' or 'canvas', draw })` from `core/render` |
+| param (slider) | one line in `src/core/params.ts` | `registerParam({ key, label, min, max, step, default })` |
+| audio and FX | `src/audio/` | `world.events.on('cut', ...)` |
+
+Registries throw on duplicate keys. Kill switches are in `src/core/config.ts`: `flags` for anything that names a `flag`, and `featureToggles` for generator features.
+
+## Conventions
+
+- Grid: `idx = y * w + x`, with **y = 0 at the top**. Dimensions come from `LevelDims` (default 960×256 in `core/constants.ts`), never from globals.
+- Per-tick order on the pages: `driver.apply(world)` (queued input or replay), then `frontier.advance(world)` on the generator page, then `step(world)`. `step` advances `world.tick`.
+- Abilities receive `args` (e.g. `radius`, `el`). Args are recorded in the action log, so replays reproduce them.
+- `World.set()` clears life, velocity and owner unless they are given. It keeps aux and flags. Pass `{ cut: true }` to leave a CUT scar and emit `cut`.
+- Out-of-bounds `world.get()` returns ROCK, so the grid edges act as walls.
+- Stubs are marked `PHASE 0 STUB`; replace them on your branch.
+- Tests target interfaces and determinism hashes, not internals. `tests/discovery.test.ts` writes temporary `zz_test_dummy.ts` files into `src/` and deletes them afterwards. Test files run one at a time for that reason.

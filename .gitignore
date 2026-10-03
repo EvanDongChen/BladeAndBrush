@@ -1,0 +1,7 @@
+node_modules/
+dist/
+*.local
+.vite/
+coverage/
+# temporary files written (and removed) by tests/discovery.test.ts
+**/zz_test_dummy*.ts

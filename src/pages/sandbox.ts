@@ -1,0 +1,243 @@
+import './bootstrap';
+import type { AbilityArgs, AbilityId } from '../core/abilities';
+import { Clock } from '../core/clock';
+import { DEFAULT_DIMS } from '../core/constants';
+import { El, elements } from '../core/elements';
+import { defaultParams, type GenParams } from '../core/params';
+import { Renderer } from '../core/render';
+import { ActionDriver, type ActionLog } from '../core/replay';
+import { World } from '../core/world';
+import { Frontier } from '../gen/frontier';
+import { generate } from '../gen/generate';
+import { step } from '../sim/step';
+import {
+  abilityBar,
+  button,
+  elementPalette,
+  h,
+  layerToggles,
+  pageHeader,
+  panel,
+  paramSliders,
+  registryInspector,
+  startLoop,
+  toCell,
+} from './ui';
+
+type Scene = 'blueprint' | 'empty';
+
+interface Recording {
+  seed: number;
+  scene: Scene;
+  params: GenParams;
+  log: ActionLog;
+  endTick: number;
+  hash: number;
+  paramsChanged: boolean;
+}
+
+/** Person B's test page: paint elements, use abilities, step the sim, record and replay. */
+export function mountSandbox(root: HTMLElement): () => void {
+  const params = defaultParams();
+  let seed = 1;
+  let scene: Scene = 'blueprint';
+  let world: World;
+  let driver = new ActionDriver();
+
+  // current tool: the paint brush with an element, or an ability
+  let tool: { ability: AbilityId; el: number } = { ability: 'paint', el: El.ROCK };
+  let radius = 4;
+
+  let recordingFrom: Omit<Recording, 'log' | 'endTick' | 'hash'> | null = null;
+  let recording: Recording | null = null;
+
+  const canvas = h('canvas', { class: 'grid paintable' });
+  const renderer = new Renderer(canvas, DEFAULT_DIMS);
+  const status = h('div', { class: 'status' });
+  const recStatus = h('div', { class: 'status' }, 'Not recording.');
+
+  function buildScene(s: number, sc: Scene, p: GenParams): World {
+    const w = new World(DEFAULT_DIMS, s, p);
+    if (sc === 'blueprint') new Frontier(generate(s, p)).revealAll(w);
+    return w;
+  }
+
+  function reset(): void {
+    world = buildScene(seed, scene, params);
+    driver = new ActionDriver();
+    clock.reset();
+    if (recordingFrom) {
+      recordingFrom = null;
+      recStatus.textContent = 'Recording cancelled (scene was reset).';
+    }
+  }
+
+  const tickOnce = () => {
+    driver.apply(world);
+    step(world);
+  };
+  const clock = new Clock(tickOnce);
+  reset();
+
+  // ---- input -> action driver (applied at the next tick) ----
+  const args = (): AbilityArgs => (tool.ability === 'paint' ? { el: tool.el, radius } : { radius });
+  let down = false;
+  let last = { x: 0, y: 0, t: 0 };
+  let cursor: { x: number; y: number; r: number } | null = null;
+
+  canvas.addEventListener('pointerdown', (e) => {
+    canvas.setPointerCapture?.(e.pointerId);
+    const p = toCell(canvas, e);
+    down = true;
+    last = { ...p, t: performance.now() };
+    driver.begin(tool.ability, { ...p, speed: 0 }, args());
+  });
+  canvas.addEventListener('pointermove', (e) => {
+    const p = toCell(canvas, e);
+    cursor = { ...p, r: radius };
+    if (!down) return;
+    const now = performance.now();
+    const ticks = Math.max(1e-3, ((now - last.t) / Clock.STEP_MS) * clock.speed);
+    const speed = Math.round((Math.hypot(p.x - last.x, p.y - last.y) / ticks) * 1000) / 1000;
+    last = { ...p, t: now };
+    driver.move({ ...p, speed });
+  });
+  const release = () => {
+    if (down) driver.end();
+    down = false;
+  };
+  canvas.addEventListener('pointerup', release);
+  canvas.addEventListener('pointercancel', release);
+  canvas.addEventListener('pointerleave', () => (cursor = null));
+
+  // ---- controls ----
+  const seedInput = h('input', { type: 'number', value: seed });
+  seedInput.addEventListener('change', () => {
+    seed = Number(seedInput.value) | 0;
+    reset();
+  });
+  const sceneSelect = h(
+    'select',
+    {},
+    h('option', { value: 'blueprint' }, 'Blueprint (seed + params)'),
+    h('option', { value: 'empty' }, 'Empty'),
+  );
+  sceneSelect.addEventListener('change', () => {
+    scene = sceneSelect.value as Scene;
+    reset();
+  });
+
+  const bar = abilityBar((id) => {
+    tool = { ability: id, el: tool.el };
+    palette.querySelectorAll('button').forEach((b) => b.classList.remove('on'));
+  });
+  const palette = elementPalette(tool.el, (id) => {
+    tool = { ability: 'paint', el: id };
+    bar.clear();
+  });
+
+  const radiusInput = h('input', { type: 'range', min: 1, max: 24, step: 1, value: radius });
+  radiusInput.addEventListener('input', () => (radius = Number(radiusInput.value)));
+
+  const pauseBtn = button('Pause', () => {
+    clock.paused = !clock.paused;
+    pauseBtn.textContent = clock.paused ? 'Play' : 'Pause';
+  });
+  const speedSelect = h('select', {}, ...[0.25, 0.5, 1, 2, 4].map((s) => h('option', { value: s, selected: s === 1 }, `${s}x`)));
+  speedSelect.addEventListener('change', () => (clock.speed = Number(speedSelect.value)));
+
+  const onParam = (key: string) => {
+    world.params[key] = params[key]; // live for behaviors; the blueprint picks it up on Reset
+    if (recordingFrom) recordingFrom.paramsChanged = true;
+  };
+
+  const record = button('Record', () => {
+    reset();
+    recordingFrom = { seed, scene, params: { ...params }, paramsChanged: false };
+    recording = null;
+    recStatus.textContent = 'Recording… (starts from a fresh scene)';
+  });
+  const stopRec = button('Stop', () => {
+    if (!recordingFrom) return;
+    if (down) release();
+    tickOnce(); // flush queued input so the log is complete
+    recording = {
+      ...recordingFrom,
+      log: JSON.parse(JSON.stringify(driver.log)) as ActionLog,
+      endTick: world.tick,
+      hash: world.hash(),
+    };
+    recordingFrom = null;
+    recStatus.textContent = `Recorded ${recording.log.length} uses over ${recording.endTick} ticks · hash ${hex(recording.hash)}`;
+  });
+  const replay = button('Replay', () => {
+    const r = recording;
+    if (!r) return void (recStatus.textContent = 'Nothing recorded yet.');
+    world = buildScene(r.seed, r.scene, r.params);
+    driver = new ActionDriver(r.log);
+    while (world.tick < r.endTick) tickOnce();
+    const got = world.hash();
+    const ok = got === r.hash;
+    recStatus.textContent =
+      `Replayed to tick ${world.tick}: hash ${hex(got)} ${ok ? '✓ matches' : `✗ MISMATCH (expected ${hex(r.hash)})`}` +
+      (r.paramsChanged ? ' · params changed mid-recording, which is not logged' : '');
+    driver = new ActionDriver(); // back to live input on the replayed world
+  });
+
+  const counts = h('dl', { class: 'readout' });
+  const countCells = new Map<number, HTMLElement>();
+  for (const e of elements.all()) {
+    const dd = h('dd', { 'data-count': e.id }, '-');
+    countCells.set(e.id, dd);
+    counts.append(h('dt', {}, e.name), dd);
+  }
+  const countBuf = new Uint32Array(256);
+
+  root.replaceChildren(
+    pageHeader('Sandbox'),
+    h(
+      'main',
+      { class: 'layout' },
+      h('div', { class: 'stage' }, canvas, status),
+      h(
+        'aside',
+        { class: 'controls' },
+        panel(
+          'Scene',
+          h('label', { class: 'row' }, h('span', {}, 'Scene'), sceneSelect),
+          h('label', { class: 'row' }, h('span', {}, 'Seed'), seedInput),
+          button('Reset', reset),
+        ),
+        panel('Elements', palette, h('label', { class: 'row' }, h('span', {}, 'Brush size'), radiusInput)),
+        panel('Abilities', bar.node),
+        panel(
+          'Sim',
+          h('div', { class: 'row' }, pauseBtn, button('Step', () => clock.stepOnce()), speedSelect),
+        ),
+        panel('Record / replay', h('div', { class: 'row' }, record, stopRec, replay), recStatus),
+        panel('Params', paramSliders(params, onParam)),
+        panel('Cell counts', counts),
+        panel('Layers', layerToggles(renderer)),
+        panel('Registries', registryInspector()),
+      ),
+    ),
+  );
+
+  let frame = 0;
+  const stop = startLoop(clock, () => {
+    renderer.draw(world, { cursor });
+    if (frame++ % 15 === 0) {
+      world.countByElement(countBuf);
+      for (const [id, dd] of countCells) dd.textContent = String(countBuf[id]);
+      status.textContent = `tick ${world.tick}${clock.paused ? ' (paused)' : ''} · ${clock.speed}x · tool ${tool.ability}${
+        tool.ability === 'paint' ? ` ${elements.get(tool.el)?.name}` : ''
+      } · uses ${driver.uses}`;
+    }
+  });
+  return stop;
+}
+
+const hex = (n: number) => n.toString(16).padStart(8, '0');
+
+const app = document.getElementById('app');
+if (app) mountSandbox(app);

@@ -1,0 +1,199 @@
+:root {
+  --paper: #eee6d4;
+  --paper-2: #e4dac4;
+  --ink: #2e2b28;
+  --ink-soft: #6b645c;
+  --seal: #b22222;
+  --line: #cbbfa6;
+  color-scheme: light;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font: 14px/1.4 system-ui, 'Segoe UI', 'Noto Sans SC', sans-serif;
+}
+
+header.top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+header.top h1 {
+  margin: 0;
+  font-size: 20px;
+  font-family: 'Noto Serif SC', 'Songti SC', serif;
+}
+
+header.top h1 span {
+  font: 600 14px system-ui, sans-serif;
+  color: var(--seal);
+  margin-left: 6px;
+}
+
+header.top nav a {
+  color: var(--ink-soft);
+  margin-left: 12px;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 16px;
+  padding: 16px;
+}
+
+@media (max-width: 900px) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.stage {
+  min-width: 0;
+}
+
+canvas.grid {
+  display: block;
+  width: 100%;
+  height: auto;
+  image-rendering: pixelated;
+  border: 1px solid var(--line);
+  background: var(--paper-2);
+}
+
+canvas.paintable {
+  cursor: crosshair;
+  touch-action: none;
+}
+
+.status {
+  margin-top: 6px;
+  color: var(--ink-soft);
+  font: 12px ui-monospace, Consolas, monospace;
+  overflow-wrap: anywhere;
+}
+
+.controls {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.panel {
+  border: 1px solid var(--line);
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.panel h3 {
+  margin: 0 0 6px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-soft);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0;
+}
+
+.row > span {
+  flex: 0 0 110px;
+}
+
+.row input[type='range'],
+.row select {
+  flex: 1;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.row:has(> button) {
+  flex-wrap: wrap;
+}
+
+.row output {
+  width: 40px;
+  text-align: right;
+  font: 12px ui-monospace, Consolas, monospace;
+}
+
+.checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+}
+
+.palette {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+button,
+select,
+input[type='number'] {
+  font: inherit;
+  color: var(--ink);
+  background: var(--paper);
+  border: 1px solid var(--ink-soft);
+  padding: 3px 8px;
+}
+
+input[type='number'] {
+  width: 120px;
+}
+
+button:hover {
+  background: var(--paper-2);
+}
+
+button.on {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.readout {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px 12px;
+  margin: 0;
+}
+
+.readout dd {
+  margin: 0;
+  font: 12px ui-monospace, Consolas, monospace;
+  text-align: right;
+}
+
+.registries ul {
+  margin: 4px 0 6px;
+  padding-left: 18px;
+  font: 12px ui-monospace, Consolas, monospace;
+}
+
+.shell {
+  max-width: 720px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.poem {
+  font-family: 'Noto Serif SC', 'Songti SC', serif;
+}

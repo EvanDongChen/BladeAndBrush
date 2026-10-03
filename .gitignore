@@ -5,3 +5,5 @@ dist/
 coverage/
 # temporary files written (and removed) by tests/discovery.test.ts
 **/zz_test_dummy*.ts
+
+docs/

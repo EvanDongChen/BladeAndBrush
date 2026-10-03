@@ -13,6 +13,9 @@ const TONE = {
   mid: { ink: [120, 122, 122] as [number, number, number], base: 0.04, edge: 0.35, band: 0.1, outline: 55, texture: 35, textureScale: 0.5, mist: 160 },
 };
 
+/** The paper's own tone: mist fades into this rather than into the brighter occluder white. */
+const PAPER_TONE: [number, number, number] = [236, 228, 210];
+
 const DRAW_ORDER: Record<string, number> = { far: 0, mid: 1, near: 2 };
 
 /**
@@ -39,7 +42,7 @@ registerFeature({
 
     function paintMountain(p: Placement): void {
       const tone = p.depth === 'mid' ? TONE.mid : TONE.near;
-      const base = p.depth === 'mid' ? ground - u.toArt(30) : ground;
+      const base = ground;
       const pr = getShape(p.kind).build(p, { u, params, base });
       if (pr.tops.length === 0) return;
       const cell = (v: number) => Math.floor(v / K);
@@ -51,7 +54,10 @@ registerFeature({
         base: tone.base,
         edge: tone.edge,
         band: tone.band,
-        mist: tone.mist > 0 ? { from: base - u.toArt(tone.mist), to: base } : undefined,
+        // Mid row recedes: ink thins toward the foot into the paper tone, over a band scaled to
+        // the mountain so short ones keep their ridge and do not become blank cutouts.
+        paper: tone.mist > 0 ? PAPER_TONE : undefined,
+        mist: tone.mist > 0 ? { from: base - Math.min(u.toArt(tone.mist), 0.6 * (base - pr.peakY)), to: base } : undefined,
         edgeWidth: K * 3,
         bandWidth: K * 1.5,
         speckle: 0.14,

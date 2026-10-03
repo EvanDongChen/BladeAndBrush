@@ -41,3 +41,22 @@ describe('background plane', () => {
     expect(max).toBeLessThan(200);
   });
 });
+
+describe('mid row at low height', () => {
+  it('has no vertical walls: the foreground skyline never jumps more than a few cells', () => {
+    for (let s = 1; s <= 3; s++) {
+      const bp = generate(s, { ...defaultParams(), mountainHeight: 0.2 }, { k: 2, features: { stubTrees: false } });
+      const aw = bp.w * 2;
+      const ah = bp.h * 2;
+      let prev = -1;
+      let worst = 0;
+      for (let x = 0; x < aw; x++) {
+        let y = 0;
+        while (y < ah && bp.art!.fg[y * aw + x] >>> 24 < 128) y++;
+        if (prev >= 0) worst = Math.max(worst, Math.abs(y - prev));
+        prev = y;
+      }
+      expect(worst).toBeLessThan(12);
+    }
+  });
+});

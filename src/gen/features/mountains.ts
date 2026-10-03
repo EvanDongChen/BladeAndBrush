@@ -1,6 +1,7 @@
 import { El, rgba } from '../../core/elements';
 import { registerFeature } from '../../core/features';
 import { artOf } from '../artState';
+import { recordMountain } from '../mountainStore';
 import { contourWash } from '../paint/shaders';
 import { planOf, type Placement } from '../plan';
 import { rasterizeCoverage } from '../raster';
@@ -87,6 +88,7 @@ registerFeature({
       }
 
       rasterizeCoverage(bp, fg, K, id, El.ROCK, bp, [cell(pr.x0), cell(pr.peakY), cell(pr.x0 + tops.length), cell(ground + K)], true);
+      recordMountain(bp, { id, depth: p.depth, profile: pr });
     }
 
     /** Nearer mountains may hide farther ones completely: drop those, and fit bboxes to what is left. */

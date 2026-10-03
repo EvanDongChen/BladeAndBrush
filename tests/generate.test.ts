@@ -39,15 +39,15 @@ describe('stub generate()', () => {
   });
 
   it('disabling a feature flag removes that feature from the pipeline with no errors', () => {
-    expect(enabledFeatures().map((f) => f.name)).toContain('stubTrees');
-    featureToggles.stubTrees = false;
+    expect(enabledFeatures().map((f) => f.name)).toContain('trees');
+    featureToggles.trees = false;
     try {
-      expect(enabledFeatures().map((f) => f.name)).not.toContain('stubTrees');
+      expect(enabledFeatures().map((f) => f.name)).not.toContain('trees');
       const bp = generate(1, defaultParams());
       expect(count(bp.el, El.TREE)).toBe(0);
       expect(count(bp.el, El.ROCK)).toBeGreaterThan(0);
     } finally {
-      delete featureToggles.stubTrees;
+      delete featureToggles.trees;
     }
     // per-call overrides work the same way
     expect(count(generate(1, defaultParams(), { features: { mountains: false } }).el, El.TREE)).toBeGreaterThan(0);
@@ -131,7 +131,7 @@ describe('mountains', () => {
   };
   const mean = (a: number[]) => a.reduce((s, v) => s + v, 0) / a.length;
   const wiggle = (a: number[]) => a.slice(1).reduce((s, v, i) => s + Math.abs(v - a[i]), 0);
-  const gen = (seed: number, over: Record<string, number>) => generate(seed, { ...defaultParams(), ...over }, { k, features: { stubTrees: false } });
+  const gen = (seed: number, over: Record<string, number>) => generate(seed, { ...defaultParams(), ...over }, { k, features: { trees: false } });
 
   it('replace the stub bumps', () => {
     expect(enabledFeatures().map((f) => f.name)).toContain('mountains');

@@ -87,3 +87,61 @@ describe('tree species', () => {
 
   it('unknown species throws', () => expect(() => getSpecies('baobab')).toThrow());
 });
+
+import { defaultParams } from '../src/core/params';
+import { enabledFeatures, generate } from '../src/gen/generate';
+import { Frontier } from '../src/gen/frontier';
+
+describe('trees feature', () => {
+  const gen = (seed: number, over: Record<string, number> = {}, features: Record<string, boolean> = {}) =>
+    generate(seed, { ...defaultParams(), ...over }, { k: 2, features });
+  const treeStrokes = (bp: ReturnType<typeof generate>) => [...bp.registry.strokes.values()].filter((s) => s.kind === 'tree');
+  const count = (a: Uint8Array, v: number) => a.reduce((n, x) => n + (x === v ? 1 : 0), 0);
+
+  it('replaces the stub trees', () => {
+    const names = enabledFeatures().map((f) => f.name);
+    expect(names).toContain('trees');
+    expect(names).not.toContain('stubTrees');
+  });
+
+  it('tree density adds trees; zero density grows none', () => {
+    let lo = 0;
+    let hi = 0;
+    for (let s = 1; s <= 3; s++) {
+      lo += treeStrokes(gen(s, { treeDensity: 0.2 })).length;
+      hi += treeStrokes(gen(s, { treeDensity: 0.8 })).length;
+    }
+    expect(hi).toBeGreaterThan(lo * 1.5);
+    const none = gen(1, { treeDensity: 0 });
+    expect(treeStrokes(none)).toEqual([]);
+    expect(count(none.el, El.TREE)).toBe(0);
+  });
+
+  it('never turns rock into tree', () => {
+    const on = gen(2, { treeDensity: 0.9 });
+    const off = gen(2, { treeDensity: 0.9 }, { trees: false });
+    expect(count(on.el, El.ROCK)).toBe(count(off.el, El.ROCK));
+  });
+
+  it('every tree owns cells and stands on rock', () => {
+    const bp = gen(3, { treeDensity: 0.7 });
+    const trees = treeStrokes(bp);
+    expect(trees.length).toBeGreaterThan(5);
+    const owned = new Set<number>();
+    for (let i = 0; i < bp.el.length; i++) if (bp.el[i] === El.TREE) owned.add(bp.owner[i]);
+    for (const t of trees) {
+      expect(owned.has(t.id)).toBe(true);
+      const [ax, ay] = t.anchor;
+      let grounded = false;
+      for (let y = ay - 1; y <= ay + 2; y++) if (y >= 0 && y < bp.h && bp.el[y * bp.w + ax] === El.ROCK) grounded = true;
+      expect(grounded).toBe(true);
+    }
+  });
+
+  it('the scan counts exactly the registered trees', () => {
+    const bp = gen(4, { treeDensity: 0.6 });
+    const world = new World(bp, 4);
+    new Frontier(bp).revealAll(world);
+    expect(scan(world).counts.trees).toBe(treeStrokes(bp).length);
+  });
+});

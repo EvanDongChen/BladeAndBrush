@@ -47,7 +47,7 @@ describe('background plane', () => {
 describe('mid row at low height', () => {
   it('has no vertical walls: the foreground skyline never jumps more than a few cells', () => {
     for (let s = 1; s <= 3; s++) {
-      const bp = generate(s, { ...defaultParams(), mountainHeight: 0.2 }, { k: 2, features: { stubTrees: false } });
+      const bp = generate(s, { ...defaultParams(), mountainHeight: 0.2 }, { k: 2, features: { trees: false } });
       const aw = bp.w * 2;
       const ah = bp.h * 2;
       let prev = -1;
@@ -67,7 +67,7 @@ describe('ground bank', () => {
   it('is drawn in front of every mountain: the art just under its edge is ground', () => {
     const K = 4;
     for (let s = 1; s <= 3; s++) {
-      const bp = generate(s, defaultParams(), { k: K, dims: { w: 320, h: 96 }, features: { stubTrees: false } });
+      const bp = generate(s, defaultParams(), { k: K, dims: { w: 320, h: 96 }, features: { trees: false } });
       const ground = [...bp.registry.strokes.values()].find((q) => q.kind === 'rock')!;
       const own = artOf(bp).fg.own;
       const aw = bp.w * K;

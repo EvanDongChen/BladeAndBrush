@@ -1,7 +1,7 @@
 import './bootstrap';
 import { describeGoal } from '../core/goals';
 import { levels, type LevelDef } from '../core/levels';
-import { h, pageHeader, panel } from './ui';
+import { h, panel } from './ui';
 
 /**
  * Home landing page. Presentational only: reads the level registry,
@@ -11,16 +11,10 @@ function hero(): HTMLElement {
   return h(
     'section',
     { class: 'home-hero' },
-    h('p', { class: 'home-kicker' }, 'Noita-style ink landscape · slash, burn, flood, push'),
-    h(
-      'div',
-      { class: 'home-title-row' },
-      h('h2', { class: 'home-title' }, '斬山水'),
-      h('span', { class: 'home-seal' }, '斬'),
-    ),
-    h('p', { class: 'home-sub' }, 'Blade & Brush · Zhan-Shui'),
-    h('p', { class: 'home-tag' }, 'The painting draws itself. You carve it until it matches the poem.'),
-    h('div', { class: 'home-divider', 'aria-hidden': 'true' }, h('span', {}, '山')),
+    h('p', { class: 'home-kicker' }, 'Slash · burn · flood · push'),
+    h('h2', { class: 'home-title' }, 'Blade & Brush'),
+    h('p', { class: 'home-tag' }, 'A living landscape that paints itself. Carve it until it matches the poem.'),
+    h('div', { class: 'home-divider', 'aria-hidden': 'true' }, h('span', {}, '·')),
   );
 }
 
@@ -111,20 +105,13 @@ function credits(): HTMLElement {
   return h(
     'footer',
     { class: 'home-foot' },
-    h('div', { class: 'home-divider', 'aria-hidden': 'true' }, h('span', {}, '水')),
-    h(
-      'p',
-      {},
-      'Inspired by ',
-      h('a', { href: 'https://github.com/LingDong-/shan-shui-inf' }, 'shan-shui-inf'),
-      ' (reference only). Vite + TypeScript + Canvas 2D, no UI framework.',
-    ),
+    h('div', { class: 'home-divider', 'aria-hidden': 'true' }, h('span', {}, '·')),
+    h('p', {}, 'Blade & Brush · built with Vite, TypeScript and Canvas 2D.'),
   );
 }
 
 export function mountHome(root: HTMLElement): () => void {
   root.replaceChildren(
-    pageHeader('Home'),
     h(
       'main',
       { class: 'shell home' },

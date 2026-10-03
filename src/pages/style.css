@@ -201,8 +201,10 @@ button.on {
 /* Home landing (index.html). Additive only; shared classes above stay untouched. */
 
 .home {
+  width: 100%;
   max-width: 1280px;
-  padding: 16px 32px;
+  margin: 0 auto;
+  padding: 24px 32px;
 }
 
 .home-hero {
@@ -222,40 +224,12 @@ button.on {
   color: var(--ink-soft);
 }
 
-.home-title-row {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 14px;
-}
-
 .home-title {
   margin: 0;
   font-family: 'Noto Serif SC', 'Songti SC', serif;
   font-size: 56px;
   font-weight: 700;
-  letter-spacing: 0.18em;
-  text-indent: 0.18em;
-}
-
-.home-seal {
-  display: inline-block;
-  background: var(--seal);
-  color: #f5efe0;
-  font-family: 'Noto Serif SC', 'Songti SC', serif;
-  font-size: 22px;
-  line-height: 1;
-  padding: 8px 9px;
-  border-radius: 4px;
-  transform: rotate(-4deg);
-  box-shadow: 1px 1px 0 rgba(46, 43, 40, 0.35);
-}
-
-.home-sub {
-  margin: 8px 0 0;
-  font-size: 15px;
-  letter-spacing: 0.06em;
-  color: var(--ink-soft);
+  letter-spacing: 0.04em;
 }
 
 .home-tag {

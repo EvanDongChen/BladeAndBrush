@@ -1,11 +1,18 @@
-import { registerAbility } from '../../core/abilities';
+import { registerAbility, type AbilityArgs, type PointerSample } from '../../core/abilities';
+import { El } from '../../core/elements';
+import type { World } from '../../core/world';
+import { forCapsule } from '../brush';
 
-/** PHASE 0 STUB (Person B): clear cells with no splatter and no CUT flag (section 7.4). */
+/** Quietly erase everything under the brush: smooth edge, no splatter, no CUT flag. */
+function erase(world: World, a: PointerSample, b: PointerSample, args: AbilityArgs): void {
+  forCapsule(world, a.x, a.y, b.x, b.y, Math.max(1, args.radius ?? 4), (x, y) => world.set(x, y, El.EMPTY));
+}
+
 registerAbility({
   id: 'null',
   name: 'Null',
   icon: '無',
-  begin: () => {},
-  move: () => {},
+  begin: (world, s, args) => erase(world, s, s, args),
+  move: (world, from, to, args) => erase(world, from, to, args),
   end: () => {},
 });

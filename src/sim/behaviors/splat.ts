@@ -1,7 +1,7 @@
 import { registerBehavior } from '../../core/behaviors';
 import { El } from '../../core/elements';
 import type { World } from '../../core/world';
-import { FREE, moveCell, REPLACEABLE } from '../physics';
+import { at, FREE, K_GAS, K_PROJECTILE, KIND, moveCell, NEIGHBORS8, REPLACEABLE } from '../physics';
 import { defineTunables } from '../tunables';
 
 export const splatTunables = defineTunables(
@@ -37,12 +37,14 @@ function updateSplat(world: World, x: number, y: number): void {
       world.set(x, y, El.EMPTY); // flew off the canvas
       return;
     }
-    if (!REPLACEABLE[el[ny * w + nx]]) {
+    const e = el[ny * w + nx];
+    if (REPLACEABLE[e]) {
+      cx = nx;
+      cy = ny;
+    } else if (!passThrough(e)) {
       hit = true;
       break;
-    }
-    cx = nx;
-    cy = ny;
+    } // smoke, dust, other droplets: fly through, don't stain on them
   }
 
   const j = cx === x && cy === y ? i : moveCell(world, x, y, cx, cy, FREE);
@@ -57,4 +59,27 @@ function updateSplat(world: World, x: number, y: number): void {
   }
 }
 
+/** Things a droplet flies through, and that can't hold a stain up: gases and other flying bits. */
+function passThrough(e: number): boolean {
+  const k = KIND[e];
+  return k === K_GAS || k === K_PROJECTILE;
+}
+
+/**
+ * A stain clings to whatever it landed on. If that is gone (the piece it was on fell, slid or
+ * burnt away) and nothing solid touches it any more, it drips: it turns back into a droplet and
+ * settles on the next thing below. Stains touching only other stains count as unsupported.
+ */
+function updateStain(world: World, x: number, y: number): void {
+  for (let k = 0; k < 16; k += 2) {
+    const e = at(world, x + NEIGHBORS8[k], y + NEIGHBORS8[k + 1]); // out of bounds reads as rock
+    if (!REPLACEABLE[e] && !passThrough(e)) return;
+  }
+  const i = y * world.w + x;
+  world.el[i] = El.SPLAT;
+  world.vx[i] = 0;
+  world.vy[i] = 0;
+}
+
 registerBehavior(El.SPLAT, updateSplat);
+registerBehavior(El.STAIN, updateStain);

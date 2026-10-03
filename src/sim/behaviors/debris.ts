@@ -2,8 +2,9 @@ import { registerBehavior } from '../../core/behaviors';
 import { El, ELEMENTS } from '../../core/elements';
 import type { World } from '../../core/world';
 import { DEBRIS } from '../elements/debris';
-import { FREE, moveCell, REPLACEABLE } from '../physics';
+import { FREE, moveCell, REPLACEABLE, RIGID } from '../physics';
 import { defineTunables } from '../tunables';
+import { markUnsupported } from './rigid';
 
 export const debrisTunables = defineTunables(
   'debris',
@@ -27,6 +28,8 @@ function land(world: World, j: number): void {
   world.life[j] = 0;
   world.vx[j] = 0;
   world.vy[j] = 0;
+  // rubble that came to rest in mid-air (e.g. on a piece that then fell away) gets picked up and falls
+  if (ok && RIGID[carried]) markUnsupported(world);
 }
 
 /** Ballistic flight along vx/vy; lands as its carried element on the first thing it hits. */

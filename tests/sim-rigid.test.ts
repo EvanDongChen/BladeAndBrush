@@ -90,6 +90,35 @@ describe('rigid pieces', () => {
     expect(maxTheta).toBeGreaterThan(1);
   });
 
+  it('ink stains on a piece do not stay hanging in the air when the piece falls', () => {
+    const world = boxWorld(64, 64);
+    fillRect(world, 20, 20, 39, 25, El.ROCK); // a floating slab...
+    fillRect(world, 20, 19, 39, 19, El.STAIN); // ...with ink stains along its top
+    fillRect(world, 40, 20, 40, 25, El.STAIN); // ...and its right side
+    const stains = count(world, El.STAIN);
+    markUnsupported(world);
+    run(world, 300);
+    // dripping ink can merge into stains it lands on, but never multiplies
+    expect(count(world, El.STAIN)).toBeGreaterThan(stains / 2);
+    expect(count(world, El.STAIN)).toBeLessThanOrEqual(stains);
+    // every stain is touching something solid (nothing left hanging where the slab used to be)
+    let hanging = 0;
+    for (let i = 0; i < world.size; i++) {
+      if (world.el[i] !== El.STAIN) continue;
+      const x = i % 64;
+      const y = (i / 64) | 0;
+      let touching = false;
+      for (let dy = -1; dy <= 1; dy++)
+        for (let dx = -1; dx <= 1; dx++) {
+          const n = world.get(x + dx, y + dy);
+          if ((dx || dy) && n !== El.EMPTY && n !== El.STAIN) touching = true;
+        }
+      if (!touching) hanging++;
+    }
+    expect(hanging).toBe(0);
+    expect(rowsOf(world, El.STAIN).top).toBeGreaterThan(40);
+  });
+
   it('anything still connected to the ground stays put', () => {
     const world = boxWorld();
     fillRect(world, 10, 20, 12, 46, El.ROCK); // pillar on the floor

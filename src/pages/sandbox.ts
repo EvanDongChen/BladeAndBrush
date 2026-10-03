@@ -12,6 +12,7 @@ import { generate } from '../gen/generate';
 import { aimEnd, chargeOf, drawAim, isLineAbility } from '../sim/lineAbility';
 import { SCENES } from '../sim/scenes';
 import { step } from '../sim/step';
+import { Fx } from './fx';
 import { tunables } from '../sim/tunables';
 import {
   abilityBar,
@@ -58,6 +59,7 @@ export function mountSandbox(root: HTMLElement): () => void {
 
   const canvas = h('canvas', { class: 'grid paintable' });
   const renderer = new Renderer(canvas, DEFAULT_DIMS);
+  const fx = new Fx(); // blade trails, shake, hit-stop
   const status = h('div', { class: 'status' });
   const recStatus = h('div', { class: 'status' }, 'Not recording.');
 
@@ -70,6 +72,7 @@ export function mountSandbox(root: HTMLElement): () => void {
 
   function reset(): void {
     world = buildScene(seed, scene, params);
+    fx.attach(world);
     driver = new ActionDriver();
     clock.reset();
     if (recordingFrom) {
@@ -203,6 +206,7 @@ export function mountSandbox(root: HTMLElement): () => void {
     const r = recording;
     if (!r) return void (recStatus.textContent = 'Nothing recorded yet.');
     world = buildScene(r.seed, r.scene, r.params);
+    fx.detach(); // no effects while fast-forwarding the replay
     driver = new ActionDriver(r.log);
     while (world.tick < r.endTick) tickOnce();
     const got = world.hash();
@@ -211,6 +215,7 @@ export function mountSandbox(root: HTMLElement): () => void {
       `Replayed to tick ${world.tick}: hash ${hex(got)} ${ok ? '✓ matches' : `✗ MISMATCH (expected ${hex(r.hash)})`}` +
       (r.untracked ? ' · params or tuning changed mid-recording, which is not logged' : '');
     driver = new ActionDriver(); // back to live input on the replayed world
+    fx.attach(world);
   });
 
   const counts = h('dl', { class: 'readout' });
@@ -254,19 +259,31 @@ export function mountSandbox(root: HTMLElement): () => void {
   );
 
   let frame = 0;
-  const stop = startLoop(clock, () => {
-    renderer.draw(world, { cursor });
-    // skill-shot preview: drawn from live pointer input, so it shows instantly (even when paused)
-    if (down && cursor && isLineAbility(tool.ability)) drawAim(renderer.g, tool.ability, aimEnd(pressedAt.x, pressedAt.y, cursor.x, cursor.y), radius, chargeOf(world.tick - pressedTick));
-    if (frame++ % 15 === 0) {
-      world.countByElement(countBuf);
-      for (const [id, dd] of countCells) dd.textContent = String(countBuf[id]);
-      status.textContent = `tick ${world.tick}${clock.paused ? ' (paused)' : ''} · ${clock.speed}x · tool ${tool.ability}${
-        tool.ability === 'paint' ? ` ${elements.get(tool.el)?.name}` : ''
-      } · uses ${driver.uses}`;
-    }
-  });
-  return stop;
+  const stop = startLoop(
+    clock,
+    (dt) => {
+      renderer.draw(world, { cursor });
+      fx.draw(renderer.g);
+      // skill-shot preview: drawn from live pointer input, so it shows instantly (even when paused)
+      if (down && cursor && isLineAbility(tool.ability)) {
+        const aim = aimEnd(pressedAt.x, pressedAt.y, cursor.x, cursor.y);
+        drawAim(renderer.g, tool.ability, aim, radius, chargeOf(world.tick - pressedTick));
+      }
+      if (frame++ % 15 === 0) {
+        world.countByElement(countBuf);
+        for (const [id, dd] of countCells) dd.textContent = String(countBuf[id]);
+        status.textContent = `tick ${world.tick}${clock.paused ? ' (paused)' : ''} · ${clock.speed}x · tool ${tool.ability}${
+          tool.ability === 'paint' ? ` ${elements.get(tool.el)?.name}` : ''
+        } · uses ${driver.uses}`;
+      }
+      fx.endFrame(canvas, dt);
+    },
+    () => fx.shouldAdvance(), // hit-stop holds the sim for a few frames
+  );
+  return () => {
+    stop();
+    fx.detach();
+  };
 }
 
 const hex = (n: number) => n.toString(16).padStart(8, '0');

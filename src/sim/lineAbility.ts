@@ -87,6 +87,11 @@ export function isLineAbility(id: string): boolean {
   return defs.has(id);
 }
 
+/** The ability's color as 'r, g, b' (for previews and effects). */
+export function lineColor(id: string): string {
+  return defs.get(id)?.color ?? '40, 40, 40';
+}
+
 /**
  * Skill-shot preview on the grid-resolution canvas: the strip it will hit (as wide as the charged
  * line), the path, an arrow, and a charge meter at the start that fills while you hold.

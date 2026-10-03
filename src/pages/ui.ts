@@ -171,16 +171,20 @@ export function registryInspector(): HTMLElement {
   return wrap;
 }
 
-/** Drive a Clock from requestAnimationFrame and draw each frame. Returns a stop function. */
-export function startLoop(clock: Clock, frame: () => void): () => void {
+/**
+ * Drive a Clock from requestAnimationFrame and draw each frame (frame gets the frame time in ms).
+ * If `shouldAdvance` returns false the sim does not advance that frame (hit-stop). Returns a stop function.
+ */
+export function startLoop(clock: Clock, frame: (dtMs: number) => void, shouldAdvance?: () => boolean): () => void {
   let last = -1;
   let id = 0;
   let stopped = false;
   const loop = (t: number) => {
     if (stopped) return;
-    clock.advance(last < 0 ? 0 : Math.min(t - last, 250));
+    const dt = last < 0 ? 0 : Math.min(t - last, 250);
+    if (shouldAdvance?.() !== false) clock.advance(dt);
     last = t;
-    frame();
+    frame(dt);
     id = requestAnimationFrame(loop);
   };
   id = requestAnimationFrame(loop);

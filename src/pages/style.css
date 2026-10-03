@@ -618,15 +618,8 @@ input[type='number'] {
 
 .hang-row {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
-}
-
-.hang-row.steps {
-  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
-}
-
-.hang-row {
-  gap: 22px 26px;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 22px;
   align-items: start;
 }
 
@@ -727,9 +720,8 @@ input[type='number'] {
 
 .home-title .en {
   margin-top: 10px;
-  font: 600 clamp(18px, 2.4vw, 24px) var(--font-serif);
-  letter-spacing: 0.35em;
-  text-transform: uppercase;
+  font: 600 clamp(18px, 2.4vw, 22px) var(--font-serif);
+  letter-spacing: 0.08em;
   color: var(--ink-soft);
 }
 
@@ -739,46 +731,18 @@ input[type='number'] {
   font-size: 17px;
 }
 
-/* brush-stroke section divider that paints itself */
-.brush-divider {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  margin: 0 0 18px;
-  color: var(--ink);
+.section-title {
+  margin: 0 0 12px;
+  padding-bottom: 6px;
+  font: 600 18px var(--font-serif);
+  letter-spacing: 0.04em;
+  border-bottom: 1px solid var(--line);
 }
 
-.brush-divider svg {
-  flex: 1;
-  min-width: 0;
-  height: 14px;
-  overflow: visible;
-}
-
-.brush-divider path {
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 3;
-  stroke-linecap: round;
-  opacity: 0.75;
-  stroke-dasharray: 420;
-  stroke-dashoffset: 420;
-  transition: stroke-dashoffset 1.4s var(--ease-scroll);
-}
-
-.brush-divider svg:last-child path {
-  transform: scaleX(-1);
-  transform-origin: center;
-}
-
-.brush-divider.in path {
-  stroke-dashoffset: 0;
-}
-
-.brush-divider span {
-  font: 400 26px var(--font-brush);
-  letter-spacing: 0.1em;
-  white-space: nowrap;
+.rule {
+  border: 0;
+  border-top: 1px solid var(--line);
+  margin: 0 0 12px;
 }
 
 .reveal {
@@ -795,26 +759,17 @@ input[type='number'] {
 }
 
 .home-note {
-  margin: 14px 0 0;
+  margin: 12px 0 16px;
   font-size: 13px;
   color: var(--ink-soft);
 }
 
-.home-note.center {
-  margin: -6px 0 18px;
-  text-align: center;
-}
-
-.step-glyph {
-  font: 400 54px/1 var(--font-brush);
-  text-align: center;
-  color: var(--ink);
-  margin-bottom: 8px;
-}
-
-.steps .hanging-inner p {
+.home-steps {
   margin: 0;
-  text-align: center;
+  padding-left: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
 .home-poem {

@@ -53,42 +53,28 @@ function hero(): { node: HTMLElement; scroll: ScrollHandle } {
   return { node: h('section', { class: 'home-hero' }, scroll.node), scroll };
 }
 
-function brushDivider(label: string): HTMLElement {
-  return h(
-    'div',
-    { class: 'brush-divider reveal', 'aria-hidden': 'true' },
-    svg('svg', { viewBox: '0 0 400 20', preserveAspectRatio: 'none' }, svg('path', { d: 'M4 12 C80 4 160 16 200 10 S330 4 396 11' })),
-    h('span', {}, label),
-    svg('svg', { viewBox: '0 0 400 20', preserveAspectRatio: 'none' }, svg('path', { d: 'M4 11 C70 4 170 16 200 10 S320 5 396 12' })),
-  );
+function sectionTitle(text: string): HTMLElement {
+  return h('h3', { class: 'section-title' }, text);
 }
 
-const STEPS: [string, string, string][] = [
-  ['讀', 'Read the poem', 'Each level names its goals: peaks, trees, water.'],
-  ['觀', 'Watch it paint', 'The generator reveals the scroll left to right.'],
-  ['斬', 'Cut it into shape', 'Slash grooves to steer water, burn trees, flood valleys. The scanner reads the cells to judge.'],
-];
-
-function howTo(): { node: HTMLElement; scrolls: ScrollHandle[] } {
-  const scrolls = STEPS.map(([glyph, title, text], i) =>
-    hangingScroll(
-      `${i + 1} · ${title}`,
-      h('div', { class: 'step-glyph' }, glyph),
-      h('p', {}, text),
-    ),
-  );
-  const node = h(
+function howTo(): HTMLElement {
+  return h(
     'section',
     { class: 'home-block how' },
-    brushDivider('How it plays'),
-    h('div', { class: 'hang-row steps' }, ...scrolls.map((s) => s.node)),
+    sectionTitle('How it plays'),
+    h(
+      'ol',
+      { class: 'home-steps' },
+      h('li', {}, 'Read the poem. Each level names its goals: peaks, trees, water.'),
+      h('li', {}, 'Watch the landscape paint itself from left to right.'),
+      h('li', {}, 'Cut it into shape. Slash grooves, burn trees, flood valleys. The scanner counts the result.'),
+    ),
     h(
       'p',
       { class: 'home-note' },
       'The full paint-and-play loop arrives after the generator and abilities branches land. For now, explore the workshops below.',
     ),
   );
-  return { node, scrolls };
 }
 
 function levelScroll(l: LevelDef): HTMLElement {
@@ -121,8 +107,8 @@ function levelsSection(): HTMLElement {
   return h(
     'section',
     { class: 'home-block', id: 'levels' },
-    brushDivider('Levels'),
-    h('p', { class: 'home-note center' }, 'Click a scroll’s roller to unroll it.'),
+    sectionTitle('Levels'),
+    h('p', { class: 'home-note' }, 'Click a scroll to unroll it.'),
     wrap,
   );
 }
@@ -135,40 +121,37 @@ const WORKSHOPS: [string, string, string][] = [
 
 function workshops(): HTMLElement {
   const grid = h('div', { class: 'workshops' });
-  WORKSHOPS.forEach(([name, href, text], i) =>
+  WORKSHOPS.forEach(([name, href, text]) =>
     grid.append(
       h(
         'a',
-        { class: 'workshop reveal', href, style: `--d:${i * 120}ms` },
+        { class: 'workshop', href },
         h('strong', {}, name),
         h('span', {}, text),
       ),
     ),
   );
-  return h('section', { class: 'home-block' }, brushDivider('Workshops'), grid);
+  return h('section', { class: 'home-block' }, sectionTitle('Workshops'), grid);
 }
 
 function credits(): HTMLElement {
   return h(
     'footer',
     { class: 'home-foot' },
-    brushDivider('終'),
+    h('hr', { class: 'rule' }),
     h('p', {}, 'Blade & Brush · built with Vite, TypeScript and Canvas 2D.'),
   );
 }
 
 export function mountHome(root: HTMLElement): () => void {
   const top = hero();
-  const how = howTo();
-  const main = h('main', { class: 'shell home' }, top.node, how.node, levelsSection(), workshops(), credits());
+  const main = h('main', { class: 'shell home' }, top.node, howTo(), levelsSection(), workshops(), credits());
   root.replaceChildren(siteNav('Home'), main);
 
-  // Unroll the title scroll shortly after load, then the three step scrolls one after another.
-  const timers: number[] = [];
-  timers.push(window.setTimeout(top.scroll.open, 350));
-  how.scrolls.forEach((s, i) => timers.push(window.setTimeout(s.open, 1500 + i * 280)));
+  // Unroll the title scroll shortly after load.
+  const timer = window.setTimeout(top.scroll.open, 350);
   revealOnScroll(main);
-  return () => timers.forEach((t) => clearTimeout(t));
+  return () => clearTimeout(timer);
 }
 
 const app = document.getElementById('app');

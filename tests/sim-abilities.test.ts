@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { El } from '../src/core/elements';
 import { ActionDriver, type ActionLog } from '../src/core/replay';
 import type { World } from '../src/core/world';
+import { bodyCount } from '../src/sim/behaviors/rigid';
+import { DEBRIS } from '../src/sim/elements/debris';
 import { EARTH } from '../src/sim/elements/earth';
 import { step } from '../src/sim/step';
 import { blueprintWorld } from './helpers';
@@ -33,21 +35,59 @@ describe('water ability', () => {
 });
 
 describe('push ability', () => {
-  it('moves material along the drag and conserves every element', () => {
-    const world = boxWorld(96, 48);
-    fillRect(world, 20, 30, 30, 46, El.ROCK);
-    fillRect(world, 31, 40, 34, 46, EARTH);
+  const xRange = (world: World, el: number) => {
+    let min = Infinity;
+    let max = -1;
+    let sum = 0;
+    let n = 0;
+    for (let i = 0; i < world.size - world.w; i++) {
+      if (world.el[i] !== el) continue;
+      const x = i % world.w;
+      min = Math.min(min, x);
+      max = Math.max(max, x);
+      sum += x;
+      n++;
+    }
+    return { min, max, mean: sum / n };
+  };
+
+  it('a drag flings loose earth far along the drag, and it lands back as earth', () => {
+    const world = boxWorld(200, 64);
+    fillRect(world, 20, 50, 34, 62, EARTH);
+    const earth = count(world, EARTH);
+    stroke(world, 'push', [[16, 56, 0], [24, 56, 20], [32, 56, 20], [40, 56, 20]], { radius: 7 });
+    expect(count(world, DEBRIS)).toBeGreaterThan(0);
+    run(world, 300);
+    expect(count(world, DEBRIS)).toBe(0);
+    expect(count(world, EARTH)).toBe(earth);
+    expect(xRange(world, EARTH).max).toBeGreaterThan(70);
+  });
+
+  it('breaks rock into chunks that fly and land intact', () => {
+    const world = boxWorld(200, 64);
+    fillRect(world, 30, 20, 37, 62, El.ROCK); // pillar standing on the floor
+    const rock = count(world, El.ROCK);
+    stroke(world, 'push', [[24, 24, 0], [30, 24, 20], [36, 24, 20]], { radius: 6 });
+    expect(bodyCount(world)).toBeGreaterThan(0);
+    run(world, 400);
+    expect(bodyCount(world)).toBe(0);
+    expect(count(world, El.ROCK)).toBe(rock);
+    expect(xRange(world, El.ROCK).max).toBeGreaterThan(55);
+  });
+
+  it('a click without dragging blasts outward in every direction', () => {
+    const world = boxWorld(200, 64);
+    fillRect(world, 90, 50, 110, 62, EARTH);
+    fillRect(world, 60, 40, 140, 49, El.WATER);
     const before = world.countByElement().slice();
-    const meanX = () => {
-      let sum = 0;
-      let n = 0;
-      for (let i = 0; i < world.size; i++) if (world.el[i] === El.ROCK && (i / world.w | 0) < 46) (sum += i % world.w), n++;
-      return sum / n;
-    };
-    const x0 = meanX();
-    stroke(world, 'push', [[22, 36], [30, 36], [38, 36], [46, 36]], { radius: 6 });
-    expect(meanX()).toBeGreaterThan(x0 + 2);
-    expect(world.countByElement()).toEqual(before);
+    stroke(world, 'push', [[100, 52]], { radius: 8 });
+    run(world, 400);
+    const after = world.countByElement();
+    expect(after[EARTH]).toBe(before[EARTH]);
+    expect(after[El.WATER]).toBe(before[El.WATER]);
+    const spread = xRange(world, EARTH);
+    expect(spread.min).toBeLessThan(85);
+    expect(spread.max).toBeGreaterThan(115);
   });
 });
 

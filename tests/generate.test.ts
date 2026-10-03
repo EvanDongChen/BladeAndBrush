@@ -94,3 +94,25 @@ describe('Frontier', () => {
     expect(scan(world).counts.trees).toBe(trees);
   });
 });
+
+describe('art pipeline', () => {
+  it('every solid cell is at least half covered by its owner in the art, and the art is painted', () => {
+    const bp = generate(3, defaultParams(), { k: 2 });
+    const art = bp.art!;
+    const k = art.k;
+    const aw = bp.w * k;
+    let painted = 0;
+    for (const c of art.fg) if (c >>> 24) painted++;
+    expect(painted).toBeGreaterThan(bp.w * k * k * 5);
+    let bad = 0;
+    for (let i = 0; i < bp.el.length; i++) {
+      if (bp.el[i] === El.EMPTY) continue;
+      const x = i % bp.w;
+      const y = (i / bp.w) | 0;
+      let opaque = 0;
+      for (let yy = 0; yy < k; yy++) for (let xx = 0; xx < k; xx++) if (art.fg[(y * k + yy) * aw + x * k + xx] >>> 24) opaque++;
+      if (opaque < Math.ceil((k * k) / 2)) bad++;
+    }
+    expect(bad).toBe(0);
+  });
+});

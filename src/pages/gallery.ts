@@ -16,6 +16,7 @@ function entryCard(e: GalleryEntry, onRemove: () => void): HTMLElement {
     { class: 'home-card' },
     h('img', { class: 'gallery-thumb', src: e.png, alt: `Winning painting for ${e.levelId}` }),
     h('h4', {}, e.levelId),
+    h('p', { class: 'home-meta' }, `By ${e.playerName ?? 'anonymous'}`),
     h(
       'p',
       { class: 'home-meta' },

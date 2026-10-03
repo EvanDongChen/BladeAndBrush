@@ -1,5 +1,34 @@
 import type { GalleryEntry, GalleryStore, NewGalleryEntry } from './types';
 
+/** Delete secrets for remote entries, keyed by entry id. */
+const SECRET_KEY = 'blade-and-brush.gallery.secrets.v1';
+
+function readSecrets(): Record<string, string> {
+  try {
+    const raw = localStorage.getItem(SECRET_KEY);
+    const parsed: unknown = raw ? JSON.parse(raw) : {};
+    return typeof parsed === 'object' && parsed !== null ? (parsed as Record<string, string>) : {};
+  } catch {
+    return {};
+  }
+}
+
+export function rememberSecret(id: string, secret: string): void {
+  const all = readSecrets();
+  all[id] = secret;
+  localStorage.setItem(SECRET_KEY, JSON.stringify(all));
+}
+
+export function recallSecret(id: string): string | undefined {
+  return readSecrets()[id];
+}
+
+export function forgetSecret(id: string): void {
+  const all = readSecrets();
+  delete all[id];
+  localStorage.setItem(SECRET_KEY, JSON.stringify(all));
+}
+
 /**
  * STUB: remote backend for the future database (Tiger Data / Postgres).
  *
@@ -42,11 +71,19 @@ export class RemoteGalleryStore implements GalleryStore {
     return this.request<GalleryEntry>(`/gallery/${encodeURIComponent(id)}`);
   }
 
-  save(entry: NewGalleryEntry): Promise<GalleryEntry> {
-    return this.request<GalleryEntry>('/gallery', { method: 'POST', body: JSON.stringify(entry) });
+  async save(entry: NewGalleryEntry): Promise<GalleryEntry> {
+    const { entry: saved, deleteSecret } = await this.request<{ entry: GalleryEntry; deleteSecret: string }>(
+      '/gallery',
+      { method: 'POST', body: JSON.stringify(entry) },
+    );
+    rememberSecret(saved.id, deleteSecret);
+    return saved;
   }
 
-  async remove(id: string): Promise<void> {
-    await this.request<void>(`/gallery/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  async remove(id: string, secret?: string): Promise<void> {
+    const s = secret ?? recallSecret(id);
+    const q = s ? `?secret=${encodeURIComponent(s)}` : '';
+    await this.request<void>(`/gallery/${encodeURIComponent(id)}${q}`, { method: 'DELETE' });
+    forgetSecret(id);
   }
 }

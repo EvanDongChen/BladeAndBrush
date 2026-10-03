@@ -6,6 +6,8 @@ import type { ActionLog } from '../core/replay';
  */
 export interface GalleryEntry {
   id: string;
+  /** Display name, or null for anonymous. */
+  playerName: string | null;
   levelId: string;
   seed: number;
   params: Record<string, number>;
@@ -14,6 +16,12 @@ export interface GalleryEntry {
   png: string;
   /** Goal outcome at submit time. */
   result: { pass: boolean; progress: number };
+  /** Scanner output at submit time, if available. */
+  scan: Record<string, unknown> | null;
+  /** Deterministic fingerprint of the final grid (PLAN.md section 9). */
+  worldHash: number;
+  /** Build that produced this entry, for replay compatibility. */
+  appVersion: string;
   /** Epoch ms, set by the store on save. */
   createdAt: number;
 }
@@ -28,6 +36,7 @@ export type NewGalleryEntry = Omit<GalleryEntry, 'id' | 'createdAt'>;
 export interface GalleryStore {
   list(levelId?: string): Promise<GalleryEntry[]>;
   get(id: string): Promise<GalleryEntry | undefined>;
+  /** Resolves with the entry; remote backends also persist a delete secret (see submit.ts). */
   save(entry: NewGalleryEntry): Promise<GalleryEntry>;
-  remove(id: string): Promise<void>;
+  remove(id: string, secret?: string): Promise<void>;
 }

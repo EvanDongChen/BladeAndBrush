@@ -15,11 +15,13 @@ export const pushTunables = defineTunables(
     /** Fastest launch. */
     maxSpeed: 11,
     /** Extra upward kick, so things arc instead of skidding. */
-    lift: 1.5,
+    lift: 2.5,
     /** Launch speed of a click without dragging (a blast outward in every direction). */
-    blast: 8,
+    blast: 11,
     /** Rough size of the chunks rock breaks into (cells across). */
     chunk: 6,
+    /** How much speed a thrown chunk keeps when it hits rock (it rebounds out of the surface). */
+    rebound: 0.75,
   },
   {
     power: [0, 2, 0.05],
@@ -28,6 +30,7 @@ export const pushTunables = defineTunables(
     lift: [0, 6, 0.25],
     blast: [0, 12, 0.5],
     chunk: [2, 30, 1],
+    rebound: [0, 1, 0.05],
   },
 );
 
@@ -35,7 +38,8 @@ const clamp = (v: number) => Math.max(-12, Math.min(12, Math.round(v)));
 
 /**
  * Fling everything under the brush. Loose material (earth, ash, water) flies as DEBRIS and lands
- * back as itself; rock, wood and leaves break into a few chunks that fly as rigid pieces.
+ * back as itself; rock, wood and leaves break into a few chunks that fly as rigid pieces (chunks
+ * walled in by solid rock burst into flying rubble instead, which sprays out of the crater).
  * Directional (dirx, diry) for a drag, or outward from the center for a blast.
  */
 function shove(world: World, cx: number, cy: number, r: number, dirx: number, diry: number, speed: number, radial: boolean): void {
@@ -89,7 +93,7 @@ function shove(world: World, cx: number, cy: number, r: number, dirx: number, di
       if (groups[s].length === 0) continue;
       const [ux, uy] = away(seeds[s] % w, (seeds[s] / w) | 0);
       const v = speed * rng.range(0.8, 1.2);
-      launchBody(world, groups[s], ux * v + rng.range(-0.5, 0.5), uy * v - lift * rng.range(0.5, 1.5));
+      launchBody(world, groups[s], ux * v + rng.range(-0.5, 0.5), uy * v - lift * rng.range(0.5, 1.5), pushTunables.rebound, true);
     }
   }
   markUnsupported(world);
@@ -117,7 +121,12 @@ registerAbility({
     moved = true;
     const { power, minSpeed, maxSpeed } = pushTunables;
     const speed = Math.max(minSpeed, Math.min(maxSpeed, to.speed * power));
-    shove(world, to.x, to.y, radius(args), dx / len, dy / len, speed, false);
+    // a fast swipe moves many cells per tick: hit everything along the way, nearest first
+    const r = radius(args);
+    const n = Math.max(1, Math.ceil(len / Math.max(1, r * 0.6)));
+    for (let k = 1; k <= n; k++) {
+      shove(world, from.x + (dx * k) / n, from.y + (dy * k) / n, r, dx / len, dy / len, speed, false);
+    }
   },
   end: (world, args) => {
     if (start && !moved) shove(world, start.x, start.y, radius(args), 0, 0, pushTunables.blast, true);

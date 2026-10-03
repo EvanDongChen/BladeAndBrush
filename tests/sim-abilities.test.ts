@@ -75,6 +75,20 @@ describe('push ability', () => {
     expect(xRange(world, El.ROCK).max).toBeGreaterThan(55);
   });
 
+  it('pushing into solid rock still throws material out (walled-in chunks burst into rubble)', () => {
+    const world = boxWorld(200, 64);
+    fillRect(world, 60, 30, 199, 62, El.ROCK); // a big block
+    const rock = count(world, El.ROCK);
+    const before = world.el.slice();
+    stroke(world, 'push', [[64, 33]], { radius: 10 }); // click-blast at its corner
+    run(world, 400);
+    expect(count(world, DEBRIS)).toBe(0);
+    expect(count(world, El.ROCK)).toBe(rock);
+    let outside = 0;
+    for (let i = 0; i < world.size; i++) if (world.el[i] === El.ROCK && before[i] !== El.ROCK) outside++;
+    expect(outside).toBeGreaterThan(20);
+  });
+
   it('a click without dragging blasts outward in every direction', () => {
     const world = boxWorld(200, 64);
     fillRect(world, 90, 50, 110, 62, EARTH);

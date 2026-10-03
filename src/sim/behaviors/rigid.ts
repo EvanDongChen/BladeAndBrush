@@ -16,6 +16,7 @@ import { registerPass } from '../../core/behaviors';
 import { flagOn } from '../../core/config';
 import { El } from '../../core/elements';
 import type { World } from '../../core/world';
+import { DEBRIS } from '../elements/debris';
 import { K_GAS, K_LIQUID, K_PROJECTILE, KIND, REPLACEABLE, RIGID } from '../physics';
 import { defineTunables } from '../tunables';
 
@@ -30,8 +31,10 @@ export const rigidTunables = defineTunables(
     bounce: 0.25,
     /** Ticks between support checks after something changed. */
     checkEvery: 4,
+    /** Landing faster than this (cells per tick) rebounds instead of stopping. */
+    impact: 2.5,
   },
-  { gravity: [0.05, 1.5, 0.05], friction: [0, 1, 0.05], bounce: [0, 1, 0.05], checkEvery: [1, 30, 1] },
+  { gravity: [0.05, 1.5, 0.05], friction: [0, 1, 0.05], bounce: [0, 1, 0.05], checkEvery: [1, 30, 1], impact: [0.5, 12, 0.5] },
 );
 
 interface Body {
@@ -43,12 +46,19 @@ interface Body {
   /** Sub-cell movement not yet applied. */
   ax: number;
   ay: number;
+  /** Fraction of speed kept (reversed) when it hits something side-on or overhead. */
+  bounce: number;
+  /** Thrown pieces that are walled in and cannot move at all burst into rubble instead. */
+  shatter: boolean;
+  /** Ticks since launch. */
+  age: number;
 }
 
 interface State {
   /** Body id per cell (0 = none). */
   mark: Int32Array;
   bodies: Body[];
+  byId: Map<number, Body>;
   nextId: number;
   dirty: boolean;
   lastCheck: number;
@@ -59,7 +69,7 @@ const states = new WeakMap<World, State>();
 function state(world: World): State {
   let s = states.get(world);
   if (!s) {
-    s = { mark: new Int32Array(world.size), bodies: [], nextId: 1, dirty: false, lastCheck: -1e9 };
+    s = { mark: new Int32Array(world.size), bodies: [], byId: new Map(), nextId: 1, dirty: false, lastCheck: -1e9 };
     states.set(world, s);
   }
   return s;
@@ -81,17 +91,31 @@ export function bodyCount(world: World): number {
   return states.get(world)?.bodies.length ?? 0;
 }
 
+/** Snapshot of the moving pieces, for debugging. */
+export function bodyInfo(world: World): { cells: number; x: number; y: number; vx: number; vy: number }[] {
+  return (states.get(world)?.bodies ?? []).map((b) => ({
+    cells: b.cells.length,
+    x: b.cells[0] % world.w,
+    y: (b.cells[0] / world.w) | 0,
+    vx: Math.round(b.vx * 100) / 100,
+    vy: Math.round(b.vy * 100) / 100,
+  }));
+}
+
 /**
  * Turn the given cells into one moving piece with a starting velocity. Cells that are not solid,
- * or already belong to a moving piece, are skipped.
+ * or already belong to a moving piece, are skipped. `bounce` defaults to rigidTunables.bounce. With
+ * `shatter`, a piece that turns out to be walled in on all sides bursts into flying rubble (DEBRIS)
+ * with its velocity instead of sitting still.
  */
-export function launchBody(world: World, cells: number[], vx: number, vy: number): void {
+export function launchBody(world: World, cells: number[], vx: number, vy: number, bounce = rigidTunables.bounce, shatter = false): void {
   const s = state(world);
   const own = cells.filter((i) => s.mark[i] === 0 && solidAt(world, i)).sort((a, b) => a - b);
   if (own.length === 0) return;
-  const body: Body = { id: s.nextId++, cells: own, vx, vy, ax: 0, ay: 0 };
+  const body: Body = { id: s.nextId++, cells: own, vx, vy, ax: 0, ay: 0, bounce, shatter, age: 0 };
   for (const i of own) s.mark[i] = body.id;
   s.bodies.push(body);
+  s.byId.set(body.id, body);
   s.dirty = true; // what it was attached to may now hang free
 }
 
@@ -164,25 +188,46 @@ const dVx: number[] = [];
 const dVy: number[] = [];
 const dOwner: number[] = [];
 
-/** Can every cell of the body move by (dx, dy)? */
-function canShift(world: World, s: State, b: Body, dx: number, dy: number): boolean {
+/** canShift result: the move is clear. */
+const CLEAR = 0;
+/** canShift result: terrain or the canvas edge is in the way. (Any positive value is the id of a body in the way.) */
+const WALL = -1;
+
+/** Can every cell of the body move by (dx, dy)? CLEAR, WALL, or the id of another moving body in the way. */
+function canShift(world: World, s: State, b: Body, dx: number, dy: number): number {
   const { w, h, el } = world;
   const o = dx + dy * w;
   for (const i of b.cells) {
     const x = i % w;
     const y = (i / w) | 0;
-    if (x + dx < 0 || x + dx >= w || y + dy < 0 || y + dy >= h) return false;
+    if (x + dx < 0 || x + dx >= w || y + dy < 0 || y + dy >= h) return WALL;
     const t = i + o;
-    if (s.mark[t] === b.id) continue;
+    const m = s.mark[t];
+    if (m === b.id) continue;
     const e = el[t];
     if (REPLACEABLE[e]) continue;
     const k = KIND[e];
     if (k === K_LIQUID || k === K_GAS || k === K_PROJECTILE) continue;
-    return false;
+    return m !== 0 && s.byId.has(m) ? m : WALL;
   }
-  return true;
+  return CLEAR;
 }
 
+/**
+ * Two moving bodies bumped along one axis: exchange momentum (masses are cell counts) with a
+ * little restitution, so a rebounding chunk shoves the one behind it instead of jamming.
+ */
+function collide(a: Body, b: Body, axis: 'x' | 'y'): void {
+  const ka = axis === 'x' ? 'vx' : 'vy';
+  const ma = a.cells.length;
+  const mb = b.cells.length;
+  const va = a[ka];
+  const vb = b[ka];
+  const e = Math.min(a.bounce, b.bounce);
+  const p = ma * va + mb * vb;
+  a[ka] = (p - mb * e * (va - vb)) / (ma + mb);
+  b[ka] = (p + ma * e * (va - vb)) / (ma + mb);
+}
 /**
  * Move the body one cell by (dx, dy). Along each line of the body in the move direction, the
  * cell in front is displaced to the line's tail, so nothing is destroyed.
@@ -245,6 +290,63 @@ function shift(world: World, s: State, b: Body, dx: number, dy: number): void {
   }
 }
 
+/** Blocked straight down: slide one cell diagonally down if there is room. */
+function slide(world: World, s: State, b: Body): boolean {
+  const first = b.vx !== 0 ? Math.sign(b.vx) : world.rng.chance(0.5) ? 1 : -1;
+  for (let k = 0; k < 2; k++) {
+    const sx = k === 0 ? first : -first;
+    if (canShift(world, s, b, sx, 0) === CLEAR && canShift(world, s, b, sx, 1) === CLEAR) {
+      shift(world, s, b, sx, 0);
+      shift(world, s, b, 0, 1);
+      return true;
+    }
+  }
+  return false;
+}
+
+/** Nothing below it and no slope to slide down. */
+function supported(world: World, s: State, b: Body): boolean {
+  if (canShift(world, s, b, 0, 1) === CLEAR) return false;
+  for (let sx = -1; sx <= 1; sx += 2) {
+    if (canShift(world, s, b, sx, 0) === CLEAR && canShift(world, s, b, sx, 1) === CLEAR) return false;
+  }
+  return true;
+}
+
+function release(s: State, b: Body): void {
+  for (const i of b.cells) if (s.mark[i] === b.id) s.mark[i] = 0;
+  s.byId.delete(b.id);
+}
+
+/**
+ * A thrown piece with nowhere to go breaks into rubble: each cell flies as DEBRIS carrying its
+ * element, spraying outward from the piece's middle along its velocity, and lands back as itself.
+ */
+function burst(world: World, s: State, b: Body, speed: number): void {
+  const { w, el, aux, life, vx, vy, rng } = world;
+  let mx = 0;
+  let my = 0;
+  for (const i of b.cells) (mx += i % w), (my += (i / w) | 0);
+  mx /= b.cells.length;
+  my /= b.cells.length;
+  const clamp = (v: number) => Math.max(-12, Math.min(12, Math.round(v)));
+  for (const i of b.cells) {
+    s.mark[i] = 0;
+    if (!RIGID[el[i]]) continue; // e.g. burning wood stays put
+    const dx = (i % w) - mx;
+    const dy = ((i / w) | 0) - my;
+    const d = Math.hypot(dx, dy) || 1;
+    const spread = speed * 0.5;
+    life[i] = aux[i]; // DEBRIS keeps the shade in life and the element in aux
+    aux[i] = el[i];
+    el[i] = DEBRIS;
+    vx[i] = clamp(b.vx + (dx / d) * spread + rng.range(-1, 1));
+    vy[i] = clamp(b.vy + (dy / d) * spread + rng.range(-1, 1));
+  }
+  s.byId.delete(b.id);
+  s.dirty = true;
+}
+
 /** Returns false when the body has come to rest (or vanished) and should be dropped. */
 function moveBody(world: World, s: State, b: Body): boolean {
   // drop cells that were cut, burnt or otherwise stopped being solid
@@ -254,44 +356,67 @@ function moveBody(world: World, s: State, b: Body): boolean {
     else if (s.mark[i] === b.id) s.mark[i] = 0;
   }
   b.cells.length = live;
-  if (live === 0) return false;
+  if (live === 0) {
+    release(s, b);
+    return false;
+  }
 
   const maxFall = Math.max(1, world.params.gravity);
-  b.vy = Math.min(b.vy + rigidTunables.gravity, maxFall);
+  if (b.vy < maxFall) b.vy = Math.min(b.vy + rigidTunables.gravity, maxFall); // thrown faster than that? keep it
   b.ax += b.vx;
   b.ay += b.vy;
 
+  const speed = Math.hypot(b.vx, b.vy);
+  let shifts = 0;
   for (let guard = 0; guard < 64 && (Math.abs(b.ax) >= 1 || Math.abs(b.ay) >= 1); guard++) {
     if (Math.abs(b.ay) >= Math.abs(b.ax)) {
       const sy = Math.sign(b.ay);
-      if (canShift(world, s, b, 0, sy)) {
+      const r = canShift(world, s, b, 0, sy);
+      if (r === CLEAR) {
         shift(world, s, b, 0, sy);
         b.ay -= sy;
-      } else {
-        b.ay = 0;
-        b.vy = 0;
-        if (sy > 0) b.vx *= rigidTunables.friction; // landed: slide and slow down
+        shifts++;
+        continue;
       }
+      b.ay = 0;
+      if (r !== WALL && sy < 0) collide(b, s.byId.get(r)!, 'y');
+      else if (sy > 0 && r === WALL && slide(world, s, b)) b.ay = Math.max(0, b.vy - 1); // slid down a slope
+      else if (sy > 0 && r === WALL && b.vy > rigidTunables.impact) {
+        b.vy = -b.vy * b.bounce; // hit the ground hard: rebound (blasted rock flies back out)
+        b.vx *= rigidTunables.friction;
+      } else if (sy > 0) {
+        // landed on terrain, or is resting on another piece (pieces stack, they don't trade fall speed)
+        b.vy = 0;
+        b.vx *= rigidTunables.friction; // landed: skid and slow down
+      } else b.vy = -b.vy * b.bounce; // hit something overhead
     } else {
       const sx = Math.sign(b.ax);
-      if (canShift(world, s, b, sx, 0)) {
+      const r = canShift(world, s, b, sx, 0);
+      if (r === CLEAR) {
         shift(world, s, b, sx, 0);
         b.ax -= sx;
-      } else {
-        b.ax = 0;
-        b.vx = -b.vx * rigidTunables.bounce;
+        shifts++;
+        continue;
       }
+      b.ax = 0;
+      if (r !== WALL) collide(b, s.byId.get(r)!, 'x');
+      else b.vx = -b.vx * b.bounce;
     }
   }
 
-  const supported = !canShift(world, s, b, 0, 1);
-  if (supported && Math.abs(b.vx) < 0.3 && b.vy <= rigidTunables.gravity) {
-    for (const i of b.cells) s.mark[i] = 0;
+  if (b.shatter && b.age++ < 2 && shifts === 0 && speed > 1.5) {
+    burst(world, s, b, speed);
+    return false;
+  }
+
+  if (Math.abs(b.vx) < 0.3 && b.vy <= rigidTunables.gravity && supported(world, s, b)) {
+    // resting on a piece that may still move away: re-check support soon so it can't end up floating
+    if (canShift(world, s, b, 0, 1) !== WALL) s.dirty = true;
+    release(s, b);
     return false;
   }
   return true;
 }
-
 registerPass({
   name: 'rigidBodies',
   phase: 'pre',

@@ -49,11 +49,25 @@ describe('rigid pieces', () => {
     expect(bodyCount(world)).toBe(0);
     // the slab came down by roughly the groove's width and is still one flat 28-wide slab
     const slab = bbox(world, El.ROCK);
-    expect(slab.x0).toBe(18);
-    expect(slab.x1).toBe(45);
+    expect(slab.x1 - slab.x0).toBe(27); // same width (it may slide a cell on the ragged cut)
+    expect(Math.abs(slab.x0 - 18)).toBeLessThanOrEqual(2);
     let slabRow = -1;
-    for (let y = 0; y < 64 && slabRow < 0; y++) if (world.el[y * 64 + 18] === El.ROCK) slabRow = y;
+    for (let y = 0; y < 64 && slabRow < 0; y++) if (world.el[y * 64 + slab.x0] === El.ROCK) slabRow = y;
     expect(slabRow).toBeGreaterThan(29);
+  });
+
+  it('a piece cut on a slant slides off down the cut', () => {
+    const world = boxWorld(96, 64);
+    for (let x = 20; x < 76; x++) fillRect(world, x, 62 - Math.min(x - 20, 75 - x), x, 62, El.ROCK); // a pyramid
+    const rock = count(world, El.ROCK);
+    stroke(world, 'slash', [[30, 34], [55, 44], [80, 54]], { radius: 2 }); // slanted cut through the top
+    const cut = count(world, El.ROCK);
+    const topBefore = rowsOf(world, El.ROCK).top;
+    run(world, 300);
+    expect(bodyCount(world)).toBe(0);
+    expect(count(world, El.ROCK)).toBe(cut);
+    expect(cut).toBeLessThan(rock);
+    expect(rowsOf(world, El.ROCK).top).toBeGreaterThan(topBefore + 3); // the tip came down
   });
 
   it('a piece dropped into a pond sinks and pushes the water up, losing nothing', () => {

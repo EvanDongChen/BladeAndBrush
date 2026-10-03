@@ -12,6 +12,7 @@ export default defineConfig({
         generator: page('generator'),
         sandbox: page('sandbox'),
         gallery: page('gallery'),
+        level: page('level'),
       },
     },
   },

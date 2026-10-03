@@ -22,8 +22,11 @@ export interface Brush {
 export interface Painter {
   /** Fill art columns x0.. from tops[j] (fractional) down to bottoms[j] (or one shared bottom). */
   fillColumns(x0: number, tops: ArrayLike<number>, bottoms: ArrayLike<number> | number, shader: Shader, owner: number): void;
-  /** A variable-width ink stroke along a path in art pixels. Decoration only: claims no owner. */
-  stroke(path: ArrayLike<readonly [number, number]>, brush: Brush, noise?: Noise): void;
+  /**
+   * A variable-width ink stroke along a path in art pixels. Decoration unless `owner` is given;
+   * then pixels at least half covered are claimed for it (e.g. a tree's trunk and needles).
+   */
+  stroke(path: ArrayLike<readonly [number, number]>, brush: Brush, noise?: Noise, owner?: number): void;
 }
 
 export class PixelPainter implements Painter {
@@ -57,7 +60,7 @@ export class PixelPainter implements Painter {
     }
   }
 
-  stroke(path: ArrayLike<readonly [number, number]>, brush: Brush, noise?: Noise): void {
+  stroke(path: ArrayLike<readonly [number, number]>, brush: Brush, noise?: Noise, owner?: number): void {
     const n = path.length;
     if (n < 2) return;
     const taper = brush.taper ?? 1;
@@ -118,7 +121,7 @@ export class PixelPainter implements Painter {
     for (let y = by; y <= ey; y++) {
       for (let x = bx; x <= ex; x++) {
         const c = cov[(y - by) * bw + (x - bx)];
-        if (c > 0) this.buf.blend(y * this.buf.w + x, (rgb | (Math.round(alpha * c) << 24)) >>> 0);
+        if (c > 0) this.buf.blend(y * this.buf.w + x, (rgb | (Math.round(alpha * c) << 24)) >>> 0, c >= 0.5 ? owner : undefined);
       }
     }
   }

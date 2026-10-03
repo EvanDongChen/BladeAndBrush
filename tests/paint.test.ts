@@ -136,3 +136,21 @@ describe('mist', () => {
     expect(A(s(0, 200, 10))).toBe(0);
   });
 });
+
+describe('stroke with owner', () => {
+  it('claims the well-covered pixels for the owner, not the faint fringe', () => {
+    const b = buf(40, 20);
+    new PixelPainter(b).stroke(
+      [
+        [5, 10],
+        [35, 10],
+      ],
+      { width: 3, color: rgba(0, 0, 0, 200), taper: 0 },
+      undefined,
+      4,
+    );
+    expect(b.own[10 * 40 + 20]).toBe(4);
+    expect(b.own[2 * 40 + 20]).toBe(0);
+    expect(b.own[(10 - 4) * 40 + 20]).toBe(0); // fringe just outside the radius
+  });
+});

@@ -11,6 +11,7 @@ export default defineConfig({
         main: page('index'),
         generator: page('generator'),
         sandbox: page('sandbox'),
+        gallery: page('gallery'),
       },
     },
   },

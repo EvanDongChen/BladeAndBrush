@@ -355,3 +355,29 @@ button.on {
 .home-foot a {
   color: var(--ink-soft);
 }
+
+.home-nav {
+  width: 100%;
+  max-width: 1280px;
+  margin: 0 auto;
+}
+
+.home-nav h1 {
+  font-family: 'Noto Serif SC', 'Songti SC', serif;
+  letter-spacing: 0.02em;
+}
+
+.home-nav nav a[aria-current='page'] {
+  color: var(--ink);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.gallery-thumb {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--line);
+  background: var(--paper-2);
+}

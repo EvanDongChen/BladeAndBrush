@@ -1,7 +1,7 @@
 import './bootstrap';
 import { describeGoal } from '../core/goals';
 import { levels, type LevelDef } from '../core/levels';
-import { h, panel } from './ui';
+import { h, panel, siteNav } from './ui';
 
 /**
  * Home landing page. Presentational only: reads the level registry,
@@ -97,6 +97,7 @@ function workshops(): HTMLElement {
         h('a', { href: './sandbox.html' }, 'Sandbox'),
         ': elements, abilities, record/replay',
       ),
+      h('li', {}, h('a', { href: './gallery.html' }, 'Gallery'), ': winning paintings'),
     ),
   );
 }
@@ -112,6 +113,7 @@ function credits(): HTMLElement {
 
 export function mountHome(root: HTMLElement): () => void {
   root.replaceChildren(
+    siteNav('Home'),
     h(
       'main',
       { class: 'shell home' },

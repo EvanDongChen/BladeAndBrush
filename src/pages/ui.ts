@@ -52,6 +52,23 @@ export function pageHeader(title: string): HTMLElement {
   );
 }
 
+/** Site navbar for the player-facing pages (Home, Gallery). */
+export function siteNav(active: 'Home' | 'Generator' | 'Sandbox' | 'Gallery'): HTMLElement {
+  const links = [
+    ['Home', './index.html'],
+    ['Generator', './generator.html'],
+    ['Sandbox', './sandbox.html'],
+    ['Gallery', './gallery.html'],
+  ] as const;
+  const nav = h('nav', {});
+  for (const [label, href] of links) {
+    const a = h('a', { href }, label);
+    if (label === active) a.setAttribute('aria-current', 'page');
+    nav.append(a);
+  }
+  return h('header', { class: 'top home-nav' }, h('h1', {}, 'Blade & Brush'), nav);
+}
+
 /** One slider per registered param. */
 export function paramSliders(values: GenParams, onChange: (key: string) => void): HTMLElement {
   const wrap = h('div', { class: 'rows' });

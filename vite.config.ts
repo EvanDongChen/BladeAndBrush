@@ -7,7 +7,7 @@ const onWindowsDriveInWsl = process.platform === 'linux' && /^\/mnt\/[a-z]\//.te
 
 export default defineConfig({
   server: {
-    watch: onWindowsDriveInWsl ? { usePolling: true, interval: 300 } : undefined,
+    watch: onWindowsDriveInWsl ? { usePolling: true, interval: 300, ignored: ['**/docs/**'] } : undefined,
   },
   build: {
     rollupOptions: {

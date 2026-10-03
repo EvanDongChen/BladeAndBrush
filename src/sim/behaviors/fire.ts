@@ -46,10 +46,13 @@ function lifetime(world: World, fuel: number): number {
   return Math.max(2, Math.min(255, Math.round(base * world.rng.range(0.6, 1.4))));
 }
 
-/** Set (x, y) on fire. Burning fuel keeps its element id in aux. Used by the fire ability too. */
+/**
+ * Set (x, y) on fire: a flammable cell becomes burning fuel (its element id kept in aux), anything
+ * else becomes a free flame. Used by the fire ability too.
+ */
 export function ignite(world: World, x: number, y: number): void {
   const i = y * world.w + x;
-  const fuel = world.el[i] === El.EMPTY ? 0 : world.el[i];
+  const fuel = FLAMMABILITY[world.el[i]] > 0 ? world.el[i] : 0;
   world.set(x, y, El.FIRE, { aux: fuel, life: lifetime(world, fuel) });
   world.flags[i] |= Flag.UPDATED; // starts burning next tick
   if (fuel !== 0 && world.events.has('ignite')) world.events.emit('ignite', { x, y });

@@ -1,28 +1,9 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import type { AbilityArgs, PointerSample } from '../src/core/abilities';
 import { flags } from '../src/core/config';
 import { Flag } from '../src/core/constants';
 import { El } from '../src/core/elements';
-import { ActionDriver } from '../src/core/replay';
 import type { World } from '../src/core/world';
-import { step } from '../src/sim/step';
-import { boxWorld, count, fillRect, run } from './sim-helpers';
-
-/** Drag an ability along `pts` one point per tick, the way the sandbox feeds pointer input. */
-function stroke(world: World, ability: string, pts: [number, number, number?][], args: AbilityArgs = {}): void {
-  const driver = new ActionDriver();
-  const s = (p: [number, number, number?]): PointerSample => ({ x: p[0], y: p[1], speed: p[2] ?? 4 });
-  driver.begin(ability, s(pts[0]), args);
-  driver.apply(world);
-  step(world);
-  for (const p of pts.slice(1)) {
-    driver.move(s(p));
-    driver.apply(world);
-    step(world);
-  }
-  driver.end();
-  driver.apply(world);
-}
+import { boxWorld, count, fillRect, run, stroke } from './sim-helpers';
 
 const cutCells = (world: World) => world.flags.reduce((n, f) => n + (f & Flag.CUT ? 1 : 0), 0);
 

@@ -1,5 +1,7 @@
 import '../src/pages/bootstrap';
+import type { AbilityArgs, PointerSample } from '../src/core/abilities';
 import { El } from '../src/core/elements';
+import { ActionDriver } from '../src/core/replay';
 import { World } from '../src/core/world';
 import { step } from '../src/sim/step';
 
@@ -35,4 +37,24 @@ export function rowsOf(world: World, el: number): { top: number; bottom: number 
     bottom = Math.max(bottom, y);
   }
   return { top, bottom };
+}
+
+/** Drag an ability along `pts` one point per tick, the way the sandbox feeds pointer input. */
+export function stroke(world: World, ability: string, pts: [number, number, number?][], args: AbilityArgs = {}, holdTicks = 0): void {
+  const driver = new ActionDriver();
+  const s = (p: [number, number, number?]): PointerSample => ({ x: p[0], y: p[1], speed: p[2] ?? 4 });
+  driver.begin(ability, s(pts[0]), args);
+  driver.apply(world);
+  step(world);
+  for (const p of pts.slice(1)) {
+    driver.move(s(p));
+    driver.apply(world);
+    step(world);
+  }
+  for (let t = 0; t < holdTicks; t++) {
+    driver.apply(world);
+    step(world);
+  }
+  driver.end();
+  driver.apply(world);
 }

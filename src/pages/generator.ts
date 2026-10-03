@@ -102,7 +102,7 @@ export function mountGenerator(root: HTMLElement): () => void {
 
   let frame = 0;
   const stop = startLoop(clock, () => {
-    renderer.draw(world, { frontierX: frontier.done ? undefined : frontier.x, art: bp.art });
+    renderer.draw(world, { frontierX: frontier.done ? undefined : frontier.x, art: bp.art ? { art: bp.art, el: bp.el } : undefined });
     if (frame++ % 10 === 0) {
       readout.update(scan(world));
       status.textContent = `seed ${seed} · tick ${world.tick} · frontier ${frontier.x}/${bp.w} · strokes ${bp.registry.strokes.size}`;

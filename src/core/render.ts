@@ -1,8 +1,14 @@
-import type { ArtLayer } from './blueprint';
+import type { ArtBuffers } from './blueprint';
 import { flagOn } from './config';
 import type { LevelDims } from './constants';
 import { byOrder, ExtensionRegistry } from './registry';
 import type { World } from './world';
+
+/** The blueprint's art plus its cells, so the art layer can tell which cells still match. */
+export interface ArtView {
+  art: ArtBuffers;
+  el: Uint8Array;
+}
 
 /** Per-frame inputs from the page, beyond the world itself. */
 export interface RenderState {
@@ -11,7 +17,7 @@ export interface RenderState {
   /** Brush outline in cell coordinates. */
   cursor?: { x: number; y: number; r: number } | null;
   /** Hybrid art layer (section 3.8), if the blueprint has one. */
-  art?: ArtLayer;
+  art?: ArtView;
 }
 
 export interface RenderCtx extends RenderState {

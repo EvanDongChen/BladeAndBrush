@@ -19,6 +19,8 @@ export interface Blueprint {
   draw: DrawCmd[];
   /** Background plane (same size as el): FAR_ROCK or EMPTY. Never simulated or scanned. */
   bg?: Uint8Array;
+  /** 1 where a fuel cell grows over rock (a tree on a mountain face): revealed with Flag.ON_ROCK. */
+  onRock?: Uint8Array;
   /**
    * High-res art (section 3.8): k x k art pixels per cell. A cell's block is shown only while the
    * cell still matches the blueprint, so every visible pixel is backed by a cell.
@@ -56,6 +58,8 @@ export interface ArtBuffers {
   fg: Uint32Array;
   /** Background plane art (far ridges). */
   bg: Uint32Array;
+  /** Foreground art from before things were painted over rock: shown once a face tree has burnt back to rock. */
+  under?: Uint32Array;
 }
 
 export function createBlueprint(seed: number, params: GenParams, dims: LevelDims): Blueprint {
@@ -80,7 +84,9 @@ export function hashBlueprint(bp: Blueprint): number {
   }
   for (const w of bp.registry.waterSources) h.int(w.x).int(w.y).int(Math.round(w.rate * 1000));
   if (bp.bg) h.bytes(bp.bg);
+  if (bp.onRock) h.bytes(bp.onRock);
   if (bp.art) h.int(bp.art.k).u32(bp.art.fg).u32(bp.art.bg);
+  if (bp.art?.under) h.u32(bp.art.under);
   h.int(bp.draw.length);
   return h.digest();
 }

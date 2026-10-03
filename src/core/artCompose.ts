@@ -26,6 +26,8 @@ export interface PreparedArt {
   sky: Uint32Array;
   /** fg over bg over paper (untouched solid cell; opaque). */
   solid: Uint32Array;
+  /** The pre-overpaint rock art over bg over paper, if the art has `under`. */
+  under: Uint32Array | null;
 }
 
 const prepared = new WeakMap<ArtBuffers, PreparedArt>();
@@ -41,7 +43,12 @@ export function prepareArt(art: ArtBuffers): PreparedArt {
     sky[i] = over(art.fg[i], art.bg[i]);
     solid[i] = over(sky[i], PAPER_RGBA);
   }
-  p = { k: art.k, bg: art.bg, sky, solid };
+  let under: Uint32Array | null = null;
+  if (art.under) {
+    under = new Uint32Array(n);
+    for (let i = 0; i < n; i++) under[i] = over(over(art.under[i], art.bg[i]), PAPER_RGBA);
+  }
+  p = { k: art.k, bg: art.bg, sky, solid, under };
   prepared.set(art, p);
   return p;
 }
@@ -51,6 +58,7 @@ export function prepareArt(art: ArtBuffers): PreparedArt {
  * left of frontierX:
  * - world cell non-empty and equal to the blueprint cell: solid (fg over bg over paper)
  * - world cell EMPTY and blueprint EMPTY (untouched sky): sky (fg over bg)
+ * - world cell ROCK where the blueprint has something else on rock (a burnt face tree): under
  * - world cell EMPTY but blueprint not (slashed, burnt, nulled): bg only
  * - anything else (water, fire, ... drawn by the cells layer): transparent
  */
@@ -72,7 +80,17 @@ export function compose(
       const we = worldEl[i];
       const be = bpEl[i];
       const src =
-        cx >= fx ? null : we !== El.EMPTY ? (we === be ? art.solid : null) : be === El.EMPTY ? art.sky : art.bg;
+        cx >= fx
+          ? null
+          : we !== El.EMPTY
+            ? we === be
+              ? art.solid
+              : we === El.ROCK && be !== El.EMPTY
+                ? art.under
+                : null
+            : be === El.EMPTY
+              ? art.sky
+              : art.bg;
       const base = cy * k * aw + cx * k;
       for (let yy = 0; yy < k; yy++) {
         let p = base + yy * aw;

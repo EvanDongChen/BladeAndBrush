@@ -1364,3 +1364,91 @@ input[type='number'] {
     grid-template-columns: repeat(auto-fill, minmax(70px, 1fr));
   }
 }
+
+/* ---------- Arsenal: 3D-ish swords ---------- */
+
+.arsenal {
+  grid-template-columns: repeat(auto-fill, minmax(86px, 1fr));
+  perspective: 600px;
+}
+
+.blade {
+  padding-top: 6px;
+  transform-style: preserve-3d;
+}
+
+.blade-art {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 112px;
+  perspective: 260px;
+}
+
+.sword {
+  display: block;
+  height: 100%;
+  margin: 0 auto;
+  overflow: visible;
+  transform: rotate(24deg) rotateY(-18deg);
+  transform-origin: 50% 70%;
+  filter: drop-shadow(2px 4px 3px rgba(0, 0, 0, 0.3));
+  transition: transform 0.35s var(--ease-scroll), filter 0.3s;
+}
+
+.sword.ghost {
+  opacity: 0.8;
+}
+
+.blade:hover .sword {
+  transform: rotate(14deg) rotateY(18deg) translateY(-3px);
+}
+
+/* drawn: the selected blade stands upright and glows in its own colour */
+.blade.on .sword {
+  transform: rotate(6deg) rotateY(0deg) translateY(-5px) scale(1.06);
+  filter: drop-shadow(0 0 6px rgba(var(--blade), 0.75)) drop-shadow(2px 5px 3px rgba(0, 0, 0, 0.3));
+}
+
+.sword .shine {
+  transform-box: fill-box;
+  opacity: 0;
+}
+
+.blade.on .sword .shine {
+  animation: blade-shine 2.8s 0.3s ease-in-out infinite;
+}
+
+.blade-glyph {
+  font-size: 16px;
+  line-height: 1;
+  margin-right: 4px;
+  vertical-align: -1px;
+}
+
+.sword .fx-flame {
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+  animation: flame-flicker 0.7s ease-in-out infinite alternate;
+}
+
+.sword .fx-drop {
+  animation: drop-bob 1.6s ease-in-out infinite;
+}
+
+@keyframes blade-shine {
+  0% { opacity: 0; transform: translateX(0) skewX(-18deg); }
+  15% { opacity: 1; }
+  45% { opacity: 0; transform: translateX(46px) skewX(-18deg); }
+  100% { opacity: 0; transform: translateX(46px) skewX(-18deg); }
+}
+
+@keyframes flame-flicker {
+  from { transform: scale(0.85, 0.9); opacity: 0.8; }
+  to { transform: scale(1.1, 1.2); opacity: 1; }
+}
+
+@keyframes drop-bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(4px); }
+}

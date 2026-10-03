@@ -1,7 +1,7 @@
 import './bootstrap';
 import { describeGoal } from '../core/goals';
 import { levels, type LevelDef } from '../core/levels';
-import { h, handscroll, hangingScroll, revealOnScroll, seal, siteNav, type ScrollHandle } from './ui';
+import { h, handscroll, hangingScroll, revealOnScroll, siteNav, type ScrollHandle } from './ui';
 
 /**
  * Home landing page. Presentational only: reads the level registry,
@@ -33,11 +33,9 @@ function inkMountains(): SVGElement {
         svg('stop', { offset: '100%', 'stop-color': 'currentColor', 'stop-opacity': 0 }),
       ),
     ),
-    svg('circle', { cx: 930, cy: 92, r: 38, class: 'sun' }),
     ridge('M0 250 C80 200 130 120 210 150 S320 90 380 140 S500 210 560 170 S700 60 790 120 S930 200 1010 150 S1140 110 1200 160 V360 H0Z', 'ridge far'),
     ridge('M0 290 C60 260 120 180 190 210 S300 260 360 200 S440 110 520 170 S640 280 720 230 S860 140 940 200 S1080 270 1200 220 V360 H0Z', 'ridge mid'),
     ridge('M0 330 C90 300 150 250 240 280 S380 330 470 290 S600 240 700 300 S860 340 960 300 S1120 270 1200 300 V360 H0Z', 'ridge near'),
-    svg('path', { d: 'M150 150 l18 -14 l18 14 M175 165 l12 -9 l12 9', class: 'birds' }),
   );
 }
 
@@ -45,21 +43,14 @@ function hero(): { node: HTMLElement; scroll: ScrollHandle } {
   const scroll = handscroll(
     'the title scroll',
     inkMountains(),
-    h('div', { class: 'mist m1', 'aria-hidden': 'true' }),
-    h('div', { class: 'mist m2', 'aria-hidden': 'true' }),
     h(
       'div',
       { class: 'hero-text' },
-      h('p', { class: 'home-kicker' }, '斬 · 焚 · 淹 · 推  —  slash · burn · flood · push'),
       h('h2', { class: 'home-title' }, h('span', { class: 'cn' }, '斬山水'), h('span', { class: 'en' }, 'Blade & Brush')),
-      h('p', { class: 'home-tag' }, 'A living landscape that paints itself. Carve it until it matches the poem.'),
-      h('a', { class: 'home-cta big', href: '#levels' }, 'Begin the journey'),
+      h('p', { class: 'home-tag' }, 'A landscape that paints itself. Cut it until it matches the poem.'),
     ),
-    seal('刀筆', 'hero-seal'),
   );
-  const petals = h('div', { class: 'petals', 'aria-hidden': 'true' });
-  for (let i = 0; i < 9; i++) petals.append(h('span', { style: `--i:${i}` }));
-  return { node: h('section', { class: 'home-hero' }, petals, scroll.node), scroll };
+  return { node: h('section', { class: 'home-hero' }, scroll.node), scroll };
 }
 
 function brushDivider(label: string): HTMLElement {
@@ -136,20 +127,19 @@ function levelsSection(): HTMLElement {
   );
 }
 
-const WORKSHOPS: [string, string, string, string][] = [
-  ['生', 'Generator', './generator.html', 'Seed, params, frontier reveal, scan'],
-  ['戲', 'Sandbox', './sandbox.html', 'Elements, abilities, record and replay'],
-  ['藏', 'Gallery', './gallery.html', 'Winning paintings'],
+const WORKSHOPS: [string, string, string][] = [
+  ['Generator', './generator.html', 'Seed, params, frontier reveal, scan'],
+  ['Sandbox', './sandbox.html', 'Elements, abilities, record and replay'],
+  ['Gallery', './gallery.html', 'Winning paintings'],
 ];
 
 function workshops(): HTMLElement {
   const grid = h('div', { class: 'workshops' });
-  WORKSHOPS.forEach(([glyph, name, href, text], i) =>
+  WORKSHOPS.forEach(([name, href, text], i) =>
     grid.append(
       h(
         'a',
         { class: 'workshop reveal', href, style: `--d:${i * 120}ms` },
-        h('span', { class: 'workshop-glyph', 'aria-hidden': 'true' }, glyph),
         h('strong', {}, name),
         h('span', {}, text),
       ),

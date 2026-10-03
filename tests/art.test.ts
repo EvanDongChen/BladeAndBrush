@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { compose, over, PAPER_RGBA } from '../src/core/artCompose';
+import { compose, over, PAPER_RGBA, prepareArt } from '../src/core/artCompose';
 import { createBlueprint, hashBlueprint } from '../src/core/blueprint';
 import { El, rgba } from '../src/core/elements';
 import { defaultParams } from '../src/core/params';
@@ -41,27 +41,36 @@ describe('compose()', () => {
 
   it('untouched solid cell shows fg over paper (soft pixel not see-through)', () => {
     const out = new Uint32Array(fg.length);
-    compose(out, Uint8Array.from([El.ROCK, El.ROCK, El.EMPTY]), bpEl, w, h, art, w);
+    compose(out, Uint8Array.from([El.ROCK, El.ROCK, El.EMPTY]), bpEl, w, h, prepareArt(art), w);
     expect(px(out, 0)[0]).toBe(ink);
     expect(A(px(out, 0)[1])).toBe(255);
   });
 
   it('removed cell shows bg only; dynamic element cell is transparent', () => {
     const out = new Uint32Array(fg.length);
-    compose(out, Uint8Array.from([El.EMPTY, El.WATER, El.EMPTY]), bpEl, w, h, art, w);
+    compose(out, Uint8Array.from([El.EMPTY, El.WATER, El.EMPTY]), bpEl, w, h, prepareArt(art), w);
     expect(px(out, 0)).toEqual([bg[0], bg[1], bg[6], bg[7]]);
     expect(px(out, 1)).toEqual([0, 0, 0, 0]);
   });
 
   it('untouched empty cell shows fg over bg; nothing past the frontier', () => {
     const out = new Uint32Array(fg.length);
-    compose(out, Uint8Array.from([El.ROCK, El.ROCK, El.EMPTY]), bpEl, w, h, art, 2);
+    compose(out, Uint8Array.from([El.ROCK, El.ROCK, El.EMPTY]), bpEl, w, h, prepareArt(art), 2);
     expect(px(out, 2)).toEqual([0, 0, 0, 0]);
-    compose(out, Uint8Array.from([El.ROCK, El.ROCK, El.EMPTY]), bpEl, w, h, art, 3);
+    compose(out, Uint8Array.from([El.ROCK, El.ROCK, El.EMPTY]), bpEl, w, h, prepareArt(art), 3);
     expect(px(out, 2)[0]).toBe(ink);
   });
 
   it('PAPER_RGBA is opaque', () => expect(A(PAPER_RGBA)).toBe(255));
+
+  it('prepareArt caches and precomputes the blends', () => {
+    const prep = prepareArt(art);
+    expect(prepareArt(art)).toBe(prep);
+    for (let p = 0; p < fg.length; p++) {
+      expect(prep.sky[p]).toBe(over(fg[p], bg[p]));
+      expect(prep.solid[p]).toBe(over(over(fg[p], bg[p]), PAPER_RGBA));
+    }
+  });
 });
 
 describe('hashBlueprint with art', () => {

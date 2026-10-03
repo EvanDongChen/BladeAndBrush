@@ -16,8 +16,6 @@ import { step } from '../sim/step';
 import { tunables } from '../sim/tunables';
 import { Fx } from './fx';
 import { arsenal } from './arsenal';
-import { SlashFx } from './slashFx';
-import { swordCursor } from './swords';
 import { button, h, handscroll, panel, seal, startLoop, toCell } from './ui';
 
 /** A panel that starts rolled up (secondary controls the player rarely needs). */
@@ -71,9 +69,7 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
   const banner = h('div', { class: 'hud-banner', hidden: true, role: 'status' }, h('p', {}, 'Out of ink.'), retry);
   const reveal = h('span', { class: 'reveal-fill' });
   const revealBar = h('div', { class: 'reveal-bar', 'aria-hidden': 'true' }, reveal);
-  const swingLayer = h('div', { class: 'slash-layer', 'aria-hidden': 'true' });
-  const slashFx = new SlashFx(swingLayer, canvas, level.dims.w);
-  const frame = h('div', { class: 'frame' }, canvas, swingLayer, hudTool, banner, revealBar);
+  const frame = h('div', { class: 'frame' }, canvas, hudTool, banner, revealBar);
   let tip = '';
 
   function regenerate(): void {
@@ -86,7 +82,6 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
     complete?.close();
     banner.hidden = true;
     fx.attach(world);
-    slashFx.attach(world);
     clock.reset();
   }
 
@@ -143,7 +138,6 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
     hudGlyph.textContent = a?.icon ?? '';
     hudName.textContent = a?.name ?? '';
     stage.style.setProperty('--blade', lineColor(id));
-    canvas.style.cursor = swordCursor(id);
   });
   const radiusDot = h('span', { class: 'brush-dot', 'aria-hidden': 'true' });
   const radiusInput = h('input', { type: 'range', min: 1, max: 24, step: 1, value: radius, 'aria-label': 'Brush size' });
@@ -307,7 +301,6 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
   return () => {
     stop();
     fx.detach();
-    slashFx.dispose();
     removeEventListener('keydown', onKey);
   };
 }

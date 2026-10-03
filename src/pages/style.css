@@ -1366,17 +1366,3 @@ input[type='number'] {
 }
 
 
-/* ---------- First-person sword swing (WebGL) ---------- */
-
-.slash-layer {
-  position: absolute;
-  inset: 0;
-  overflow: hidden;
-  pointer-events: none;
-}
-
-.slash-gl {
-  display: block;
-  width: 100%;
-  height: 100%;
-}

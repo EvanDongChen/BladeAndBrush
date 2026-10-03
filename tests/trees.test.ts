@@ -38,3 +38,52 @@ describe('trees metric fallback', () => {
     expect(scan(w).counts.trees).toBe(2);
   });
 });
+
+import { createNoise } from '../src/core/noise';
+import { Rng } from '../src/core/rng';
+import { ArtBuffer } from '../src/gen/paint/artBuffer';
+import { PixelPainter } from '../src/gen/paint/painter';
+import { getSpecies } from '../src/gen/species';
+
+describe('tree species', () => {
+  const grow = (name: string, seed = 1) => {
+    const buf = new ArtBuffer(200, 200, new Uint32Array(200 * 200));
+    const bbox = getSpecies(name).grow({
+      paint: new PixelPainter(buf),
+      x: 100,
+      y: 180,
+      size: 60,
+      owner: 3,
+      rng: new Rng(seed),
+      noise: createNoise(seed),
+      ink: [50, 56, 50],
+      k: 4,
+    });
+    return { buf, bbox };
+  };
+
+  for (const name of ['pine', 'round', 'tall']) {
+    it(`${name}: owns pixels, all inside its bbox, near its base`, () => {
+      const { buf, bbox } = grow(name);
+      let owned = 0;
+      for (let i = 0; i < buf.own.length; i++) {
+        if (buf.own[i] !== 3) continue;
+        owned++;
+        const x = i % 200;
+        const y = (i / 200) | 0;
+        expect(x >= bbox[0] && x <= bbox[2] && y >= bbox[1] && y <= bbox[3]).toBe(true);
+      }
+      expect(owned).toBeGreaterThan(60);
+      expect(bbox[0]).toBeGreaterThanOrEqual(100 - 60);
+      expect(bbox[2]).toBeLessThanOrEqual(100 + 60);
+      expect(bbox[1]).toBeGreaterThanOrEqual(180 - 60 * 1.25);
+      expect(bbox[3]).toBeLessThanOrEqual(180 + 6);
+    });
+
+    it(`${name}: deterministic`, () => {
+      expect(Array.from(grow(name, 7).buf.px)).toEqual(Array.from(grow(name, 7).buf.px));
+    });
+  }
+
+  it('unknown species throws', () => expect(() => getSpecies('baobab')).toThrow());
+});

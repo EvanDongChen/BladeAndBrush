@@ -1,11 +1,16 @@
-import { registerAbility } from '../../core/abilities';
+import { El } from '../../core/elements';
+import { markUnsupported } from '../behaviors/rigid';
+import { forCapsule } from '../brush';
+import { registerLineAbility } from '../lineAbility';
 
-/** PHASE 0 STUB (Person B): clear cells with no splatter and no CUT flag (section 7.4). */
-registerAbility({
+/** Aim a line, release to quietly erase the strip: smooth edge, no splatter, no CUT flag. */
+registerLineAbility({
   id: 'null',
   name: 'Null',
   icon: '無',
-  begin: () => {},
-  move: () => {},
-  end: () => {},
+  color: '90, 90, 110',
+  apply: (world, ax, ay, bx, by, r) => {
+    forCapsule(world, ax, ay, bx, by, r, (x, y) => world.set(x, y, El.EMPTY));
+    markUnsupported(world);
+  },
 });

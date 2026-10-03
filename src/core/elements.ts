@@ -29,6 +29,8 @@ export interface CellView {
   aux: number;
   owner: number;
   flags: number;
+  /** World tick, for animated colors (shimmer, flicker). Rendering only; the sim never reads it from here. */
+  tick: number;
 }
 
 export interface ElementDef {
@@ -55,6 +57,68 @@ export function shade(r: number, g: number, b: number, aux: number, a = 255): nu
   const k = 0.88 + (aux / 255) * 0.24;
   const c = (v: number) => Math.min(255, Math.round(v * k));
   return rgba(c(r), c(g), c(b), a);
+}
+
+/** Cheap deterministic hash of three ints to 0..255, for animated color noise (glints, flicker). */
+export function hash3(x: number, y: number, t: number): number {
+  let n = Math.imul(x, 374761393) + Math.imul(y, 668265263) + Math.imul(t, 2246822519);
+  n = Math.imul(n ^ (n >>> 13), 1274126177);
+  return (n ^ (n >>> 16)) & 255;
+}
+
+/** One full sine cycle over 256 steps, for wave shimmer. Index with `& 255`. */
+export const SIN256 = new Float32Array(256).map((_, i) => Math.sin((i / 256) * Math.PI * 2));
+
+/** Scale an rgb color by k (clamped), packed like rgba(). */
+export function scaled(r: number, g: number, b: number, k: number, a = 255): number {
+  const c = (v: number) => Math.max(0, Math.min(255, Math.round(v * k)));
+  return rgba(c(r), c(g), c(b), a);
+}
+
+/**
+ * Water: two slow ripples crossing each other brighten and darken the surface, and the odd cell
+ * catches a pale glint that changes every few ticks.
+ */
+function waterColor(c: CellView): number {
+  if ((hash3(c.x, c.y, c.tick >> 3) & 63) === 0) return rgba(206, 228, 240);
+  const a = SIN256[(c.x * 7 + c.y * 11 + c.tick * 3) & 255];
+  const b = SIN256[(c.x * 5 - c.y * 9 - c.tick * 2) & 255];
+  const jitter = 0.94 + (c.aux / 255) * 0.12; // subdued per-cell variation so the waves read
+  return scaled(96, 128, 150, (1 + 0.06 * (a + b)) * jitter);
+}
+
+/** Fire from smoldering red through orange to yellow-white, indexed by how much life is left. */
+const FIRE_RAMP = (() => {
+  const stops: [number, number, number, number][] = [
+    [0, 92, 24, 20],
+    [0.25, 186, 46, 24],
+    [0.55, 236, 116, 34],
+    [0.8, 250, 184, 72],
+    [1, 255, 238, 176],
+  ];
+  const ramp = new Uint32Array(64);
+  for (let i = 0; i < 64; i++) {
+    const t = i / 63;
+    let s = 0;
+    while (s < stops.length - 2 && t > stops[s + 1][0]) s++;
+    const [t0, r0, g0, b0] = stops[s];
+    const [t1, r1, g1, b1] = stops[s + 1];
+    const f = (t - t0) / (t1 - t0);
+    ramp[i] = rgba(Math.round(r0 + (r1 - r0) * f), Math.round(g0 + (g1 - g0) * f), Math.round(b0 + (b1 - b0) * f));
+  }
+  return ramp;
+})();
+
+/**
+ * Fire is colored by its remaining life: fresh flame is yellow-white, then orange, then red, then
+ * a dark ember just before it goes out. Free flames (aux 0) are short-lived and burning fuel lasts
+ * longer, so each gets its own scale. A little per-cell flicker shifts the shade every other tick.
+ */
+function fireColor(c: CellView): number {
+  const span = c.aux === 0 ? 26 : 48;
+  const flicker = (hash3(c.x, c.y, c.tick >> 1) & 15) - 8;
+  const t = Math.max(0, Math.min(1, c.life / span + flicker * 0.012));
+  return FIRE_RAMP[(t * 63 + 0.5) | 0];
 }
 
 export const elements = new ExtensionRegistry<ElementDef>('element', (e) => e.id, (e) => `${e.id} ${e.name}`);
@@ -113,7 +177,7 @@ registerElement({
   name: 'water',
   kind: 'liquid',
   density: 10,
-  color: (c) => shade(96, 128, 150, c.aux),
+  color: waterColor,
 });
 registerElement({
   ...base,
@@ -121,7 +185,7 @@ registerElement({
   name: 'fire',
   kind: 'gas',
   density: 1,
-  color: (c) => shade(214, 84 + (c.life & 63), 40, c.aux),
+  color: fireColor,
 });
 registerElement({
   ...base,

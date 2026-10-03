@@ -1,7 +1,7 @@
 import { El, ELEMENTS, type CellView } from '../elements';
 import { registerLayer } from '../render';
 
-const view: CellView = { x: 0, y: 0, el: 0, life: 0, aux: 0, owner: 0, flags: 0 };
+const view: CellView = { x: 0, y: 0, el: 0, life: 0, aux: 0, owner: 0, flags: 0, tick: 0 };
 
 /** Every non-empty cell, colored by its element (with per-cell shade jitter from aux). */
 registerLayer({
@@ -10,6 +10,7 @@ registerLayer({
   kind: 'pixels',
   draw: ({ pixels, world }) => {
     const { el, life, aux, owner, flags, w, size } = world;
+    view.tick = world.tick;
     for (let i = 0; i < size; i++) {
       const e = el[i];
       if (e === El.EMPTY) continue;

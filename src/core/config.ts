@@ -8,6 +8,7 @@ export const flags: Record<string, boolean> = {
   artLayer: true,
   splatter: true,
   fireSpread: true,
+  glow: true,
 };
 
 /** Generator feature toggles by feature name. Missing = enabled; false = removed from the pipeline. */

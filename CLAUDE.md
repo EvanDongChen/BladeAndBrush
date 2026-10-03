@@ -48,6 +48,9 @@ Every file in these folders is auto-imported by `src/pages/bootstrap.ts` (`impor
 | goal type | `src/levels/goals/` | `registerGoal(type, (scan, args) => ({ pass, progress }))` from `core/goals` |
 | level | `src/levels/` | `registerLevel({ id, poem, dims, seed, params, goals, actionBudget })` from `core/levels` |
 | render layer | `src/core/layers/` | `registerLayer({ name, order, kind: 'pixels' or 'canvas', draw })` from `core/render` |
+| glowing element | any file in `src/sim/elements/` | `registerGlow({ el, r, g, b, near, far, level? })` from `core/glow` (the glow layer does the rest) |
+| creature (self-moving sprite) | `src/sim/behaviors/` + its element in `src/sim/elements/` | `defineCreature({ el, frames, variants, paint, think })` from `sim/creatures`; also registers the brush spawner |
+| brush hooks for an element | its element file | `registerPaintAux(el, fn)` / `registerSpawner(el, fn, spacing)` from `sim/spawn` |
 | param (slider) | one line in `src/core/params.ts` | `registerParam({ key, label, min, max, step, default })` |
 | audio and FX | `src/audio/` | `world.events.on('cut', ...)` |
 
@@ -61,4 +64,7 @@ Registries throw on duplicate keys. Kill switches are in `src/core/config.ts`: `
 - `World.set()` clears life, velocity and owner unless they are given. It keeps aux and flags. Pass `{ cut: true }` to leave a CUT scar and emit `cut`.
 - Out-of-bounds `world.get()` returns ROCK, so the grid edges act as walls.
 - Stubs are marked `PHASE 0 STUB`; replace them on your branch.
+- Element colors can animate: `CellView.tick` is the world tick (rendering only). Water shimmers and fire is colored by remaining life in `core/elements.ts`; use `hash3`, `SIN256` and `scaled` from there for your own.
+- Creatures are cells: one anchor cell holds the state (vx = facing, vy = frame, owner = variant, life = AI byte) and every other cell points back at it through vx/vy. A creature that loses a cell dies (burns if the missing cell is burning, otherwise bursts into SPLAT ink). They only move through empty space and gas. See the header of `src/sim/creatures.ts`.
+- Per-fuel burn behavior (burn life, ash chance, spark rate) lives in `src/sim/behaviors/fire.ts`; add a fuel there when you add a flammable element that should burn differently from wood.
 - Tests target interfaces and determinism hashes, not internals. `tests/discovery.test.ts` writes temporary `zz_test_dummy.ts` files into `src/` and deletes them afterwards. Test files run one at a time for that reason.

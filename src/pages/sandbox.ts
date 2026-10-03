@@ -9,7 +9,11 @@ import { ActionDriver, type ActionLog } from '../core/replay';
 import { World } from '../core/world';
 import { Frontier } from '../gen/frontier';
 import { generate } from '../gen/generate';
+import { aimEnd, chargeOf, drawAim, isLineAbility } from '../sim/lineAbility';
+import { SCENES } from '../sim/scenes';
 import { step } from '../sim/step';
+import { Fx } from './fx';
+import { tunables } from '../sim/tunables';
 import {
   abilityBar,
   button,
@@ -24,7 +28,8 @@ import {
   toCell,
 } from './ui';
 
-type Scene = 'blueprint' | 'empty';
+/** 'blueprint', 'empty', or the id of one of the hand-built SCENES. */
+type Scene = string;
 
 interface Recording {
   seed: number;
@@ -33,7 +38,8 @@ interface Recording {
   log: ActionLog;
   endTick: number;
   hash: number;
-  paramsChanged: boolean;
+  /** Params or tunables changed mid-recording (they are not in the log). */
+  untracked: boolean;
 }
 
 /** Person B's test page: paint elements, use abilities, step the sim, record and replay. */
@@ -53,17 +59,20 @@ export function mountSandbox(root: HTMLElement): () => void {
 
   const canvas = h('canvas', { class: 'grid paintable' });
   const renderer = new Renderer(canvas, DEFAULT_DIMS);
+  const fx = new Fx(); // blade trails, shake, hit-stop
   const status = h('div', { class: 'status' });
   const recStatus = h('div', { class: 'status' }, 'Not recording.');
 
   function buildScene(s: number, sc: Scene, p: GenParams): World {
     const w = new World(DEFAULT_DIMS, s, p);
     if (sc === 'blueprint') new Frontier(generate(s, p)).revealAll(w);
+    else SCENES.find((x) => x.id === sc)?.build(w);
     return w;
   }
 
   function reset(): void {
     world = buildScene(seed, scene, params);
+    fx.attach(world);
     driver = new ActionDriver();
     clock.reset();
     if (recordingFrom) {
@@ -83,12 +92,17 @@ export function mountSandbox(root: HTMLElement): () => void {
   const args = (): AbilityArgs => (tool.ability === 'paint' ? { el: tool.el, radius } : { radius });
   let down = false;
   let last = { x: 0, y: 0, t: 0 };
+  let pressedAt = { x: 0, y: 0 }; // where the current press started (line abilities aim from here)
+  let pressedTick = 0; // sim tick at the press (charge is counted in sim ticks, like the ability does)
   let cursor: { x: number; y: number; r: number } | null = null;
 
   canvas.addEventListener('pointerdown', (e) => {
     canvas.setPointerCapture?.(e.pointerId);
     const p = toCell(canvas, e);
     down = true;
+    pressedAt = p;
+    pressedTick = world.tick;
+    cursor = { ...p, r: radius };
     last = { ...p, t: performance.now() };
     driver.begin(tool.ability, { ...p, speed: 0 }, args());
   });
@@ -120,6 +134,7 @@ export function mountSandbox(root: HTMLElement): () => void {
     'select',
     {},
     h('option', { value: 'blueprint' }, 'Blueprint (seed + params)'),
+    ...SCENES.map((x) => h('option', { value: x.id }, x.name)),
     h('option', { value: 'empty' }, 'Empty'),
   );
   sceneSelect.addEventListener('change', () => {
@@ -148,12 +163,29 @@ export function mountSandbox(root: HTMLElement): () => void {
 
   const onParam = (key: string) => {
     world.params[key] = params[key]; // live for behaviors; the blueprint picks it up on Reset
-    if (recordingFrom) recordingFrom.paramsChanged = true;
+    if (recordingFrom) recordingFrom.untracked = true;
   };
+
+  // live feel knobs from sim/tunables (every behavior and ability registers its own)
+  const tuning = h('div', { class: 'registries' });
+  for (const g of tunables.all()) {
+    const rows = h('div', { class: 'rows' });
+    for (const [key, [min, max, stepSize]] of Object.entries(g.ranges)) {
+      const out = h('output', {}, String(g.values[key]));
+      const input = h('input', { type: 'range', min, max, step: stepSize, value: g.values[key], 'data-tunable': `.${key}` });
+      input.addEventListener('input', () => {
+        g.values[key] = Number(input.value);
+        out.textContent = input.value;
+        if (recordingFrom) recordingFrom.untracked = true;
+      });
+      rows.append(h('label', { class: 'row' }, h('span', {}, key), input, out));
+    }
+    tuning.append(h('details', {}, h('summary', {}, g.name), rows));
+  }
 
   const record = button('Record', () => {
     reset();
-    recordingFrom = { seed, scene, params: { ...params }, paramsChanged: false };
+    recordingFrom = { seed, scene, params: { ...params }, untracked: false };
     recording = null;
     recStatus.textContent = 'Recording… (starts from a fresh scene)';
   });
@@ -174,14 +206,16 @@ export function mountSandbox(root: HTMLElement): () => void {
     const r = recording;
     if (!r) return void (recStatus.textContent = 'Nothing recorded yet.');
     world = buildScene(r.seed, r.scene, r.params);
+    fx.detach(); // no effects while fast-forwarding the replay
     driver = new ActionDriver(r.log);
     while (world.tick < r.endTick) tickOnce();
     const got = world.hash();
     const ok = got === r.hash;
     recStatus.textContent =
       `Replayed to tick ${world.tick}: hash ${hex(got)} ${ok ? '✓ matches' : `✗ MISMATCH (expected ${hex(r.hash)})`}` +
-      (r.paramsChanged ? ' · params changed mid-recording, which is not logged' : '');
+      (r.untracked ? ' · params or tuning changed mid-recording, which is not logged' : '');
     driver = new ActionDriver(); // back to live input on the replayed world
+    fx.attach(world);
   });
 
   const counts = h('dl', { class: 'readout' });
@@ -216,6 +250,7 @@ export function mountSandbox(root: HTMLElement): () => void {
         ),
         panel('Record / replay', h('div', { class: 'row' }, record, stopRec, replay), recStatus),
         panel('Params', paramSliders(params, onParam)),
+        panel('Tuning', tuning),
         panel('Cell counts', counts),
         panel('Layers', layerToggles(renderer)),
         panel('Registries', registryInspector()),
@@ -224,17 +259,31 @@ export function mountSandbox(root: HTMLElement): () => void {
   );
 
   let frame = 0;
-  const stop = startLoop(clock, () => {
-    renderer.draw(world, { cursor });
-    if (frame++ % 15 === 0) {
-      world.countByElement(countBuf);
-      for (const [id, dd] of countCells) dd.textContent = String(countBuf[id]);
-      status.textContent = `tick ${world.tick}${clock.paused ? ' (paused)' : ''} · ${clock.speed}x · tool ${tool.ability}${
-        tool.ability === 'paint' ? ` ${elements.get(tool.el)?.name}` : ''
-      } · uses ${driver.uses}`;
-    }
-  });
-  return stop;
+  const stop = startLoop(
+    clock,
+    (dt) => {
+      renderer.draw(world, { cursor });
+      fx.draw(renderer.g);
+      // skill-shot preview: drawn from live pointer input, so it shows instantly (even when paused)
+      if (down && cursor && isLineAbility(tool.ability)) {
+        const aim = aimEnd(pressedAt.x, pressedAt.y, cursor.x, cursor.y);
+        drawAim(renderer.g, tool.ability, aim, radius, chargeOf(world.tick - pressedTick));
+      }
+      if (frame++ % 15 === 0) {
+        world.countByElement(countBuf);
+        for (const [id, dd] of countCells) dd.textContent = String(countBuf[id]);
+        status.textContent = `tick ${world.tick}${clock.paused ? ' (paused)' : ''} · ${clock.speed}x · tool ${tool.ability}${
+          tool.ability === 'paint' ? ` ${elements.get(tool.el)?.name}` : ''
+        } · uses ${driver.uses}`;
+      }
+      fx.endFrame(canvas, dt);
+    },
+    () => fx.shouldAdvance(), // hit-stop holds the sim for a few frames
+  );
+  return () => {
+    stop();
+    fx.detach();
+  };
 }
 
 const hex = (n: number) => n.toString(16).padStart(8, '0');

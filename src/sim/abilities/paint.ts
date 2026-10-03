@@ -1,6 +1,8 @@
 import { registerAbility, type AbilityArgs } from '../../core/abilities';
 import { El } from '../../core/elements';
 import type { World } from '../../core/world';
+import { markUnsupported } from '../behaviors/rigid';
+import { PAINT_AUX, SPAWNERS } from '../spawn';
 
 /** Live-tweakable from the sandbox. */
 export const paintTunables = {
@@ -8,12 +10,24 @@ export const paintTunables = {
   spacing: 0.5,
 };
 
+/** Where this stroke last spawned something (elements with a spawner place one thing, not a disc). */
+let lastSpawn: { x: number; y: number } | null = null;
+
 function stamp(world: World, x: number, y: number, args: AbilityArgs): void {
   const el = args.el ?? El.ROCK;
+  const spawner = SPAWNERS[el];
+  if (spawner) {
+    if (lastSpawn && Math.hypot(x - lastSpawn.x, y - lastSpawn.y) < spawner.spacing) return;
+    lastSpawn = { x, y };
+    spawner.spawn(world, x, y);
+    return;
+  }
+  const aux = PAINT_AUX[el];
   world.forCircle(x, y, args.radius ?? 3, (cx, cy) => {
     if (el === El.EMPTY) world.set(cx, cy, El.EMPTY);
-    else world.set(cx, cy, el, { aux: world.rng.int(256) });
+    else world.set(cx, cy, el, { aux: aux ? aux(world, cx, cy) : world.rng.int(256) });
   });
+  markUnsupported(world); // painted rock in the air falls; erased supports drop what they held
 }
 
 /**
@@ -25,7 +39,10 @@ registerAbility({
   name: 'Paint',
   icon: '筆',
   debug: true,
-  begin: (world, s, args) => stamp(world, s.x, s.y, args),
+  begin: (world, s, args) => {
+    lastSpawn = null;
+    stamp(world, s.x, s.y, args);
+  },
   move: (world, from, to, args) => {
     const step = Math.max(1, (args.radius ?? 3) * paintTunables.spacing);
     const n = Math.max(1, Math.ceil(Math.hypot(to.x - from.x, to.y - from.y) / step));

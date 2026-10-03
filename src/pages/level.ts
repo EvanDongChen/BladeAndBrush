@@ -1,6 +1,7 @@
 import './bootstrap';
 import type { AbilityId } from '../core/abilities';
 import { Clock } from '../core/clock';
+import { describeGoal, evaluateGoal } from '../core/goals';
 import { levels, type LevelDef } from '../core/levels';
 import { defaultParams, type GenParams } from '../core/params';
 import { Renderer } from '../core/render';
@@ -8,11 +9,12 @@ import { ActionDriver } from '../core/replay';
 import { World } from '../core/world';
 import { Frontier } from '../gen/frontier';
 import { generate } from '../gen/generate';
+import { scan } from '../gen/scan';
 import type { Blueprint } from '../core/blueprint';
 import { aimEnd, chargeOf, drawAim, isLineAbility } from '../sim/lineAbility';
 import { step } from '../sim/step';
 import { Fx } from './fx';
-import { abilityBar, button, h, pageHeader, panel, startLoop, toCell } from './ui';
+import { abilityBar, button, h, handscroll, pageHeader, panel, startLoop, toCell } from './ui';
 
 /**
  * Player-facing level page: ?level=<id>. The player gets the abilities, a Regenerate button,
@@ -28,6 +30,10 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
   let driver = new ActionDriver();
   let ability: AbilityId = '';
   let radius = 4;
+  let used = 0; // ability uses spent this round
+  let won = false;
+  let tuningTouched = false;
+  const initial = { ...params };
 
   const canvas = h('canvas', { class: 'grid paintable' });
   const renderer = new Renderer(canvas, level.dims);
@@ -39,6 +45,9 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
     world = new World(level.dims, level.seed, { ...params });
     frontier = new Frontier(bp);
     driver = new ActionDriver();
+    used = 0;
+    won = false;
+    complete?.close();
     fx.attach(world);
     clock.reset();
   }
@@ -48,6 +57,7 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
     frontier.advance(world);
     step(world);
   });
+  let complete: ReturnType<typeof handscroll> | undefined;
   regenerate();
 
   // ---- pointer input -> action driver ----
@@ -58,9 +68,10 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
   let cursor: { x: number; y: number; r: number } | null = null;
 
   canvas.addEventListener('pointerdown', (e) => {
-    if (!ability || !frontier.done) return;
+    if (!ability || !frontier.done || used >= level.actionBudget) return;
     canvas.setPointerCapture?.(e.pointerId);
     const p = toCell(canvas, e);
+    used++;
     down = true;
     pressedAt = p;
     pressedTick = world.tick;
@@ -92,21 +103,75 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
   const radiusInput = h('input', { type: 'range', min: 1, max: 24, step: 1, value: radius });
   radiusInput.addEventListener('input', () => (radius = Number(radiusInput.value)));
 
+  // ---- poem, goals, ink ----
+  const poem = h('p', { class: 'poem level-poem' });
+  level.poem.forEach((line, i) => {
+    if (i) poem.append(h('br'));
+    poem.append(line);
+  });
+  const goalRows = level.goals.map((g) => {
+    const fill = h('span', { class: 'goal-fill' });
+    const row = h('li', { class: 'goal' }, h('span', { class: 'goal-text' }, describeGoal(g)), h('span', { class: 'goal-bar' }, fill));
+    return { g, row, fill };
+  });
+  const goalList = h('ul', { class: 'goals' }, ...goalRows.map((r) => r.row));
+  const ink = h('p', { class: 'ink' });
+
+  const next = levels.all()[levels.all().findIndex((l) => l.id === level.id) + 1];
+  complete = handscroll(
+    'level complete',
+    h(
+      'div',
+      { class: 'complete' },
+      h('h3', {}, '完成'),
+      h('p', {}, 'The landscape matches the poem.'),
+      h(
+        'p',
+        { class: 'cta-row' },
+        next ? h('a', { class: 'home-cta', href: `./level.html?level=${encodeURIComponent(next.id)}` }, 'Next level') : '',
+        h('a', { class: 'home-cta', href: './index.html' }, 'All levels'),
+      ),
+    ),
+  );
+  complete.node.hidden = true;
+
+  /** Has the player changed anything yet? Goals the fresh painting already meets do not count. */
+  const changed = () => used > 0 || tuningTouched || Object.keys(initial).some((k) => params[k] !== initial[k]);
+
+  function checkGoals(): void {
+    const result = scan(world);
+    let all = true;
+    for (const r of goalRows) {
+      const { pass, progress } = evaluateGoal(result, r.g);
+      all &&= pass;
+      r.row.classList.toggle('met', pass);
+      r.fill.style.width = `${Math.round(progress * 100)}%`;
+    }
+    ink.textContent = `Ink left: ${level.actionBudget - used} of ${level.actionBudget}`;
+    if (all && changed() && !won) {
+      won = true;
+      complete!.node.hidden = false;
+      requestAnimationFrame(() => complete!.open());
+    }
+  }
+
   root.replaceChildren(
     pageHeader(level.id),
     h(
       'main',
       { class: 'layout' },
-      h('div', { class: 'stage' }, canvas, status),
+      h('div', { class: 'stage' }, canvas, status, complete.node),
       h(
         'aside',
         { class: 'controls' },
+        panel('Poem', poem, goalList, ink),
         panel('Abilities', bar.node, h('label', { class: 'row' }, h('span', {}, 'Brush size'), radiusInput)),
         panel('Painting', button('Regenerate', regenerate)),
       ),
     ),
   );
 
+  let frame = 0;
   const stop = startLoop(
     clock,
     (dt) => {
@@ -116,7 +181,12 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
         const aim = aimEnd(pressedAt.x, pressedAt.y, cursor.x, cursor.y);
         drawAim(renderer.g, ability, aim, radius, chargeOf(world.tick - pressedTick));
       }
-      status.textContent = frontier.done ? `tick ${world.tick}` : 'The landscape is painting itself…';
+      if (frame++ % 10 === 0 && frontier.done) checkGoals();
+      status.textContent = !frontier.done
+        ? 'The landscape is painting itself…'
+        : used >= level.actionBudget && !won
+          ? 'Out of ink. Regenerate to try again.'
+          : `tick ${world.tick}`;
       fx.endFrame(canvas, dt);
     },
     () => fx.shouldAdvance(),

@@ -157,6 +157,7 @@ export function registerLineAbility(def: LineAbilityDef): void {
       let list = sweeps.get(world);
       if (!list) sweeps.set(world, (list = []));
       list.push({ def, aim, r: a.r, done: 0 });
+      if (world.events.has('lineFire')) world.events.emit('lineFire', { id: def.id, ...aim, r: a.r, power: 1 });
     },
     drawCursor: (g) => {
       if (aiming) drawAim(g, def.id, aimEnd(aiming.x0, aiming.y0, aiming.x, aiming.y), aiming.r);

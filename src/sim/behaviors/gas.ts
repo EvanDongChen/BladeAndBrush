@@ -2,6 +2,7 @@ import { registerBehavior } from '../../core/behaviors';
 import { Flag } from '../../core/constants';
 import { El } from '../../core/elements';
 import type { World } from '../../core/world';
+import { DUST } from '../elements/dust';
 import { STEAM } from '../elements/steam';
 import { at, BLOCKED, canRise, FREE, moveCell, REPLACEABLE } from '../physics';
 import { defineTunables } from '../tunables';
@@ -17,8 +18,10 @@ export const gasTunables = defineTunables(
     condense: 0.25,
     /** Chance per tick to drift sideways instead of rising. */
     drift: 0.3,
+    /** Average dust lifetime in ticks. */
+    dustLife: 26,
   },
-  { smokeLife: [10, 250, 5], steamLife: [10, 250, 5], condense: [0, 1, 0.05], drift: [0, 1, 0.05] },
+  { smokeLife: [10, 250, 5], steamLife: [10, 250, 5], condense: [0, 1, 0.05], drift: [0, 1, 0.05], dustLife: [4, 120, 2] },
 );
 
 /** life 0 means "not started yet" (e.g. painted), so it gets a randomized lifetime first. */
@@ -56,15 +59,27 @@ function updateGas(world: World, x: number, y: number): void {
   const i = y * world.w + x;
   const me = world.el[i];
   if (world.life[i] === 0) {
-    world.life[i] = startLife(world, me === STEAM ? gasTunables.steamLife : gasTunables.smokeLife);
+    world.life[i] = startLife(world, me === STEAM ? gasTunables.steamLife : me === DUST ? gasTunables.dustLife : gasTunables.smokeLife);
   } else if (--world.life[i] === 0) {
     if (me === STEAM && world.rng.chance(gasTunables.condense)) world.set(x, y, El.WATER);
     else world.set(x, y, El.EMPTY);
     world.flags[i] |= Flag.UPDATED;
     return;
   }
-  rise(world, x, y, gasTunables.drift);
+  rise(world, x, y, me === DUST ? 0.7 : gasTunables.drift); // dust mostly spreads sideways
+}
+
+/** Kick up `count` dust puffs in free cells within `radius` of (x, y). */
+export function spawnDust(world: World, x: number, y: number, count: number, radius: number): void {
+  const { rng, el, w } = world;
+  for (let k = 0; k < count; k++) {
+    const px = Math.round(x + rng.range(-radius, radius));
+    const py = Math.round(y + rng.range(-radius, radius * 0.4));
+    if (!world.inBounds(px, py) || !REPLACEABLE[el[py * w + px]]) continue;
+    world.set(px, py, DUST, { aux: rng.int(256), life: startLife(world, gasTunables.dustLife) });
+  }
 }
 
 registerBehavior(El.SMOKE, updateGas);
 registerBehavior(STEAM, updateGas);
+registerBehavior(DUST, updateGas);

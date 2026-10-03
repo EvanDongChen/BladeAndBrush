@@ -19,6 +19,7 @@ import type { World } from '../../core/world';
 import { DEBRIS } from '../elements/debris';
 import { K_GAS, K_LIQUID, K_PROJECTILE, KIND, REPLACEABLE, RIGID } from '../physics';
 import { defineTunables } from '../tunables';
+import { spawnDust } from './gas';
 
 export const rigidTunables = defineTunables(
   'rigid',
@@ -33,8 +34,20 @@ export const rigidTunables = defineTunables(
     checkEvery: 4,
     /** Landing faster than this (cells per tick) rebounds instead of stopping. */
     impact: 2.5,
+    /** Landing at least this fast kicks up dust and emits an 'impact' event. */
+    dustSpeed: 1.2,
+    /** Pieces this small (cells) or smaller crumble into rubble when they land. */
+    crumbleSize: 12,
   },
-  { gravity: [0.05, 1.5, 0.05], friction: [0, 1, 0.05], bounce: [0, 1, 0.05], checkEvery: [1, 30, 1], impact: [0.5, 12, 0.5] },
+  {
+    gravity: [0.05, 1.5, 0.05],
+    friction: [0, 1, 0.05],
+    bounce: [0, 1, 0.05],
+    checkEvery: [1, 30, 1],
+    impact: [0.5, 12, 0.5],
+    dustSpeed: [0.2, 6, 0.1],
+    crumbleSize: [0, 200, 1],
+  },
 );
 
 interface Body {
@@ -338,6 +351,24 @@ function burst(world: World, s: State, b: Body, speed: number): void {
   }
   s.byId.delete(b.id);
   s.dirty = true;
+  spawnDust(world, mx, my, Math.min(30, Math.round(b.cells.length / 6)), 4);
+  if (world.events.has('impact')) world.events.emit('impact', { x: mx, y: my, strength: b.cells.length * speed });
+}
+
+/** A hard landing: dust puffs out along the contact and an 'impact' event goes out. */
+function onLand(world: World, s: State, b: Body, v: number): void {
+  if (v < rigidTunables.dustSpeed) return;
+  const { w, size } = world;
+  let sx = 0;
+  let sy = 0;
+  let n = 0;
+  for (const i of b.cells) {
+    if (i + w < size && s.mark[i + w] !== b.id) (sx += i % w), (sy += (i / w) | 0), n++;
+  }
+  if (n === 0) return;
+  const strength = b.cells.length * v;
+  spawnDust(world, sx / n, sy / n, Math.min(40, Math.round(4 + Math.sqrt(strength) * 1.5)), Math.max(3, n * 0.6));
+  if (world.events.has('impact')) world.events.emit('impact', { x: sx / n, y: sy / n, strength });
 }
 
 /** Returns false when the body has come to rest (or vanished) and should be dropped. */
@@ -361,6 +392,7 @@ function moveBody(world: World, s: State, b: Body): boolean {
 
   const speed = Math.hypot(b.vx, b.vy);
   let shifts = 0;
+  let crumble = false;
   for (let guard = 0; guard < 64 && (Math.abs(b.ax) >= 1 || Math.abs(b.ay) >= 1); guard++) {
     if (Math.abs(b.ay) >= Math.abs(b.ax)) {
       const sy = Math.sign(b.ay);
@@ -374,7 +406,10 @@ function moveBody(world: World, s: State, b: Body): boolean {
       b.ay = 0;
       if (r !== WALL && sy < 0) collide(b, s.byId.get(r)!, 'y');
       else if (sy > 0 && r === WALL && slide(world, s, b)) b.ay = Math.max(0, b.vy - 1); // slid down a slope
-      else if (sy > 0 && r === WALL && b.vy > rigidTunables.impact) {
+      else if (sy > 0 && r === WALL && (onLand(world, s, b, b.vy), b.cells.length <= rigidTunables.crumbleSize && b.vy > 0.8)) {
+        crumble = true; // small pieces break up on landing
+        break;
+      } else if (sy > 0 && r === WALL && b.vy > rigidTunables.impact) {
         b.vy = -b.vy * b.bounce; // hit the ground hard: rebound (blasted rock flies back out)
         b.vx *= rigidTunables.friction;
       } else if (sy > 0) {
@@ -395,6 +430,13 @@ function moveBody(world: World, s: State, b: Body): boolean {
       if (r !== WALL) collide(b, s.byId.get(r)!, 'x');
       else b.vx = -b.vx * b.bounce;
     }
+  }
+
+  if (crumble) {
+    b.vx = world.rng.range(-1, 1);
+    b.vy = -1.5; // a little hop so the bits scatter
+    burst(world, s, b, 3);
+    return false;
   }
 
   if (b.shatter && b.age++ < 2 && shifts === 0 && speed > 1.5) {

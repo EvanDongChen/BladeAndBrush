@@ -3,6 +3,7 @@ import { flags } from '../src/core/config';
 import { El } from '../src/core/elements';
 import type { World } from '../src/core/world';
 import { bodyCount, markUnsupported } from '../src/sim/behaviors/rigid';
+import { DUST } from '../src/sim/elements/dust';
 import { LEAF } from '../src/sim/elements/leaf';
 import { boxWorld, count, fillRect, rowsOf, run, stroke } from './sim-helpers';
 
@@ -27,6 +28,31 @@ describe('rigid pieces', () => {
     expect(bodyCount(world)).toBe(0);
     expect(bbox(world, El.ROCK)).toEqual({ x0: 10, x1: 19, y0: 42, y1: 46 });
     expect(count(world, El.ROCK)).toBe(64 + 50);
+  });
+
+  it('a hard landing kicks up dust and emits an impact; small pieces crumble but nothing is lost', () => {
+    const world = boxWorld(64, 64);
+    fillRect(world, 10, 2, 25, 9, El.ROCK); // big piece, high up
+    fillRect(world, 45, 2, 47, 4, El.ROCK); // tiny 3x3 piece
+    const rock = count(world, El.ROCK);
+    const impacts: number[] = [];
+    world.events.on('impact', (e) => impacts.push(e.strength));
+    markUnsupported(world);
+    let sawDust = false;
+    for (let t = 0; t < 300; t++) {
+      run(world, 1);
+      sawDust ||= count(world, DUST) > 0;
+    }
+    expect(sawDust).toBe(true);
+    expect(impacts.length).toBeGreaterThan(0);
+    expect(Math.max(...impacts)).toBeGreaterThan(100);
+    expect(count(world, El.ROCK)).toBe(rock);
+    expect(bodyCount(world)).toBe(0);
+    // the big piece kept its shape; the tiny one broke up (no 3x3 block left at its landing spot)
+    expect(bbox(world, El.ROCK)).toMatchObject({ y1: 62 });
+    let tinyBlock = true;
+    for (let y = 60; y <= 62; y++) for (let x = 45; x <= 47; x++) tinyBlock &&= world.el[y * 64 + x] === El.ROCK;
+    expect(tinyBlock).toBe(false);
   });
 
   it('anything still connected to the ground stays put', () => {

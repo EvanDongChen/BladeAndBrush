@@ -28,6 +28,19 @@ export class Hasher {
     return this;
   }
 
+  u32(a: Uint32Array): this {
+    let h = this.h;
+    for (let i = 0; i < a.length; i++) {
+      const v = a[i];
+      h = Math.imul(h ^ (v & 0xff), 0x01000193);
+      h = Math.imul(h ^ ((v >>> 8) & 0xff), 0x01000193);
+      h = Math.imul(h ^ ((v >>> 16) & 0xff), 0x01000193);
+      h = Math.imul(h ^ (v >>> 24), 0x01000193);
+    }
+    this.h = h;
+    return this;
+  }
+
   digest(): number {
     return this.h >>> 0;
   }

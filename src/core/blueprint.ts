@@ -17,8 +17,15 @@ export interface Blueprint {
   registry: Registry;
   /** Vector draw commands for the art layer (empty in the Phase 0 stub). */
   draw: DrawCmd[];
-  /** Optional pre-rendered art (section 3.8). Built from `draw` by whoever implements the art layer. */
-  art?: ArtLayer;
+  /** Background plane (same size as el): FAR_ROCK or EMPTY. Never simulated or scanned. */
+  bg?: Uint8Array;
+  /** 1 where a fuel cell grows over rock (a tree on a mountain face): revealed with Flag.ON_ROCK. */
+  onRock?: Uint8Array;
+  /**
+   * High-res art (section 3.8): k x k art pixels per cell. A cell's block is shown only while the
+   * cell still matches the blueprint, so every visible pixel is backed by a cell.
+   */
+  art?: ArtBuffers;
 }
 
 export interface DrawCmd {
@@ -44,10 +51,15 @@ export interface StrokeInfo {
   anchor: [x: number, y: number];
 }
 
-/** Hook for the hybrid renderer: art drawn at `scale` x grid resolution. */
-export interface ArtLayer {
-  canvas: CanvasImageSource;
-  scale: number;
+/** RGBA art at k x grid resolution, packed little-endian like rgba(). Row width is w * k. */
+export interface ArtBuffers {
+  k: number;
+  /** Foreground plane art (mountains, trees...). Transparent where nothing was painted. */
+  fg: Uint32Array;
+  /** Background plane art (far ridges). */
+  bg: Uint32Array;
+  /** Foreground art from before things were painted over rock: shown once a face tree has burnt back to rock. */
+  under?: Uint32Array;
 }
 
 export function createBlueprint(seed: number, params: GenParams, dims: LevelDims): Blueprint {
@@ -71,6 +83,10 @@ export function hashBlueprint(bp: Blueprint): number {
     h.int(s.anchor[0]).int(s.anchor[1]);
   }
   for (const w of bp.registry.waterSources) h.int(w.x).int(w.y).int(Math.round(w.rate * 1000));
+  if (bp.bg) h.bytes(bp.bg);
+  if (bp.onRock) h.bytes(bp.onRock);
+  if (bp.art) h.int(bp.art.k).u32(bp.art.fg).u32(bp.art.bg);
+  if (bp.art?.under) h.u32(bp.art.under);
   h.int(bp.draw.length);
   return h.digest();
 }

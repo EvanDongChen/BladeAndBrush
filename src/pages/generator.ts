@@ -5,6 +5,7 @@ import { DEFAULT_DIMS } from '../core/constants';
 import { defaultParams } from '../core/params';
 import { Renderer } from '../core/render';
 import { World } from '../core/world';
+import { DEFAULT_ART_K } from '../gen/artState';
 import { generate } from '../gen/generate';
 import { Frontier } from '../gen/frontier';
 import { scan } from '../gen/scan';
@@ -35,7 +36,9 @@ export function mountGenerator(root: HTMLElement): () => void {
   let frontier: Frontier;
 
   const canvas = h('canvas', { class: 'grid' });
-  const renderer = new Renderer(canvas, DEFAULT_DIMS);
+  const renderer = new Renderer(canvas, DEFAULT_DIMS, DEFAULT_ART_K);
+  // The canvas is k x the grid and gets shrunk to fit: smooth it instead of pixelating.
+  canvas.style.imageRendering = 'auto';
   const status = h('div', { class: 'status' });
   const readout = metricReadout();
 
@@ -102,7 +105,7 @@ export function mountGenerator(root: HTMLElement): () => void {
 
   let frame = 0;
   const stop = startLoop(clock, () => {
-    renderer.draw(world, { frontierX: frontier.done ? undefined : frontier.x, art: bp.art });
+    renderer.draw(world, { frontierX: frontier.done ? undefined : frontier.x, art: bp.art ? { art: bp.art, el: bp.el } : undefined });
     if (frame++ % 10 === 0) {
       readout.update(scan(world));
       status.textContent = `seed ${seed} · tick ${world.tick} · frontier ${frontier.x}/${bp.w} · strokes ${bp.registry.strokes.size}`;

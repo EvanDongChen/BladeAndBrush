@@ -1,0 +1,21 @@
+# Runs the full test suite (typecheck + lint boundaries/determinism + vitest) on every push and PR.
+# To make it block merges, a repo admin adds a branch protection rule on main that requires the
+# "test" check to pass.
+name: test
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run build

@@ -23,6 +23,7 @@ export function revealColumn(bp: Blueprint, world: World, x: number): void {
     world.vx[i] = 0;
     world.vy[i] = 0;
     world.flags[i] |= Flag.GENERATED;
+    if (bp.onRock?.[i]) world.flags[i] |= Flag.ON_ROCK;
   }
 }
 

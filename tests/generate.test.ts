@@ -39,18 +39,18 @@ describe('stub generate()', () => {
   });
 
   it('disabling a feature flag removes that feature from the pipeline with no errors', () => {
-    expect(enabledFeatures().map((f) => f.name)).toContain('stubTrees');
-    featureToggles.stubTrees = false;
+    expect(enabledFeatures().map((f) => f.name)).toContain('trees');
+    featureToggles.trees = false;
     try {
-      expect(enabledFeatures().map((f) => f.name)).not.toContain('stubTrees');
+      expect(enabledFeatures().map((f) => f.name)).not.toContain('trees');
       const bp = generate(1, defaultParams());
       expect(count(bp.el, El.TREE)).toBe(0);
       expect(count(bp.el, El.ROCK)).toBeGreaterThan(0);
     } finally {
-      delete featureToggles.stubTrees;
+      delete featureToggles.trees;
     }
     // per-call overrides work the same way
-    expect(count(generate(1, defaultParams(), { features: { stubBumps: false } }).el, El.TREE)).toBeGreaterThan(0);
+    expect(count(generate(1, defaultParams(), { features: { mountains: false } }).el, El.TREE)).toBeGreaterThan(0);
   });
 });
 
@@ -92,5 +92,83 @@ describe('Frontier', () => {
     new Frontier(bp).revealAll(world);
     const trees = [...bp.registry.strokes.values()].filter((s) => s.kind === 'tree').length;
     expect(scan(world).counts.trees).toBe(trees);
+  });
+});
+
+describe('art pipeline', () => {
+  it('every solid cell is at least half covered by its owner in the art, and the art is painted', () => {
+    const bp = generate(3, defaultParams(), { k: 2 });
+    const art = bp.art!;
+    const k = art.k;
+    const aw = bp.w * k;
+    let painted = 0;
+    for (const c of art.fg) if (c >>> 24) painted++;
+    expect(painted).toBeGreaterThan(bp.w * k * k * 5);
+    let bad = 0;
+    for (let i = 0; i < bp.el.length; i++) {
+      if (bp.el[i] === El.EMPTY) continue;
+      const x = i % bp.w;
+      const y = (i / bp.w) | 0;
+      let opaque = 0;
+      for (let yy = 0; yy < k; yy++) for (let xx = 0; xx < k; xx++) if (art.fg[(y * k + yy) * aw + x * k + xx] >>> 24) opaque++;
+      if (opaque < Math.ceil((k * k) / 2)) bad++;
+    }
+    expect(bad).toBe(0);
+  });
+});
+
+describe('mountains', () => {
+  const k = 2;
+  /** Mean column height of the blueprint's solid cells (cells above the ground bank count). */
+  const heights = (bp: ReturnType<typeof generate>) => {
+    const out: number[] = [];
+    for (let x = 0; x < bp.w; x++) {
+      let y = 0;
+      while (y < bp.h && bp.el[y * bp.w + x] === El.EMPTY) y++;
+      out.push(bp.h - y);
+    }
+    return out;
+  };
+  const mean = (a: number[]) => a.reduce((s, v) => s + v, 0) / a.length;
+  const wiggle = (a: number[]) => a.slice(1).reduce((s, v, i) => s + Math.abs(v - a[i]), 0);
+  const gen = (seed: number, over: Record<string, number>) => generate(seed, { ...defaultParams(), ...over }, { k, features: { trees: false } });
+
+  it('replace the stub bumps', () => {
+    expect(enabledFeatures().map((f) => f.name)).toContain('mountains');
+    expect(enabledFeatures().map((f) => f.name)).not.toContain('stubBumps');
+  });
+
+  it('mountainHeight raises the skyline', () => {
+    let lo = 0;
+    let hi = 0;
+    for (let s = 1; s <= 3; s++) {
+      lo += mean(heights(gen(s, { mountainHeight: 0.2 })));
+      hi += mean(heights(gen(s, { mountainHeight: 0.9 })));
+    }
+    expect(hi).toBeGreaterThan(lo * 1.5);
+  });
+
+  it('ruggedness roughens the skyline', () => {
+    let smooth = 0;
+    let rough = 0;
+    for (let s = 1; s <= 3; s++) {
+      smooth += wiggle(heights(gen(s, { ruggedness: 1 })));
+      rough += wiggle(heights(gen(s, { ruggedness: 8 })));
+    }
+    expect(rough).toBeGreaterThan(smooth);
+  });
+
+  it('every mountain in the registry owns rock cells', () => {
+    const bp = gen(4, {});
+    const owners = new Set<number>();
+    for (let i = 0; i < bp.el.length; i++) if (bp.el[i] === El.ROCK) owners.add(bp.owner[i]);
+    const mountains = [...bp.registry.strokes.values()].filter((s) => s.kind === 'mountain');
+    expect(mountains.length).toBeGreaterThan(0);
+    for (const m of mountains) expect(owners.has(m.id)).toBe(true);
+  });
+
+  it('mountainHeight 0 makes no mountains and does not throw', () => {
+    const bp = gen(1, { mountainHeight: 0 });
+    expect([...bp.registry.strokes.values()].filter((s) => s.kind === 'mountain')).toEqual([]);
   });
 });

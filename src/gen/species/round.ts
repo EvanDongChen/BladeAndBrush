@@ -10,7 +10,7 @@ registerSpecies({
     line(g, [
       [x, y],
       [x + lean, y - size * 0.55],
-    ], size * 0.05, 235, 0.25);
+    ], size * 0.025, 235, 0.25);
     const cx = x + lean;
     const cy = y - size * 0.68;
     const n = 3 + rng.int(3);

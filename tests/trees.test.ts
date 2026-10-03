@@ -117,10 +117,20 @@ describe('trees feature', () => {
     expect(count(none.el, El.TREE)).toBe(0);
   });
 
-  it('never turns rock into tree', () => {
+  it('only face trees replace rock, and every one of those cells is marked onRock', () => {
     const on = gen(2, { treeDensity: 0.9 });
     const off = gen(2, { treeDensity: 0.9 }, { trees: false });
-    expect(count(on.el, El.ROCK)).toBe(count(off.el, El.ROCK));
+    let replaced = 0;
+    for (let i = 0; i < on.el.length; i++) {
+      if (off.el[i] === El.ROCK && on.el[i] === El.TREE) {
+        replaced++;
+        expect(on.onRock![i]).toBe(1);
+      }
+    }
+    expect(replaced).toBeGreaterThan(0); // face trees exist
+    expect(count(on.el, El.ROCK) + replaced).toBe(count(off.el, El.ROCK));
+    expect(on.onRock!.reduce((n, v) => n + v, 0)).toBe(replaced);
+    expect(on.art!.under).toBeDefined();
   });
 
   it('every tree owns cells and stands on rock', () => {
@@ -133,7 +143,11 @@ describe('trees feature', () => {
       expect(owned.has(t.id)).toBe(true);
       const [ax, ay] = t.anchor;
       let grounded = false;
-      for (let y = ay - 1; y <= ay + 2; y++) if (y >= 0 && y < bp.h && bp.el[y * bp.w + ax] === El.ROCK) grounded = true;
+      // on rock, or (face trees) on rock it took over, which is marked onRock
+      for (let y = ay - 1; y <= ay + 2; y++) {
+        const i = y * bp.w + ax;
+        if (y >= 0 && y < bp.h && (bp.el[i] === El.ROCK || bp.onRock?.[i])) grounded = true;
+      }
       expect(grounded).toBe(true);
     }
   });

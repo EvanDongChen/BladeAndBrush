@@ -21,7 +21,8 @@ export function put(bp: Blueprint, x: number, y: number, el: number, owner: numb
 /**
  * Cells follow the art: set (x, y) to `el`/`owner` when at least half of its k x k block is owned
  * by `owner` in `buf`. bbox is in cells (inclusive). `cells` is the blueprint itself for the
- * foreground, or the background plane. Returns the bbox of the cells set, or null.
+ * foreground, or the background plane. `overwrite`: true writes over anything, false only into
+ * EMPTY cells, or a rule deciding per cell index. Returns the bbox of the cells set, or null.
  */
 export function rasterizeCoverage(
   bp: Blueprint,
@@ -31,7 +32,7 @@ export function rasterizeCoverage(
   el: number,
   cells: { el: Uint8Array; owner: Uint16Array },
   bbox: [number, number, number, number],
-  overwrite: boolean,
+  overwrite: boolean | ((i: number) => boolean),
 ): [number, number, number, number] | null {
   const need = Math.ceil((k * k) / 2);
   const x0 = Math.max(0, bbox[0]);
@@ -48,7 +49,7 @@ export function rasterizeCoverage(
       }
       if (n < need) continue;
       const i = y * bp.w + x;
-      if (!overwrite && cells.el[i] !== El.EMPTY) continue;
+      if (typeof overwrite === 'function' ? !overwrite(i) : !overwrite && cells.el[i] !== El.EMPTY) continue;
       cells.el[i] = el;
       cells.owner[i] = owner;
       if (!out) out = [x, y, x, y];

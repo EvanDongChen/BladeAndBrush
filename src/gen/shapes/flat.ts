@@ -7,6 +7,6 @@ registerShape({
   name: 'flat',
   build: (p, ctx) => {
     const cap = new Rng(hashSeed(p.seed, 'flat')).range(0.5, 0.65);
-    return mountainProfile(p, ctx, (h, H) => (h > cap * H ? cap * H + (h - cap * H) * 0.1 : h));
+    return mountainProfile(p, ctx, { shapeH: (h, H) => (h > cap * H ? cap * H + (h - cap * H) * 0.1 : h) });
   },
 });

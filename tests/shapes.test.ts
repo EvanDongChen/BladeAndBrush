@@ -68,3 +68,18 @@ describe('flat shape', () => {
 describe('shape registry', () => {
   it('throws on an unknown shape', () => expect(() => getShape('nope')).toThrow());
 });
+
+describe('far shape', () => {
+  it('is smoother than a peak with the same seed and size', () => {
+    const rugged = { ...ctx, params: { ...defaultParams(), ruggedness: 8 } };
+    const wig = (t: Float32Array) => {
+      let s = 0;
+      for (let i = 1; i < t.length; i++) if (t[i] < u.artH && t[i - 1] < u.artH) s += Math.abs(t[i] - t[i - 1]);
+      return s;
+    };
+    const far = getShape('far').build(place('far', { height: 250 }), rugged);
+    const peak = getShape('peak').build(place('peak', { height: 250 }), rugged);
+    expect(wig(far.tops)).toBeLessThan(wig(peak.tops));
+    expect(far.layers.length).toBeLessThan(peak.layers.length);
+  });
+});

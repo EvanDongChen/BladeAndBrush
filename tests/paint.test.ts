@@ -117,3 +117,22 @@ describe('rasterizeCoverage', () => {
     expect(bp.el[0]).toBe(El.TREE);
   });
 });
+
+describe('mist', () => {
+  it('contourWash fades toward paper near the foot, staying opaque', async () => {
+    const { contourWash } = await import('../src/gen/paint/shaders');
+    const s = contourWash({
+      ink: [40, 40, 40], base: 0.5, edge: 0, edgeWidth: 1, band: 0, bandWidth: 1, speckle: 0,
+      noise: createNoise(1), x0: 0, layers: [], mist: { from: 100, to: 200 },
+    });
+    expect(A(s(0, 190, 50))).toBe(255);
+    expect(s(0, 190, 50) & 255).toBeGreaterThan(s(0, 110, 50) & 255);
+  });
+
+  it('farWash becomes transparent toward the foot', async () => {
+    const { farWash } = await import('../src/gen/paint/shaders');
+    const s = farWash({ ink: [120, 120, 120], strength: 0.5, edge: 0.2, edgeWidth: 4, noise: createNoise(1), fadeFrom: 100, fadeTo: 200 });
+    expect(A(s(0, 50, 10))).toBeGreaterThan(A(s(0, 180, 10)));
+    expect(A(s(0, 200, 10))).toBe(0);
+  });
+});

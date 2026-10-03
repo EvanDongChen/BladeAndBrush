@@ -3,8 +3,14 @@ import { hashSeed, Rng } from '../../core/rng';
 import type { Placement } from '../plan';
 import type { Profile, ShapeCtx } from './registry';
 
-/** Number of inner contour layers under the silhouette. */
-const LAYERS = 5;
+export interface ProfileOpts {
+  /** Reshape every height, e.g. clamp a plateau. */
+  shapeH?: (h: number, H: number) => number;
+  /** Cap on ruggedness (smooth, rolling shapes for distant ridges). */
+  maxRugged?: number;
+  /** Number of inner contour layers (default 5). */
+  layers?: number;
+}
 
 /**
  * Shared builder for peak-like shapes (our own formulation): a cosine hump whose two slopes are
@@ -12,7 +18,9 @@ const LAYERS = 5;
  * shrunken inner layers that later guide shading bands and texture strokes. `shapeH` can reshape
  * every height (e.g. clamp a plateau).
  */
-export function mountainProfile(p: Placement, ctx: ShapeCtx, shapeH: (h: number, H: number) => number = (h) => h): Profile {
+export function mountainProfile(p: Placement, ctx: ShapeCtx, opts: ProfileOpts = {}): Profile {
+  const shapeH = opts.shapeH ?? ((h: number) => h);
+  const LAYERS = opts.layers ?? 5;
   const { u, params, base } = ctx;
   const rng = new Rng(hashSeed(p.seed, 'shape'));
   const noise = createNoise(hashSeed(p.seed, 'shape', 'noise'));
@@ -25,7 +33,7 @@ export function mountainProfile(p: Placement, ctx: ShapeCtx, shapeH: (h: number,
 
   const pL = rng.range(0.75, 1.35);
   const pR = rng.range(0.75, 1.35);
-  const rugged = Math.max(1, Math.min(8, params.ruggedness));
+  const rugged = Math.max(1, Math.min(opts.maxRugged ?? 8, params.ruggedness));
   const octaves = Math.round(rugged);
   const falloff = 0.3 + 0.06 * rugged;
   const freq = 1 / u.toArt(120);

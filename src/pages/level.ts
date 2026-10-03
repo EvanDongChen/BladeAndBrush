@@ -148,7 +148,6 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
       r.row.classList.toggle('met', pass);
       r.fill.style.width = `${Math.round(progress * 100)}%`;
     }
-    ink.textContent = `Ink left: ${level.actionBudget - used} of ${level.actionBudget}`;
     if (all && changed() && !won) {
       won = true;
       complete!.node.hidden = false;
@@ -220,6 +219,7 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
         const aim = aimEnd(pressedAt.x, pressedAt.y, cursor.x, cursor.y);
         drawAim(renderer.g, ability, aim, radius, chargeOf(world.tick - pressedTick));
       }
+      ink.textContent = `Ink left: ${level.actionBudget - used} of ${level.actionBudget}`;
       if (frame++ % 10 === 0 && frontier.done) checkGoals();
       status.textContent = !frontier.done
         ? 'The landscape is painting itself…'

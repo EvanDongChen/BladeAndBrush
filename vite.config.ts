@@ -5,6 +5,9 @@ import { defineConfig } from 'vite';
 const page = (name: string) => fileURLToPath(new URL(`./${name}.html`, import.meta.url));
 
 export default defineConfig({
+  // Project pages (EvanDongChen/BladeAndBrush) serve under /BladeAndBrush/;
+  // local dev keeps root base.
+  base: process.env.GITHUB_PAGES ? '/BladeAndBrush/' : '/',
   server: {
     proxy: {
       '/api': 'http://localhost:3001',

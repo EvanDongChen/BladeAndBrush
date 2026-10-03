@@ -27,8 +27,23 @@ export function h<K extends keyof HTMLElementTagNameMap>(
   return e;
 }
 
+let panelSeq = 0;
+
+/**
+ * A control panel styled as a small hanging scroll. Clicking the title rolls it up or down;
+ * the contents stay in the DOM either way, so registry-driven queries keep working.
+ */
 export function panel(title: string, ...children: (Node | string)[]): HTMLElement {
-  return h('section', { class: 'panel' }, h('h3', {}, title), ...children);
+  const id = `panel-${++panelSeq}`;
+  const toggle = h('button', { type: 'button', class: 'panel-toggle', 'aria-expanded': 'true', 'aria-controls': id }, title);
+  const body = h('div', { class: 'panel-body', id }, h('div', { class: 'panel-inner' }, ...children));
+  const section = h('section', { class: 'panel' }, h('h3', {}, toggle), body);
+  toggle.addEventListener('click', () => {
+    const open = toggle.getAttribute('aria-expanded') !== 'true';
+    toggle.setAttribute('aria-expanded', String(open));
+    section.classList.toggle('rolled', !open);
+  });
+  return section;
 }
 
 export function button(label: string, onClick: () => void, attrs: Attrs = {}): HTMLButtonElement {
@@ -37,36 +52,127 @@ export function button(label: string, onClick: () => void, attrs: Attrs = {}): H
   return b;
 }
 
-export function pageHeader(title: string): HTMLElement {
-  return h(
-    'header',
-    { class: 'top' },
-    h('h1', {}, '斬山水 ', h('span', {}, title)),
-    h(
-      'nav',
-      {},
-      h('a', { href: './index.html' }, 'Game'),
-      h('a', { href: './generator.html' }, 'Generator'),
-      h('a', { href: './sandbox.html' }, 'Sandbox'),
-    ),
-  );
+/** The red square seal used as the site logo. */
+export function seal(text = '斬山水', extra = ''): HTMLElement {
+  const s = h('span', { class: `seal ${extra}`.trim(), 'aria-hidden': 'true' });
+  for (const ch of text) s.append(h('span', {}, ch));
+  return s;
 }
 
-/** Site navbar for the player-facing pages (Home, Gallery). */
-export function siteNav(active: 'Home' | 'Generator' | 'Sandbox' | 'Gallery'): HTMLElement {
-  const links = [
-    ['Home', './index.html'],
-    ['Generator', './generator.html'],
-    ['Sandbox', './sandbox.html'],
-    ['Gallery', './gallery.html'],
-  ] as const;
+const NAV_LINKS = [
+  ['Home', './index.html'],
+  ['Generator', './generator.html'],
+  ['Sandbox', './sandbox.html'],
+  ['Gallery', './gallery.html'],
+] as const;
+
+type NavLabel = (typeof NAV_LINKS)[number][0];
+
+function navBar(active: NavLabel | null, title: string, sub?: string): HTMLElement {
   const nav = h('nav', {});
-  for (const [label, href] of links) {
+  for (const [label, href] of NAV_LINKS) {
     const a = h('a', { href }, label);
     if (label === active) a.setAttribute('aria-current', 'page');
     nav.append(a);
   }
-  return h('header', { class: 'top home-nav' }, h('h1', {}, 'Blade & Brush'), nav);
+  const brand = h('a', { class: 'brand', href: './index.html' }, seal(), h('span', { class: 'brand-name' }, title));
+  if (sub) brand.append(h('span', { class: 'brand-sub' }, sub));
+  return h('header', { class: 'top' }, h('h1', {}, brand), nav);
+}
+
+/** Header for the workshop pages (Generator, Sandbox). */
+export function pageHeader(title: string): HTMLElement {
+  const active = NAV_LINKS.find(([l]) => l === title)?.[0] ?? null;
+  return navBar(active, 'Blade & Brush', title);
+}
+
+/** Site navbar for the player-facing pages (Home, Gallery). */
+export function siteNav(active: NavLabel): HTMLElement {
+  return navBar(active, 'Blade & Brush');
+}
+
+/** Wooden roller with end caps, shared by both scroll kinds. */
+function rod(cls: string): HTMLElement {
+  return h('span', { class: `rod ${cls}`, 'aria-hidden': 'true' });
+}
+
+export interface ScrollHandle {
+  node: HTMLElement;
+  open(): void;
+  close(): void;
+  toggle(): void;
+}
+
+function scrollHandle(node: HTMLElement, onChange?: (open: boolean) => void): ScrollHandle {
+  const set = (open: boolean) => {
+    node.classList.toggle('open', open);
+    node.querySelectorAll(':scope > .scroll-toggle').forEach((b) => b.setAttribute('aria-expanded', String(open)));
+    onChange?.(open);
+  };
+  return {
+    node,
+    open: () => set(true),
+    close: () => set(false),
+    toggle: () => set(!node.classList.contains('open')),
+  };
+}
+
+/**
+ * A horizontal hand scroll (手卷): two rollers that slide apart and unroll the paper between them.
+ * Starts rolled; call `open()` (or click a roller) to unroll it.
+ */
+export function handscroll(label: string, ...children: (Node | string)[]): ScrollHandle {
+  const node = h('div', { class: 'handscroll' });
+  const left = h('button', { type: 'button', class: 'scroll-toggle rod-btn left', 'aria-label': `Roll or unroll ${label}`, 'aria-expanded': 'false' }, rod('v'));
+  const right = h('button', { type: 'button', class: 'scroll-toggle rod-btn right', 'aria-label': `Roll or unroll ${label}`, 'aria-expanded': 'false' }, rod('v'));
+  node.append(h('div', { class: 'handscroll-paper' }, h('div', { class: 'handscroll-inner' }, ...children)), left, right);
+  const handle = scrollHandle(node);
+  left.addEventListener('click', handle.toggle);
+  right.addEventListener('click', handle.toggle);
+  return handle;
+}
+
+/**
+ * A vertical hanging scroll (立轴): click the top roller and the paper rolls down, weighted by the
+ * bottom roller. `title` is written on the brocade band so a closed scroll is still labelled.
+ */
+export function hangingScroll(title: string, ...children: (Node | string)[]): ScrollHandle {
+  const node = h('article', { class: 'hanging' });
+  const top = h(
+    'button',
+    { type: 'button', class: 'scroll-toggle hanging-top', 'aria-expanded': 'false' },
+    rod('h'),
+    h('span', { class: 'hanging-title' }, title),
+  );
+  node.append(
+    h('span', { class: 'hanging-cord', 'aria-hidden': 'true' }),
+    top,
+    h('div', { class: 'hanging-body' }, h('div', { class: 'hanging-inner' }, ...children)),
+    rod('h bottom'),
+  );
+  const handle = scrollHandle(node);
+  top.addEventListener('click', handle.toggle);
+  return handle;
+}
+
+/** Add `in` to each element as it scrolls into view (CSS does the animation). */
+export function revealOnScroll(root: ParentNode, selector = '.reveal'): void {
+  const els = Array.from(root.querySelectorAll<HTMLElement>(selector));
+  if (typeof IntersectionObserver === 'undefined') {
+    els.forEach((e) => e.classList.add('in'));
+    return;
+  }
+  const io = new IntersectionObserver(
+    (entries) => {
+      for (const en of entries) {
+        if (!en.isIntersecting) continue;
+        en.target.classList.add('in');
+        io.unobserve(en.target);
+      }
+    },
+    { threshold: 0.15 },
+  );
+  els.forEach((e) => io.observe(e));
 }
 
 /** One slider per registered param. */

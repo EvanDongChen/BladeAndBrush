@@ -61,6 +61,7 @@ describe('rigid pieces', () => {
     for (let x = 20; x < 76; x++) fillRect(world, x, 62 - Math.min(x - 20, 75 - x), x, 62, El.ROCK); // a pyramid
     const rock = count(world, El.ROCK);
     stroke(world, 'slash', [[30, 34], [55, 44], [80, 54]], { radius: 2 }); // slanted cut through the top
+    run(world, 2); // let the released cut sweep through
     const cut = count(world, El.ROCK);
     const topBefore = rowsOf(world, El.ROCK).top;
     run(world, 300);

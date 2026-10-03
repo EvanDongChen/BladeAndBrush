@@ -3,6 +3,8 @@ import { flags } from '../src/core/config';
 import { Flag } from '../src/core/constants';
 import { El } from '../src/core/elements';
 import type { World } from '../src/core/world';
+import { ActionDriver } from '../src/core/replay';
+import { step } from '../src/sim/step';
 import { boxWorld, count, fillRect, run, stroke } from './sim-helpers';
 
 const cutCells = (world: World) => world.flags.reduce((n, f) => n + (f & Flag.CUT ? 1 : 0), 0);
@@ -20,6 +22,7 @@ describe('slash', () => {
     world.events.on('cut', () => cuts++);
 
     stroke(world, 'slash', [[10, 30], [30, 34, 12], [50, 38, 12], [70, 42, 12]], { radius: 4 });
+    run(world, 3); // the released cut sweeps along its line
 
     const removed = rockBefore - count(world, El.ROCK);
     expect(removed).toBeGreaterThan(300);
@@ -37,6 +40,7 @@ describe('slash', () => {
     const world = boxWorld(96, 64);
     fillRect(world, 0, 0, 95, 62, El.ROCK);
     stroke(world, 'slash', [[10, 30], [80, 30]], { radius: 5 });
+    run(world, 3);
     let keptInside = 0;
     let cutOutside = 0;
     for (let x = 15; x <= 75; x++) {
@@ -58,6 +62,62 @@ describe('slash', () => {
     stroke(world, 'slash', [[10, 30], [80, 40, 15]], { radius: 4 });
     run(world, 50);
     expect(count(world, El.SPLAT) + count(world, El.STAIN)).toBe(0);
+  });
+});
+
+describe('slash is a skill shot: aim, then release', () => {
+  const cutAt = (world: World, x: number, y: number) => (world.flags[y * world.w + x] & Flag.CUT) !== 0;
+
+  it('cuts nothing while aiming, then a straight line from press to release', () => {
+    const world = boxWorld(128, 64);
+    fillRect(world, 0, 10, 127, 62, El.ROCK);
+    const before = count(world, El.ROCK);
+    // a curvy drag: press at (10, 20), wander down to y=55, release at (110, 20)
+    const driver = new ActionDriver();
+    const tick = () => {
+      driver.apply(world);
+      step(world);
+    };
+    driver.begin('slash', { x: 10, y: 20, speed: 0 }, { radius: 3 });
+    tick();
+    for (const [x, y] of [[40, 50], [60, 55], [80, 50]]) {
+      driver.move({ x, y, speed: 10 });
+      tick();
+    }
+    expect(count(world, El.ROCK)).toBe(before); // aiming does nothing
+    driver.move({ x: 110, y: 20, speed: 10 });
+    tick();
+    driver.end();
+    tick();
+    run(world, 5);
+    expect(cutAt(world, 60, 20)).toBe(true); // on the straight line
+    expect(cutAt(world, 60, 55)).toBe(false); // where the pointer wandered
+    expect(cutAt(world, 5, 20)).toBe(false); // before the start
+    expect(cutAt(world, 118, 20)).toBe(false); // past the end
+  });
+
+  it('sweeps along the line over a few ticks', () => {
+    const world = boxWorld(256, 64);
+    fillRect(world, 0, 10, 255, 62, El.ROCK);
+    stroke(world, 'slash', [[10, 30], [250, 30]], { radius: 3 });
+    run(world, 1);
+    const early = [cutAt(world, 40, 30), cutAt(world, 230, 30)];
+    run(world, 6);
+    expect(early).toEqual([true, false]);
+    expect(cutAt(world, 230, 30)).toBe(true);
+  });
+
+  it('is clamped to its range, and a plain click is cancelled', () => {
+    const world = boxWorld(960, 64);
+    fillRect(world, 0, 10, 959, 62, El.ROCK);
+    const before = count(world, El.ROCK);
+    stroke(world, 'slash', [[100, 30]], { radius: 3 }); // click
+    run(world, 5);
+    expect(count(world, El.ROCK)).toBe(before);
+    stroke(world, 'slash', [[10, 30], [900, 30]], { radius: 3 });
+    run(world, 30);
+    expect(cutAt(world, 300, 30)).toBe(true);
+    expect(cutAt(world, 10 + 360 + 10, 30)).toBe(false); // default range is 360 cells
   });
 });
 

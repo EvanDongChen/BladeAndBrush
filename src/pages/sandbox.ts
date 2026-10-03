@@ -9,6 +9,7 @@ import { ActionDriver, type ActionLog } from '../core/replay';
 import { World } from '../core/world';
 import { Frontier } from '../gen/frontier';
 import { generate } from '../gen/generate';
+import { aimEnd, drawSlashAim } from '../sim/abilities/slash';
 import { SCENES } from '../sim/scenes';
 import { step } from '../sim/step';
 import { tunables } from '../sim/tunables';
@@ -88,12 +89,15 @@ export function mountSandbox(root: HTMLElement): () => void {
   const args = (): AbilityArgs => (tool.ability === 'paint' ? { el: tool.el, radius } : { radius });
   let down = false;
   let last = { x: 0, y: 0, t: 0 };
+  let pressedAt = { x: 0, y: 0 }; // where the current press started (slash aims from here)
   let cursor: { x: number; y: number; r: number } | null = null;
 
   canvas.addEventListener('pointerdown', (e) => {
     canvas.setPointerCapture?.(e.pointerId);
     const p = toCell(canvas, e);
     down = true;
+    pressedAt = p;
+    cursor = { ...p, r: radius };
     last = { ...p, t: performance.now() };
     driver.begin(tool.ability, { ...p, speed: 0 }, args());
   });
@@ -250,6 +254,8 @@ export function mountSandbox(root: HTMLElement): () => void {
   let frame = 0;
   const stop = startLoop(clock, () => {
     renderer.draw(world, { cursor });
+    // skill-shot preview: drawn from live pointer input, so it shows instantly (even when paused)
+    if (down && cursor && tool.ability === 'slash') drawSlashAim(renderer.g, aimEnd(pressedAt.x, pressedAt.y, cursor.x, cursor.y), radius);
     if (frame++ % 15 === 0) {
       world.countByElement(countBuf);
       for (const [id, dd] of countCells) dd.textContent = String(countBuf[id]);

@@ -55,3 +55,24 @@ describe('makePlan', () => {
     }
   });
 });
+
+describe('far row', () => {
+  it('covers almost the whole scroll for every seed', () => {
+    for (let s = 1; s <= 5; s++) {
+      const far = makePlan(s, p(), u).filter((q) => q.depth === 'far');
+      expect(far.every((q) => q.kind === 'far')).toBe(true);
+      const covered = new Uint8Array(Math.ceil(u.widthUnits));
+      for (const q of far) for (let x = Math.max(0, Math.floor(q.x - q.halfWidth)); x < Math.min(covered.length, q.x + q.halfWidth); x++) covered[x] = 1;
+      expect(covered.reduce((a, b) => a + b, 0) / covered.length).toBeGreaterThanOrEqual(0.9);
+    }
+  });
+
+  it('is lower than the near peaks on average', () => {
+    const pl = makePlan(3, p(), u);
+    const avg = (d: string) => {
+      const q = pl.filter((x) => x.depth === d);
+      return q.reduce((s, x) => s + x.height, 0) / q.length;
+    };
+    expect(avg('far')).toBeLessThan(avg('near'));
+  });
+});

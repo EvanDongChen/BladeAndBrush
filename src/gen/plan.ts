@@ -93,6 +93,21 @@ export function makePlan(seed: number, params: GenParams, u: Units): Placement[]
     i = j;
   }
 
+  // Far row (background plane): overlapping low ridges across the whole scroll. Its own rng, so
+  // adding or tuning it never moves the near/mid mountains.
+  const farRng = new Rng(hashSeed(seed, 'plan', 'far'));
+  for (let x = farRng.range(-100, 150); x < W + 200; x += farRng.range(280, 520)) {
+    const score = noise.fbm1(x / 400 + 2000, 3);
+    out.push({
+      kind: 'far',
+      x: Math.min(W, Math.max(0, x)),
+      halfWidth: farRng.range(260, 420),
+      height: params.mountainHeight * lerp(140, 320, Math.min(1, Math.max(0, (score - 0.25) * 2))),
+      depth: 'far',
+      seed: 0,
+    });
+  }
+
   const kept = out.filter((q) => q.height >= 4);
   kept.forEach((q, i) => (q.seed = hashSeed(seed, 'mount', i)));
   return kept;

@@ -38,6 +38,12 @@ export const rigidTunables = defineTunables(
     dustSpeed: 1.2,
     /** Pieces this small (cells) or smaller crumble into rubble when they land. */
     crumbleSize: 12,
+    /** How fast an overhanging piece starts to tip over its edge (radians per tick, per tick). */
+    tip: 0.008,
+    /** Fastest spin (radians per tick). */
+    maxSpin: 0.15,
+    /** Spin kept per tick while resting on something without tipping. */
+    spinFriction: 0.5,
   },
   {
     gravity: [0.05, 1.5, 0.05],
@@ -47,6 +53,9 @@ export const rigidTunables = defineTunables(
     impact: [0.5, 12, 0.5],
     dustSpeed: [0.2, 6, 0.1],
     crumbleSize: [0, 200, 1],
+    tip: [0, 0.05, 0.001],
+    maxSpin: [0, 0.5, 0.01],
+    spinFriction: [0, 1, 0.05],
   },
 );
 
@@ -54,6 +63,15 @@ interface Body {
   id: number;
   /** Cell indices, kept sorted ascending. */
   cells: number[];
+  /** The piece's shape at angle 0: offsets from its origin, aligned with `cells`. */
+  ox: number[];
+  oy: number[];
+  /** Origin (world cells; fractional between rotations). cells = round(origin) + rotate(offsets, theta). */
+  fx: number;
+  fy: number;
+  theta: number;
+  /** Spin (radians per tick; positive = clockwise on screen). */
+  omega: number;
   vx: number;
   vy: number;
   /** Sub-cell movement not yet applied. */
@@ -65,6 +83,8 @@ interface Body {
   shatter: boolean;
   /** Ticks since launch. */
   age: number;
+  /** Consecutive ticks it wanted to turn but could not move at all. */
+  stuck: number;
 }
 
 interface State {
@@ -105,27 +125,44 @@ export function bodyCount(world: World): number {
 }
 
 /** Snapshot of the moving pieces, for debugging. */
-export function bodyInfo(world: World): { cells: number; x: number; y: number; vx: number; vy: number }[] {
+export function bodyInfo(world: World): { cells: number; x: number; y: number; vx: number; vy: number; theta: number }[] {
   return (states.get(world)?.bodies ?? []).map((b) => ({
     cells: b.cells.length,
-    x: b.cells[0] % world.w,
-    y: (b.cells[0] / world.w) | 0,
+    x: Math.round(b.fx),
+    y: Math.round(b.fy),
     vx: Math.round(b.vx * 100) / 100,
     vy: Math.round(b.vy * 100) / 100,
+    theta: Math.round(b.theta * 100) / 100,
   }));
 }
 
 /**
- * Turn the given cells into one moving piece with a starting velocity. Cells that are not solid,
- * or already belong to a moving piece, are skipped. `bounce` defaults to rigidTunables.bounce. With
- * `shatter`, a piece that turns out to be walled in on all sides bursts into flying rubble (DEBRIS)
- * with its velocity instead of sitting still.
+ * Turn the given cells into one moving piece with a starting velocity (and spin). Cells that are
+ * not solid, or already belong to a moving piece, are skipped. `bounce` defaults to
+ * rigidTunables.bounce. With `shatter`, a piece that turns out to be walled in on all sides bursts
+ * into flying rubble (DEBRIS) with its velocity instead of sitting still.
  */
-export function launchBody(world: World, cells: number[], vx: number, vy: number, bounce = rigidTunables.bounce, shatter = false): void {
+export function launchBody(
+  world: World,
+  cells: number[],
+  vx: number,
+  vy: number,
+  bounce = rigidTunables.bounce,
+  shatter = false,
+  spin = 0,
+): void {
   const s = state(world);
   const own = cells.filter((i) => s.mark[i] === 0 && solidAt(world, i)).sort((a, b) => a - b);
   if (own.length === 0) return;
-  const body: Body = { id: s.nextId++, cells: own, vx, vy, ax: 0, ay: 0, bounce, shatter, age: 0 };
+  const { w } = world;
+  let mx = 0;
+  let my = 0;
+  for (const i of own) (mx += i % w), (my += (i / w) | 0);
+  const fx = Math.round(mx / own.length);
+  const fy = Math.round(my / own.length);
+  const ox = own.map((i) => (i % w) - fx);
+  const oy = own.map((i) => ((i / w) | 0) - fy);
+  const body: Body = { id: s.nextId++, cells: own, ox, oy, fx, fy, theta: 0, omega: spin, vx, vy, ax: 0, ay: 0, bounce, shatter, age: 0, stuck: 0 };
   for (const i of own) s.mark[i] = body.id;
   s.bodies.push(body);
   s.byId.set(body.id, body);
@@ -294,6 +331,8 @@ function shift(world: World, s: State, b: Body, dx: number, dy: number): void {
     cells[k] += o;
     mark[cells[k]] = b.id;
   }
+  b.fx += dx;
+  b.fy += dy;
 }
 
 /** Blocked straight down: slide one cell diagonally down if there is room. */
@@ -371,15 +410,212 @@ function onLand(world: World, s: State, b: Body, v: number): void {
   if (world.events.has('impact')) world.events.emit('impact', { x: sx / n, y: sy / n, strength });
 }
 
+// ---------------------------------------------------------------- rotation
+
+/**
+ * Rotation of integer offsets by 90-degree turns plus three shears (Paeth). Every shear moves
+ * whole rows or columns by whole cells, so the mapping is one-to-one: a rotated piece has exactly
+ * as many cells as before, with no holes. Positive angles turn clockwise on screen (y is down).
+ */
+interface RotFactors {
+  q: number;
+  a: number;
+  b: number;
+}
+
+function rotFactors(theta: number): RotFactors {
+  const quarter = Math.PI / 2;
+  const qn = Math.round(theta / quarter);
+  const phi = theta - qn * quarter; // within +-45 degrees
+  return { q: ((qn % 4) + 4) % 4, a: -Math.tan(phi / 2), b: Math.sin(phi) };
+}
+
+/** Rotate offset (x, y); writes the result to rOut. */
+const rOut = [0, 0];
+function rotate(x: number, y: number, f: RotFactors): void {
+  const X = f.q === 0 ? x : f.q === 1 ? -y : f.q === 2 ? -x : y;
+  const Y = f.q === 0 ? y : f.q === 1 ? x : f.q === 2 ? -y : -x;
+  const x1 = X + Math.round(f.a * Y);
+  const y1 = Y + Math.round(f.b * x1);
+  rOut[0] = x1 + Math.round(f.a * y1);
+  rOut[1] = y1;
+}
+
+// scratch for rotations (reused)
+const rPos: number[] = [];
+const rData: number[] = []; // 6 numbers per body cell: el, life, aux, vx, vy, owner
+const rForeign: number[] = []; // 6 numbers per displaced cell
+const rVacated: number[] = [];
+let stamp = new Int32Array(0);
+let stampGen = 0;
+
+/** Fill rPos with where the body's cells would be at angle `theta` and origin (fx, fy); false if off the canvas. */
+function place(world: World, b: Body, theta: number, fx: number, fy: number): boolean {
+  const f = rotFactors(theta);
+  const cx = Math.round(fx);
+  const cy = Math.round(fy);
+  rPos.length = 0;
+  for (let k = 0; k < b.ox.length; k++) {
+    rotate(b.ox[k], b.oy[k], f);
+    const x = cx + rOut[0];
+    const y = cy + rOut[1];
+    if (x < 0 || y < 0 || x >= world.w || y >= world.h) return false;
+    rPos.push(y * world.w + x);
+  }
+  return true;
+}
+
+/** Are all of rPos free for this body (its own cells, empty, or fluid it can push aside)? */
+function placeFree(world: World, s: State, b: Body): boolean {
+  const { el } = world;
+  for (const t of rPos) {
+    if (s.mark[t] === b.id) continue;
+    const e = el[t];
+    if (REPLACEABLE[e]) continue;
+    const k = KIND[e];
+    if (k === K_LIQUID || k === K_GAS || k === K_PROJECTILE) continue;
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Move the body onto rPos (same cell count). Fluids that were in the new cells move into the
+ * cells the body left, so nothing is destroyed.
+ */
+function moveOnto(world: World, s: State, b: Body): void {
+  const { el, life, aux, vx, vy, owner, size } = world;
+  const { mark } = s;
+  if (stamp.length < size) stamp = new Int32Array(size);
+  const gen = ++stampGen;
+  for (const p of rPos) stamp[p] = gen;
+
+  rData.length = rForeign.length = rVacated.length = 0;
+  for (const p of b.cells) rData.push(el[p], life[p], aux[p], vx[p], vy[p], owner[p]);
+  for (const p of rPos) if (mark[p] !== b.id) rForeign.push(el[p], life[p], aux[p], vx[p], vy[p], owner[p]);
+  for (const p of b.cells) if (stamp[p] !== gen) rVacated.push(p);
+
+  for (const p of b.cells) mark[p] = 0;
+  for (let k = 0; k < rPos.length; k++) {
+    const p = rPos[k];
+    const d = k * 6;
+    el[p] = rData[d];
+    life[p] = rData[d + 1];
+    aux[p] = rData[d + 2];
+    vx[p] = rData[d + 3];
+    vy[p] = rData[d + 4];
+    owner[p] = rData[d + 5];
+    mark[p] = b.id;
+  }
+  for (let k = 0; k < rVacated.length; k++) {
+    const p = rVacated[k];
+    const d = k * 6;
+    el[p] = rForeign[d];
+    life[p] = rForeign[d + 1];
+    aux[p] = rForeign[d + 2];
+    vx[p] = rForeign[d + 3];
+    vy[p] = rForeign[d + 4];
+    owner[p] = rForeign[d + 5];
+  }
+
+  // keep cells sorted (shift() relies on it), with the shape offsets aligned
+  const order = rPos.map((_, k) => k).sort((p, q) => rPos[p] - rPos[q]);
+  const ox = b.ox;
+  const oy = b.oy;
+  b.cells = order.map((k) => rPos[k]);
+  b.ox = order.map((k) => ox[k]);
+  b.oy = order.map((k) => oy[k]);
+}
+
+/**
+ * Spin and tipping. A piece resting on something whose center of mass hangs past the edge of its
+ * support starts to turn over that edge; a piece in the air keeps spinning. Returns true while
+ * the piece is tipping (so it is not put to rest).
+ */
+function rotateBody(world: World, s: State, b: Body): boolean {
+  const { w, size, el } = world;
+  let mx = 0;
+  let contactMin = Infinity;
+  let contactMax = -Infinity;
+  let contactY = -1;
+  for (const i of b.cells) {
+    const x = i % w;
+    mx += x;
+    const below = i + w;
+    if (below < size) {
+      if (s.mark[below] === b.id) continue;
+      const e = el[below];
+      const k = KIND[e];
+      if (REPLACEABLE[e] || k === K_LIQUID || k === K_GAS || k === K_PROJECTILE) continue;
+    }
+    contactMin = Math.min(contactMin, x);
+    contactMax = Math.max(contactMax, x);
+    contactY = Math.max(contactY, (i / w) | 0);
+  }
+  mx = mx / b.cells.length + 0.5; // center of mass, measured from cell edges
+
+  // turning point: the support edge it tips over, or its own middle when airborne
+  let px = b.fx;
+  let py = b.fy;
+  let tipping = false;
+  if (contactY >= 0) {
+    if (mx > contactMax + 1.5) {
+      tipping = true;
+      b.omega = Math.min(rigidTunables.maxSpin, b.omega + rigidTunables.tip);
+      px = contactMax + 1;
+      py = contactY + 1;
+    } else if (mx < contactMin - 0.5) {
+      tipping = true;
+      b.omega = Math.max(-rigidTunables.maxSpin, b.omega - rigidTunables.tip);
+      px = contactMin;
+      py = contactY + 1;
+    } else {
+      b.omega *= rigidTunables.spinFriction; // sitting squarely on it: stop turning
+    }
+  }
+  if (Math.abs(b.omega) < 0.002) {
+    b.omega = 0;
+    return tipping;
+  }
+
+  // rigid turn about (px, py): the origin swings around it and the shape turns with it
+  const c = Math.cos(b.omega);
+  const sn = Math.sin(b.omega);
+  const dx = b.fx - px;
+  const dy = b.fy - py;
+  const nfx = px + dx * c - dy * sn;
+  const nfy = py + dx * sn + dy * c;
+  const theta = b.theta + b.omega;
+  for (let lift = 0; lift >= -1; lift--) {
+    // rounding can clip the support by a cell; allow a one-cell lift
+    if (place(world, b, theta, nfx, nfy + lift) && placeFree(world, s, b)) {
+      moveOnto(world, s, b);
+      b.theta = theta;
+      b.fx = nfx;
+      b.fy = nfy + lift;
+      b.stuck = 0;
+      return tipping;
+    }
+  }
+  b.omega *= -0.2; // blocked
+  b.stuck++;
+  return tipping;
+}
+
 /** Returns false when the body has come to rest (or vanished) and should be dropped. */
 function moveBody(world: World, s: State, b: Body): boolean {
   // drop cells that were cut, burnt or otherwise stopped being solid
   let live = 0;
-  for (const i of b.cells) {
-    if (s.mark[i] === b.id && solidAt(world, i)) b.cells[live++] = i;
-    else if (s.mark[i] === b.id) s.mark[i] = 0;
+  for (let k = 0; k < b.cells.length; k++) {
+    const i = b.cells[k];
+    if (s.mark[i] === b.id && solidAt(world, i)) {
+      b.cells[live] = i;
+      b.ox[live] = b.ox[k];
+      b.oy[live] = b.oy[k];
+      live++;
+    } else if (s.mark[i] === b.id) s.mark[i] = 0;
   }
-  b.cells.length = live;
+  b.cells.length = b.ox.length = b.oy.length = live;
   if (live === 0) {
     release(s, b);
     return false;
@@ -444,7 +680,10 @@ function moveBody(world: World, s: State, b: Body): boolean {
     return false;
   }
 
-  if (Math.abs(b.vx) < 0.3 && b.vy <= rigidTunables.gravity && supported(world, s, b)) {
+  if (shifts > 0) b.stuck = 0;
+  const tipping = rotateBody(world, s, b) && b.stuck < 8; // wedged tight: give up and settle
+
+  if (!tipping && b.omega === 0 && Math.abs(b.vx) < 0.3 && b.vy <= rigidTunables.gravity && supported(world, s, b)) {
     // resting on a piece that may still move away: re-check support soon so it can't end up floating
     if (canShift(world, s, b, 0, 1) !== WALL) s.dirty = true;
     release(s, b);

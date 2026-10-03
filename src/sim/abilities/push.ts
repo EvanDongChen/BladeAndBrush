@@ -73,7 +73,7 @@ function shove(world: World, cx: number, cy: number, r: number, ux: number, uy: 
     for (let s = 0; s < k; s++) {
       if (groups[s].length === 0) continue;
       const v = speed * rng.range(0.8, 1.2);
-      launchBody(world, groups[s], ux * v + rng.range(-0.5, 0.5), uy * v - lift * rng.range(0.5, 1.5), pushTunables.rebound, true);
+      launchBody(world, groups[s], ux * v + rng.range(-0.5, 0.5), uy * v - lift * rng.range(0.5, 1.5), pushTunables.rebound, true, rng.range(-0.12, 0.12));
     }
   }
   markUnsupported(world);

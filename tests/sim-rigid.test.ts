@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { flags } from '../src/core/config';
 import { El } from '../src/core/elements';
-import type { World } from '../src/core/world';
-import { bodyCount, markUnsupported } from '../src/sim/behaviors/rigid';
+import { World } from '../src/core/world';
+import { bodyCount, bodyInfo, launchBody, markUnsupported } from '../src/sim/behaviors/rigid';
 import { DUST } from '../src/sim/elements/dust';
 import { LEAF } from '../src/sim/elements/leaf';
 import { boxWorld, count, fillRect, rowsOf, run, stroke } from './sim-helpers';
@@ -53,6 +53,41 @@ describe('rigid pieces', () => {
     let tinyBlock = true;
     for (let y = 60; y <= 62; y++) for (let x = 45; x <= 47; x++) tinyBlock &&= world.el[y * 64 + x] === El.ROCK;
     expect(tinyBlock).toBe(false);
+  });
+
+  it('a plank landing off-center on a pedestal tips over the edge and falls off', () => {
+    const world = boxWorld(96, 64);
+    fillRect(world, 20, 40, 23, 62, El.ROCK); // pedestal
+    fillRect(world, 18, 30, 37, 32, El.ROCK); // short plank in the air, mostly hanging to the right (too short to lean on the floor)
+    const rock = count(world, El.ROCK);
+    markUnsupported(world);
+    let turned = false;
+    for (let t = 0; t < 600; t++) {
+      run(world, 1);
+      turned ||= bodyInfo(world).some((b) => Math.abs(b.theta) > 0.3);
+    }
+    expect(turned).toBe(true);
+    expect(bodyCount(world)).toBe(0);
+    expect(count(world, El.ROCK)).toBe(rock);
+    // nothing is left balanced on top of the pedestal
+    let onTop = 0;
+    for (let y = 0; y < 40; y++) for (let x = 0; x < 96; x++) if (world.el[y * 96 + x] === El.ROCK) onTop++;
+    expect(onTop).toBe(0);
+  });
+
+  it('a spinning piece keeps exactly its cells while it turns', () => {
+    const world = new World({ w: 128, h: 128 }, 3);
+    fillRect(world, 50, 20, 75, 27, El.ROCK);
+    const cells: number[] = [];
+    for (let i = 0; i < world.size; i++) if (world.el[i] === El.ROCK) cells.push(i);
+    launchBody(world, cells, 0, -1, 0.25, false, 0.12);
+    let maxTheta = 0;
+    for (let t = 0; t < 30; t++) {
+      run(world, 1);
+      expect(count(world, El.ROCK)).toBe(26 * 8);
+      for (const b of bodyInfo(world)) maxTheta = Math.max(maxTheta, Math.abs(b.theta));
+    }
+    expect(maxTheta).toBeGreaterThan(1);
   });
 
   it('anything still connected to the ground stays put', () => {

@@ -1365,3 +1365,39 @@ input[type='number'] {
   }
 }
 
+
+/* ---------- First-person sword swing ---------- */
+
+.slash-layer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.slash-sword {
+  position: absolute;
+  left: 0;
+  top: 0;
+  opacity: 0;
+  will-change: transform, opacity;
+  filter: drop-shadow(0 10px 12px rgba(0, 0, 0, 0.4)) drop-shadow(0 0 12px rgba(var(--blade), 0.75));
+}
+
+.slash-sword svg {
+  display: block;
+  height: 100%;
+  width: auto;
+  overflow: visible;
+}
+
+.slash-sword .fx-flame {
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+  animation: flame-flicker 0.25s ease-in-out infinite alternate;
+}
+
+@keyframes flame-flicker {
+  from { transform: scale(0.85, 0.9); opacity: 0.8; }
+  to { transform: scale(1.1, 1.2); opacity: 1; }
+}

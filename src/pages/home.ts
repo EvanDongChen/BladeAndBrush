@@ -93,8 +93,7 @@ function levelScroll(l: LevelDef): HTMLElement {
     h(
       'p',
       { class: 'cta-row' },
-      h('a', { class: 'home-cta', href: './generator.html' }, 'Preview in Generator'),
-      h('a', { class: 'home-cta home-cta-alt', href: './sandbox.html' }, 'Open Sandbox'),
+      h('a', { class: 'home-cta', href: `./level.html?level=${encodeURIComponent(l.id)}` }, 'Play'),
     ),
   ).node;
 }

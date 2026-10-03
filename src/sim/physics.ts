@@ -25,6 +25,8 @@ export const FLAMMABILITY = new Float32Array(256);
 export const REPLACEABLE = new Uint8Array(256);
 /** 1 for solid material that a slash can cut and splatter (static or powder, not STAIN). */
 export const CUTTABLE = new Uint8Array(256);
+/** 1 for static solid material that holds together as rigid pieces (rock, wood, leaf; not STAIN). */
+export const RIGID = new Uint8Array(256);
 
 let builtVersion = -1;
 
@@ -38,6 +40,7 @@ export function refreshTables(): void {
     FLAMMABILITY[id] = def?.flammability ?? 0;
     REPLACEABLE[id] = kind === K_EMPTY || id === El.STAIN ? 1 : 0;
     CUTTABLE[id] = (kind === K_STATIC || kind === K_POWDER) && id !== El.STAIN ? 1 : 0;
+    RIGID[id] = kind === K_STATIC && id !== El.STAIN && def !== undefined ? 1 : 0;
   }
   builtVersion = elements.version;
 }

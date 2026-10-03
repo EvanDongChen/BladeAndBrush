@@ -4,6 +4,7 @@ import { Flag } from '../../core/constants';
 import { El } from '../../core/elements';
 import { createNoise } from '../../core/noise';
 import type { World } from '../../core/world';
+import { markUnsupported } from '../behaviors/rigid';
 import { forCapsule } from '../brush';
 import { CUTTABLE } from '../physics';
 import { defineTunables } from '../tunables';
@@ -73,6 +74,7 @@ function carve(world: World, a: PointerSample, b: PointerSample, args: AbilityAr
     world.flags[y * w + x] |= Flag.CUT;
     splats++;
   });
+  markUnsupported(world);
 }
 
 const clamp = (v: number) => Math.max(-12, Math.min(12, v));

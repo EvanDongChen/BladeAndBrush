@@ -1,6 +1,7 @@
 import { registerAbility, type AbilityArgs } from '../../core/abilities';
 import { El } from '../../core/elements';
 import type { World } from '../../core/world';
+import { markUnsupported } from '../behaviors/rigid';
 
 /** Live-tweakable from the sandbox. */
 export const paintTunables = {
@@ -14,6 +15,7 @@ function stamp(world: World, x: number, y: number, args: AbilityArgs): void {
     if (el === El.EMPTY) world.set(cx, cy, El.EMPTY);
     else world.set(cx, cy, el, { aux: world.rng.int(256) });
   });
+  markUnsupported(world); // painted rock in the air falls; erased supports drop what they held
 }
 
 /**

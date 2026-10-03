@@ -5,9 +5,10 @@ import { El } from '../../core/elements';
 import type { World } from '../../core/world';
 import { LEAF } from '../elements/leaf';
 import { STEAM } from '../elements/steam';
-import { at, FLAMMABILITY, NEIGHBORS4, NEIGHBORS8, REPLACEABLE } from '../physics';
+import { at, FLAMMABILITY, NEIGHBORS4, NEIGHBORS8, REPLACEABLE, RIGID } from '../physics';
 import { defineTunables } from '../tunables';
 import { rise } from './gas';
+import { markUnsupported } from './rigid';
 
 export const fireTunables = defineTunables(
   'fire',
@@ -69,6 +70,7 @@ function burnOut(world: World, x: number, y: number, fuel: number): void {
   const r = world.rng;
   if (fuel !== 0) {
     if (world.events.has('burn')) world.events.emit('burn', { x, y, el: fuel });
+    if (RIGID[fuel]) markUnsupported(world); // a burnt trunk drops its canopy
     if (r.chance(fuel === LEAF ? fireTunables.leafAshChance : fireTunables.ashChance)) world.set(x, y, El.ASH, { aux: r.int(256) });
     else if (r.chance(fireTunables.smokeChance)) world.set(x, y, El.SMOKE);
     else world.set(x, y, El.EMPTY);

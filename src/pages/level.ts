@@ -307,7 +307,7 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
   return () => {
     stop();
     fx.detach();
-    slashFx.detach();
+    slashFx.dispose();
     removeEventListener('keydown', onKey);
   };
 }

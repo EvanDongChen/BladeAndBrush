@@ -1,7 +1,7 @@
 import { registerElement, rgba } from '../../core/elements';
 
 /**
- * A person in a straw hat: 24 cells that stroll around, pause, climb small steps and run from
+ * A person in a straw hat: 32 cells that stroll around, pause, climb small steps and run from
  * fire (see sim/behaviors/person.ts). Palette indices: hat, brim, skin, legs, walking staff, then
  * six robe colors by variant.
  */

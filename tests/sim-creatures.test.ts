@@ -195,15 +195,15 @@ describe('creatures (bird)', () => {
 describe('creatures (person)', () => {
   const personCells = (world: World) => count(world, PERSON);
 
-  it('is a 24-cell figure in a straw hat, and falls to the ground when spawned in the air', () => {
+  it('is a 32-cell figure in a straw hat, and falls to the ground when spawned in the air', () => {
     const world = boxWorld(120, 60);
     spawn(world, PERSON_DEF, 60, 10, 0, 1);
-    expect(personCells(world)).toBe(24);
+    expect(personCells(world)).toBe(32);
     expect(intact(world, PERSON)).toBe(true);
     run(world, 80);
     expect(intact(world, PERSON)).toBe(true);
     expect(rowsOf(world, PERSON).bottom).toBe(world.h - 2); // feet on the rock floor (row h - 1)
-    expect(rowsOf(world, PERSON).top).toBe(world.h - 2 - 6); // 7 cells tall, hat on top
+    expect(rowsOf(world, PERSON).top).toBe(world.h - 2 - 8); // 9 cells tall, hat on top
   });
 
   it('wanders along the ground on its own, staying whole, then pauses and moves on', () => {
@@ -218,7 +218,7 @@ describe('creatures (person)', () => {
       const a = anchors(world, PERSON);
       expect(a.length).toBe(1);
       expect(intact(world, PERSON)).toBe(true);
-      expect([23, 24]).toContain(personCells(world)); // legs apart or together
+      expect([31, 32]).toContain(personCells(world)); // legs apart or together
       if (t > 60) {
         minX = Math.min(minX, a[0][0]);
         maxX = Math.max(maxX, a[0][0]);
@@ -349,8 +349,8 @@ describe('creatures together', () => {
       expect(anchors(world, BIRD).length).toBe(4);
       expect(anchors(world, BUTTERFLY).length).toBe(6);
       for (const el of [PERSON, BIRD, BUTTERFLY]) expect(intact(world, el)).toBe(true);
-      expect(count(world, PERSON)).toBeGreaterThanOrEqual(4 * 23);
-      expect(count(world, PERSON)).toBeLessThanOrEqual(4 * 24);
+      expect(count(world, PERSON)).toBeGreaterThanOrEqual(4 * 31);
+      expect(count(world, PERSON)).toBeLessThanOrEqual(4 * 32);
       expect(count(world, BIRD)).toBe(20);
     }
   });

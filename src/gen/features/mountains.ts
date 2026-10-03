@@ -86,7 +86,7 @@ registerFeature({
         }
       }
 
-      rasterizeCoverage(bp, fg, K, id, El.ROCK, bp, [cell(pr.x0), 0, cell(pr.x0 + tops.length), dims.h - 1], true);
+      rasterizeCoverage(bp, fg, K, id, El.ROCK, bp, [cell(pr.x0), cell(pr.peakY), cell(pr.x0 + tops.length), cell(ground + K)], true);
     }
 
     /** Nearer mountains may hide farther ones completely: drop those, and fit bboxes to what is left. */

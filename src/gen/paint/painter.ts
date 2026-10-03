@@ -39,11 +39,20 @@ export class PixelPainter implements Painter {
       if (bottom <= top) continue;
       const yTop = Math.floor(top);
       const frac = 1 - (top - yTop); // coverage of the partial top pixel
-      for (let y = yTop; y < Math.ceil(bottom); y++) {
-        const cov = y === yTop ? frac : 1;
+      const { px, own } = this.buf;
+      const yEnd = Math.ceil(bottom);
+      for (let y = yTop; y < yEnd; y++) {
         const c = shader(x, y, y + 0.5 - top);
+        const i = y * w + x;
+        if (y !== yTop && c >>> 24 === 255) {
+          // Hot path: fully covered, opaque -> plain write.
+          px[i] = c;
+          own[i] = owner;
+          continue;
+        }
+        const cov = y === yTop ? frac : 1;
         const a = Math.round((c >>> 24) * cov);
-        this.buf.blend(y * w + x, ((c & 0xffffff) | (a << 24)) >>> 0, cov >= 0.5 ? owner : undefined);
+        this.buf.blend(i, ((c & 0xffffff) | (a << 24)) >>> 0, cov >= 0.5 ? owner : undefined);
       }
     }
   }

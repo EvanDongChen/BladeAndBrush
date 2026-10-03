@@ -21,12 +21,15 @@ export function inkWash(o: {
 }): Shader {
   const paper = o.paper ?? WHITE;
   const grain = o.grain ?? 0.35;
+  const [pr, pg, pb] = paper;
+  const dr = o.ink[0] - pr;
+  const dg = o.ink[1] - pg;
+  const db = o.ink[2] - pb;
   return (x, y, dTop) => {
     let a = o.base + o.edge * Math.exp(-dTop / o.edgeWidth);
     if (o.speckle > 0) a += o.speckle * (o.noise.n2(x * grain, y * grain) - 0.5);
-    a = Math.min(1, Math.max(0, a));
-    const mix = (i: number) => Math.round(paper[i] + (o.ink[i] - paper[i]) * a);
-    return rgba(mix(0), mix(1), mix(2));
+    a = a < 0 ? 0 : a > 1 ? 1 : a;
+    return rgba((pr + dr * a + 0.5) | 0, (pg + dg * a + 0.5) | 0, (pb + db * a + 0.5) | 0);
   };
 }
 
@@ -53,19 +56,25 @@ export function contourWash(o: {
 }): Shader {
   const paper = o.paper ?? WHITE;
   const grain = o.grain ?? 0.35;
+  const [pr, pg, pb] = paper;
+  const dr = o.ink[0] - pr;
+  const dg = o.ink[1] - pg;
+  const db = o.ink[2] - pb;
   const mist = o.mist;
+  const edgeCut = 8 * o.edgeWidth;
+  const bandCut = 8 * o.bandWidth;
   return (x, y, dTop) => {
-    let a = o.base + o.edge * Math.exp(-dTop / o.edgeWidth);
+    // exp terms below ~e^-8 are invisible after 8-bit rounding: skip them.
+    let a = o.base + (dTop < edgeCut ? o.edge * Math.exp(-dTop / o.edgeWidth) : 0);
     const j = x - o.x0;
     for (const layer of o.layers) {
-      const ly = layer[j];
-      if (ly !== undefined && y >= ly) a += o.band * Math.exp(-(y - ly) / o.bandWidth);
+      const d = y - layer[j];
+      if (d >= 0 && d < bandCut) a += o.band * Math.exp(-d / o.bandWidth);
     }
     if (o.speckle > 0) a += o.speckle * (o.noise.n2(x * grain, y * grain) - 0.5);
     if (mist && y > mist.from) a *= Math.max(0, 1 - (y - mist.from) / (mist.to - mist.from));
-    a = Math.min(1, Math.max(0, a));
-    const mix = (i: number) => Math.round(paper[i] + (o.ink[i] - paper[i]) * a);
-    return rgba(mix(0), mix(1), mix(2));
+    a = a < 0 ? 0 : a > 1 ? 1 : a;
+    return rgba((pr + dr * a + 0.5) | 0, (pg + dg * a + 0.5) | 0, (pb + db * a + 0.5) | 0);
   };
 }
 

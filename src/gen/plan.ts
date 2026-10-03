@@ -57,8 +57,8 @@ export function makePlan(seed: number, params: GenParams, u: Units): Placement[]
     for (const x of xs) {
       if (kept.some((k) => Math.abs(k - x) < rowGap)) continue;
       kept.push(x);
-      const height = params.mountainHeight * lerp(260, 620, score(x)) * heightScale;
-      out.push({ kind: 'peak', x, halfWidth: height * rng.range(0.8, 1.3) + 40, height, depth, seed: 0 });
+      const height = params.mountainHeight * lerp(300, 1000, score(x)) * heightScale;
+      out.push({ kind: 'peak', x, halfWidth: height * rng.range(0.5, 0.85) + 40, height, depth, seed: 0 });
     }
   };
   row('near', gap, 0, 1);

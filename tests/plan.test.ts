@@ -76,3 +76,27 @@ describe('far row', () => {
     expect(avg('far')).toBeLessThan(avg('near'));
   });
 });
+
+describe('mountains leave room (Emmy notes)', () => {
+  const rows = ['near', 'mid'] as const;
+  it('mountains in the same row never touch', () => {
+    for (let s = 1; s <= 5; s++) {
+      for (const spacing of [0, 0.5, 1]) {
+        const pl = makePlan(s, p({ spacing }), u);
+        for (const d of rows) {
+          const r = pl.filter((q) => q.depth === d).sort((a, b) => a.x - b.x);
+          for (let i = 1; i < r.length; i++) expect(r[i].x - r[i].halfWidth).toBeGreaterThan(r[i - 1].x + r[i - 1].halfWidth);
+        }
+      }
+    }
+  });
+
+  it('mountains cover well under the whole ground: open land stays visible', () => {
+    for (let s = 1; s <= 5; s++) {
+      const pl = makePlan(s, p({ spacing: 0 }), u).filter((q) => q.depth !== 'far');
+      const covered = new Uint8Array(Math.ceil(u.widthUnits));
+      for (const q of pl) for (let x = Math.max(0, Math.floor(q.x - q.halfWidth)); x < Math.min(covered.length, q.x + q.halfWidth); x++) covered[x] = 1;
+      expect(covered.reduce((a, b) => a + b, 0) / covered.length).toBeLessThanOrEqual(0.7);
+    }
+  });
+});

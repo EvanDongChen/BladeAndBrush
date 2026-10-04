@@ -17,7 +17,7 @@ import { boxWorld, run } from './sim-helpers';
 
 /** A WorldObject by hand, for sim-only tests. */
 function track(world: World, id: number, kind: string, el = 0, tags: string[] = []): WorldObject {
-  const o: WorldObject = { id, kind, tags, el, x: 0, y: 0, bbox: [0, 0, 0, 0], cells: 0, stats: {} };
+  const o: WorldObject = { id, kind, tags, el, x: 0, y: 0, bbox: [0, 0, 0, 0], cells: 0, stats: {}, group: 0 };
   world.objects.set(id, o);
   return o;
 }

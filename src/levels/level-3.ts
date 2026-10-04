@@ -18,10 +18,13 @@ registerLevel({
     treeDensity: { value: 0.4 },
     gravity: { value: 2, locked: true, visible: false },
   },
-  setpieces: [{ type: 'village', x0: 0.64, x1: 0.94, huts: 3, trees: 2, people: 5 }],
+  setpieces: [
+    { type: 'village', x0: 0.64, x1: 0.94, huts: 3, trees: 2, people: 5 },
+    { type: 'cloud', x: 0.79, y: 0.56, w: 0.13, h: 0.03 }, // the dry cloud over the village, waiting for steam
+  ],
   goals: [
     { type: 'metric', metric: 'waterfalls', op: '>=', n: 1, text: 'A waterfall' },
-    { type: 'metric', metric: 'villageRain', op: '>=', n: 5, text: 'Rain on the village' },
+    { type: 'metric', metric: 'villageRain', op: '>=', n: 20, text: 'Rain on the village' },
     {
       type: 'all',
       text: 'Every villager alive',

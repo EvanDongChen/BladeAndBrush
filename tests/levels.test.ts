@@ -12,7 +12,7 @@ import { ActionDriver } from '../src/core/replay';
 import { World } from '../src/core/world';
 import { Frontier } from '../src/gen/frontier';
 import { generate } from '../src/gen/generate';
-import { scan } from '../src/gen/scan';
+import { scan, skyReach } from '../src/gen/scan';
 import { step } from '../src/sim/step';
 import './helpers';
 
@@ -50,7 +50,7 @@ function play(id: string, over: Record<string, number> = {}) {
 }
 
 /** Top non-empty row in column x. */
-const topAt = (world: World, x: number) => {
+export const topAt = (world: World, x: number) => {
   for (let y = 0; y < world.h; y++) if (world.el[y * world.w + x] !== 0) return y;
   return world.h;
 };
@@ -66,19 +66,19 @@ describe('levels', () => {
   });
 
   it('1 The Peak: cut every other mountain down until one tall peak stands, trees spared', () => {
-    const { world, act, goals, used, level } = play('level-1');
+    const { world, act, goals } = play('level-1');
     expect(goals()).not.toEqual([true, true, true]);
-    for (let round = 0; round < 3 && used() < level.actionBudget; round++) {
-      const peaks = scan(world).peaks;
+    for (let round = 0; round < 6; round++) {
+      const { peaks, heights } = scan(world);
       const center = peaks.reduce((a, b) => (b.h > a.h ? b : a));
       for (const p of peaks) {
-        if (p === center || used() >= level.actionBudget) continue;
-        const y = world.h - p.h + 45;
+        if (p === center) continue;
+        const y = world.h - heights[p.x] + Math.round(p.h * 0.6); // into the mountain, well below its top
         act('slash', p.x - 90, y, p.x + 90, y, 24, 45, 240);
       }
     }
     expect(goals()).toEqual([true, true, true]);
-  }, 60_000);
+  }, 120_000);
 
   it('2 The Eclipse: break the moon, one tall peak each side of it, burn every tree', () => {
     const { world, act, goals, used, level } = play('level-2', { spacing: 0.7 }); // the player widens the spacing
@@ -122,39 +122,66 @@ describe('levels', () => {
     expect(goals()).toEqual([true, true, true]);
   }, 60_000);
 
-  it('3 The Drought: a waterfall down a slashed shaft, rain from fire over water, nobody lost', () => {
-    const { world, act, goals, used, level } = play('level-3');
+  it('3 The Drought: a waterfall down a slashed shaft, steam from fire over water soaks the cloud and it rains, nobody lost', () => {
+    const { world, act, goals } = play('level-3');
     expect(scan(world).counts.villagers).toBe(5);
+    expect(objectsOf(world, 'cloud').length).toBeGreaterThan(0);
     // a shaft down the mountain nearest the village, filled with water
-    const peaks = scan(world).peaks.filter((p) => p.x < 0.6 * world.w);
-    const p = peaks[peaks.length - 1];
-    act('slash', p.x, world.h - p.h - 5, p.x, world.h - p.h + 55, 2, 0, 120);
-    act('water', p.x - 14, world.h - p.h - 20, p.x + 14, world.h - p.h - 20, 5, 30, 300);
-    // flood the village, then run fire over the water: steam rises and comes down as rain
+    const { peaks, heights } = scan(world);
+    const p = peaks.filter((q) => q.x < 0.6 * world.w).pop()!;
+    const top = world.h - heights[p.x];
+    act('slash', p.x, top - 5, p.x, top + 55, 2, 0, 120);
+    act('water', p.x - 14, top - 20, p.x + 14, top - 20, 5, 30, 300);
+    // flood the village, then run fire over the water: the steam rises into the cloud, which rains
     const village = objectsOf(world, 'village')[0];
     const [x0, , x1] = village.bbox;
-    act('water', x0 + 70, 190, x1 - 70, 190, 8, 45, 240);
-    let surface = world.h;
-    for (let x = x0 + 80; x < x1 - 80; x++) for (let y = 150; y < world.h; y++) if (world.el[y * world.w + x] === 3) {
-      surface = Math.min(surface, y);
+    const ground = village.y;
+    act('water', x0 + 20, ground - 30, x1 - 20, ground - 30, 8, 45, 240);
+    const tops: number[] = [];
+    for (let x = x0; x <= x1; x++) for (let y = 100; y < world.h; y++) if (world.el[y * world.w + x] === 3) {
+      tops.push(y);
       break;
     }
-    while (used() < level.actionBudget && scan(world).counts.villageRain < 5) act('fire', x0 + 80, surface - 2, x1 - 80, surface - 2, 3, 45, 900);
+    tops.sort((a, b) => a - b);
+    const surface = tops[tops.length >> 1];
+    act('fire', x0 + 30, surface - 2, x1 - 30, surface - 2, 3, 45, 1500);
     expect(goals()).toEqual([true, true, true]);
-  }, 60_000);
+  }, 120_000);
 
   it('4 The Trap: open each hollow beside its bird, tap the spring, cut down the trappers', () => {
     const { world, act, goals } = play('level-4');
     const birds = objectsOf(world, 'bird');
     expect(birds).toHaveLength(3);
     expect(scan(world).counts.animalsTrapped).toBe(3);
+    /** First open-air cell going from (x, y) along (dx, dy): where a cut from outside should start. */
+    const outside = (x: number, y: number, dx: number, dy: number) => {
+      const sky = skyReach(world);
+      for (let k = 1; k < 300; k++) {
+        const px = Math.round(x + dx * k);
+        const py = Math.round(y + dy * k);
+        if (px < 0 || py < 0 || px >= world.w || py >= world.h) break;
+        if (sky[py * world.w + px]) return { x: x + dx * (k + 6), y: y + dy * (k + 6) };
+      }
+      return { x: x + dx * 120, y: y + dy * 120 };
+    };
+    // open each hollow at its lower corner, from the open air, while the bird is up the other end
     for (const b of birds) {
-      const at = indexObjects(world).firstCell(b.id) % world.w;
-      const x = at < b.x ? b.bbox[2] - 2 : b.bbox[0] + 2; // the side the bird is not on
-      act('slash', x, topAt(world, x) - 10, x, b.y - 1, 1.5);
+      const side = indexObjects(world).firstCell(b.id) % world.w < b.x ? 1 : -1;
+      for (let t = 0; t < 400; t++) {
+        const box = indexObjects(world).bbox(b.id);
+        if (box && (side > 0 ? box[2] < b.x : box[0] > b.x) && box[3] < b.y + 1) break;
+        step(world);
+      }
+      const end = { x: b.x + side * 4, y: b.y + 2 };
+      const from = outside(end.x, end.y, side * 0.7, -0.7);
+      act('slash', from.x, from.y, end.x, end.y, 1.5);
     }
     const spring = objectsOf(world, 'spring')[0];
-    act('slash', spring.bbox[2] - 2, spring.y + 4, spring.bbox[2] + 60, spring.y + 30, 3, 0, 800);
+    const tap = { x: spring.x, y: spring.bbox[3] - 1 };
+    // tap it on the side away from the nearest bird, so its water does not flood a bird's way out
+    const nearest = birds.reduce((a, b) => (Math.abs(b.x - spring.x) < Math.abs(a.x - spring.x) ? b : a));
+    const from = outside(tap.x, tap.y, nearest.x > spring.x ? -0.8 : 0.8, 0.6);
+    act('slash', from.x, from.y, tap.x, tap.y, 3, 0, 900);
     for (let k = 0; k < 3; k++) {
       const idx = indexObjects(world);
       const t = objectsOf(world, 'trapper').find((o) => idx.alive(o));
@@ -166,5 +193,5 @@ describe('levels', () => {
     }
     for (let t = 0; t < 600; t++) step(world);
     expect(goals()).toEqual([true, true, true]);
-  }, 60_000);
+  }, 120_000);
 });

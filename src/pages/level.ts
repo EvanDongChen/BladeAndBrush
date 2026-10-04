@@ -72,7 +72,7 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
   let tip = '';
 
   function regenerate(): void {
-    bp = generate(level.seed, params, { features: level.featuresEnabled });
+    bp = generate(level.seed, params, { features: level.featuresEnabled, setpieces: level.setpieces });
     world = new World(level.dims, level.seed, { ...params });
     frontier = new Frontier(bp);
     driver = new ActionDriver();
@@ -257,7 +257,7 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
 
   stage.append(frame, status, complete.node);
   root.replaceChildren(
-    levelHeader(level.id),
+    levelHeader(level.title ?? level.id),
     h(
       'main',
       { class: 'layout level-layout' },
@@ -319,7 +319,7 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
 
 function levelMissing(root: HTMLElement, id: string | null): void {
   const list = h('ul', { class: 'home-steps' });
-  for (const l of levels.all()) list.append(h('li', {}, h('a', { href: `./level.html?level=${encodeURIComponent(l.id)}` }, l.id)));
+  for (const l of levels.all()) list.append(h('li', {}, h('a', { href: `./level.html?level=${encodeURIComponent(l.id)}` }, l.title ?? l.id)));
   root.replaceChildren(
     levelHeader('Level'),
     h('main', { class: 'shell home' }, panel(id ? `No level called "${id}"` : 'Choose a level', list)),

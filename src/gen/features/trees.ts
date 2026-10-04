@@ -4,6 +4,7 @@ import { artOf } from '../artState';
 import { mountainsOf } from '../mountainStore';
 import type { Depth } from '../plan';
 import { rasterizeCoverage } from '../raster';
+import { isReserved } from '../setpieceKit';
 import { getSpecies } from '../species';
 
 /** Size range per species, in painting units, before perspective scaling. */
@@ -123,7 +124,7 @@ registerFeature({
       if (prev && Math.abs(s.x - prev[0]) < 0.35 * Math.min(size, prev[1])) continue;
       last.set(s.line, [s.x, size]);
       const objects = planes[s.plane - 1]; // PLANE.NEAR_OBJ / MID_OBJ sit right in front of their terrain
-      if (onBoulder(objects.grid, s.x, s.y)) continue;
+      if (onBoulder(objects.grid, s.x, s.y) || isReserved(bp, Math.floor(s.x / K))) continue; // reserved: a setpiece's own scene
       const id = newStroke({ kind: 'tree', bbox: [0, 0, 0, 0], anchor: [Math.floor(s.x / K), Math.floor(s.y / K)], group: s.host });
       const box = getSpecies(s.zone).grow({ paint: objects.paint, x: s.x, y: s.y + K * 0.5, size, owner: id, rng, noise, ink: INK[s.depth], k: K });
       const cells = rasterizeCoverage(

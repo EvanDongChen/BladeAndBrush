@@ -5,6 +5,7 @@ import { artOf } from '../artState';
 import { mountainsOf } from '../mountainStore';
 import { paintRock } from '../paint/rock';
 import { rasterizeCoverage } from '../raster';
+import { isReserved } from '../setpieceKit';
 import { getSpecies } from '../species';
 
 registerParam({ key: 'boulderDensity', label: 'Boulders', min: 0, max: 1, step: 0.01, default: 0.5 });
@@ -29,7 +30,7 @@ registerFeature({
 
     for (const m of mountainsOf(bp)) {
       const slab = m.slab;
-      if (!slab) continue;
+      if (!slab || isReserved(bp, Math.floor((slab.x0 + slab.x1) / 2 / K))) continue; // a setpiece (a village) owns this plateau
       const objects = planes[m.plane - 1];
       const grid = planes[m.plane].grid;
       const inkRGB: [number, number, number] = m.depth === 'mid' ? [126, 126, 124] : [96, 96, 94];

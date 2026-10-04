@@ -43,6 +43,11 @@ export interface ElementDef {
   flammability: number;
   /** Counts toward heightAt() and the scanner's silhouette. */
   solidForScan: boolean;
+  /**
+   * Hangs where it is: static material that never comes loose and falls as a rigid piece, even
+   * with nothing under it (e.g. the moon in the sky). Default false.
+   */
+  anchored?: boolean;
   /** Packed RGBA (see rgba()). May use aux/life/owner for variation. */
   color: (cell: CellView) => number;
 }

@@ -37,8 +37,10 @@ const clamp = (v: number) => Math.max(-12, Math.min(12, v));
 
 /**
  * Clear a jagged groove along a stretch of the line: every cell inside a noisy radius becomes
- * EMPTY with the CUT flag (so the frontier reveal never refills it). Cut solid material (rock,
- * tree, earth...) emits 'cut' and sometimes throws a SPLAT droplet away from the line.
+ * EMPTY with the CUT flag (so the frontier reveal never refills it). The blade cuts through the
+ * whole painting: whatever is layered behind a cut cell (a farther mountain, the rock behind a
+ * tree) goes too, so a groove is a real gap. Cut solid material (rock, tree, earth...) emits 'cut'
+ * and sometimes throws a SPLAT droplet away from the line.
  */
 function carve(world: World, ax: number, ay: number, bx: number, by: number, r: number, speed: number, power: number): void {
   const { roughness, grain, splatChance, maxSplats } = slashTunables;
@@ -51,6 +53,7 @@ function carve(world: World, ax: number, ay: number, bx: number, by: number, r: 
     const n = edgeNoise.fbm2(x * grain, y * grain, 3); // 0..1
     if (d > r * (1 + roughness * (2 * n - 1))) return;
     const prev = el[y * w + x];
+    world.clearBehind(y * w + x);
     if (CUTTABLE[prev]) {
       world.set(x, y, El.EMPTY, { cut: true }); // emits 'cut'
     } else {

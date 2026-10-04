@@ -86,7 +86,7 @@ function levelScroll(l: LevelDef): HTMLElement {
     poem.append(line);
   });
   return hangingScroll(
-    l.id,
+    l.title ?? l.id,
     poem,
     goals,
     h('p', { class: 'home-meta' }, `Ink budget ${l.actionBudget} · seed ${l.seed} · ${l.dims.w}×${l.dims.h}`),

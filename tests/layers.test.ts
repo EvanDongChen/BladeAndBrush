@@ -115,3 +115,31 @@ describe('farLayerInteractive', () => {
     }
   });
 });
+
+import { bodyCount, markUnsupported } from '../src/sim/behaviors/rigid';
+import { stroke } from './sim-helpers';
+
+describe('slashes and layers', () => {
+  it('a fresh painting rests on its feet: a support check drops nothing', () => {
+    const bp = generate(1, defaultParams(), { k: 1 });
+    const w = new World(bp, 1);
+    new Frontier(bp).revealAll(w);
+    markUnsupported(w);
+    for (let t = 0; t < 6; t++) step(w);
+    expect(bodyCount(w)).toBe(0);
+  });
+
+  it('the blade cuts through the whole stack, not just the front layer', () => {
+    const w = new World({ w: 24, h: 4 }, 1);
+    const i = w.idx(12, 1);
+    w.el[i] = El.ROCK;
+    w.plane[i] = 1;
+    w.behindEl[0][i] = El.TREE;
+    w.behindPlane[0][i] = 3;
+    w.flags[i] |= Flag.HAS_BEHIND;
+    stroke(w, 'slash', [[2, 1], [22, 1]], { radius: 1 });
+    for (let t = 0; t < 4; t++) step(w);
+    expect(w.el[i]).toBe(El.EMPTY);
+    expect(w.flags[i] & Flag.HAS_BEHIND).toBe(0);
+  });
+});

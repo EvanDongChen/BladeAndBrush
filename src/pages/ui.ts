@@ -11,6 +11,7 @@ import { params, type GenParams } from '../core/params';
 import { ALL_REGISTRIES, byOrder } from '../core/registry';
 import { layers, type Renderer } from '../core/render';
 import { metrics, type ScanResult } from '../core/scan';
+import { perf, perfEnabled } from './perf';
 
 type Attrs = Record<string, string | number | boolean | undefined>;
 
@@ -305,9 +306,20 @@ export function startLoop(clock: Clock, frame: (dtMs: number) => void, shouldAdv
   const loop = (t: number) => {
     if (stopped) return;
     const dt = last < 0 ? 0 : Math.min(t - last, 250);
-    if (shouldAdvance?.() !== false) clock.advance(dt);
-    last = t;
-    frame(dt);
+    if (!perfEnabled) {
+      if (shouldAdvance?.() !== false) clock.advance(dt);
+      last = t;
+      frame(dt);
+    } else {
+      perf.frameStart(last < 0 ? 0 : t - last);
+      const s = performance.now();
+      const n = shouldAdvance?.() !== false ? clock.advance(dt) : 0;
+      const m = performance.now();
+      perf.sim(m - s, n);
+      last = t;
+      frame(dt);
+      perf.frameEnd(performance.now() - m);
+    }
     id = requestAnimationFrame(loop);
   };
   id = requestAnimationFrame(loop);

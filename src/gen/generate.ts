@@ -139,5 +139,36 @@ function anchorLoose(bp: Blueprint): void {
   };
   for (let i = 0; i < size; i++) if (foot[i] || i >= (h - 1) * w) visit(i);
   flood();
-  for (let i = 0; i < size; i++) if (solid(i) && !seen[i]) cling[i] = 1;
+  const reachedPlain = seen.slice();
+  // what clings to held material within 2 cells (the sim's rule, see sim/behaviors/rigid.ts) clings;
+  // anything farther off floats in the picture on its own and stays where it was painted
+  for (let changed = true; changed; ) {
+    changed = false;
+    for (let i = 0; i < size; i++) {
+      if (seen[i] || !solid(i)) continue;
+      const x = i % w;
+      const y = (i / w) | 0;
+      let held = false;
+      for (let dy = -2; dy <= 2 && !held; dy++) {
+        for (let dx = -2; dx <= 2; dx++) {
+          const nx = x + dx;
+          const ny = y + dy;
+          if (nx >= 0 && ny >= 0 && nx < w && ny < h && seen[ny * w + nx]) {
+            held = true;
+            break;
+          }
+        }
+      }
+      if (!held) continue;
+      cling[i] = 1;
+      seen[i] = 1;
+      stack[top++] = i;
+      flood();
+      changed = true;
+    }
+  }
+  for (let i = 0; i < size; i++) {
+    if (!seen[i] && solid(i)) foot[i] = 1;
+    else if (seen[i] && cling[i] === 0 && !foot[i] && solid(i) && !reachedPlain[i]) cling[i] = 1;
+  }
 }

@@ -59,7 +59,7 @@ describe('stub generate()', () => {
 
 describe('Frontier', () => {
   it('reveals the blueprint left to right', () => {
-    const bp = generate(5, defaultParams());
+    const bp = generate(5, defaultParams(), { features: { life: false } }); // life is placed by the sim, not in the blueprint
     const world = new World(bp, 5);
     const f = new Frontier(bp, 10);
     f.advance(world);
@@ -154,7 +154,7 @@ describe('mountains', () => {
   };
   const mean = (a: number[]) => a.reduce((s, v) => s + v, 0) / a.length;
   const wiggle = (a: number[]) => a.slice(1).reduce((s, v, i) => s + Math.abs(v - a[i]), 0);
-  const gen = (seed: number, over: Record<string, number>) => generate(seed, { ...defaultParams(), ...over }, { k, features: { trees: false } });
+  const gen = (seed: number, over: Record<string, number>) => generate(seed, { ...defaultParams(), ...over }, { k, features: { trees: false, clouds: false } });
 
   it('replace the stub bumps', () => {
     expect(enabledFeatures().map((f) => f.name)).toContain('mountains');

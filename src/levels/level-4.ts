@@ -17,6 +17,7 @@ registerLevel({
     spacing: { value: 0.35 },
     treeDensity: { value: 0.35 },
     gravity: { value: 2, locked: true, visible: false },
+    wanderers: { value: 0, locked: true, visible: false }, // the only people here are the trappers
   },
   setpieces: [
     { type: 'captives', count: 3, animal: 'bird' },

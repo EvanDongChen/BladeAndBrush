@@ -1,5 +1,5 @@
 import type { Blueprint, PlaneGrid } from '../core/blueprint';
-import { El, elements, rgba } from '../core/elements';
+import { El, ELEMENTS, elements, rgba } from '../core/elements';
 import { artOf } from './artState';
 import type { MountainRec } from './mountainStore';
 
@@ -14,10 +14,16 @@ export function elementId(name: string): number {
   return elements.all().find((e) => e.name === name)?.id ?? 0;
 }
 
-/** Topmost non-empty cell of one plane in column x (bp.h if none). */
+/** Hangs in the sky (a cloud, the moon): not ground, not in the way of what stands below. */
+const inSky = (e: number) => ELEMENTS[e]?.anchored === true && !ELEMENTS[e]?.solidForScan;
+
+/** Topmost cell of one plane in column x that is not sky (bp.h if none). */
 export function topIn(bp: Blueprint, grid: PlaneGrid, x: number): number {
   const cx = Math.max(0, Math.min(bp.w - 1, Math.round(x)));
-  for (let y = 0; y < bp.h; y++) if (grid.el[y * bp.w + cx] !== El.EMPTY) return y;
+  for (let y = 0; y < bp.h; y++) {
+    const e = grid.el[y * bp.w + cx];
+    if (e !== El.EMPTY && !inSky(e)) return y;
+  }
   return bp.h;
 }
 
@@ -34,7 +40,7 @@ export function topOwner(bp: Blueprint, x: number): { owner: number; plane: numb
   if (y >= bp.h) return { owner: 0, plane: -1, y };
   const i = y * bp.w + Math.round(x);
   const planes = bp.planes ?? [];
-  for (let q = 0; q < planes.length; q++) if (planes[q].el[i] !== El.EMPTY) return { owner: planes[q].owner[i], plane: q, y };
+  for (let q = 0; q < planes.length; q++) if (planes[q].el[i] !== El.EMPTY && !inSky(planes[q].el[i])) return { owner: planes[q].owner[i], plane: q, y };
   return { owner: 0, plane: -1, y };
 }
 

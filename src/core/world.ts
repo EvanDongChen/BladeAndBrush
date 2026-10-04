@@ -2,6 +2,7 @@ import { BEHIND_LAYERS, Flag, NO_PLANE, type LevelDims } from './constants';
 import { El, hash3, IS_STATIC } from './elements';
 import { EventBus } from './events';
 import { Hasher } from './hash';
+import type { Cloud } from './clouds';
 import type { WorldObject } from './objects';
 import { defaultParams, type GenParams } from './params';
 import { Rng } from './rng';
@@ -71,6 +72,9 @@ export class World {
 
   /** Active water sources. The frontier reveal adds them; B's emitter pass reads them. */
   sources: WaterSource[] = [];
+
+  /** Clouds drifting across the sky (core/clouds.ts): particles, not cells. */
+  clouds: Cloud[] = [];
 
   /** Tracked objects by id (see core/objects.ts). The frontier reveal adds them. */
   objects = new Map<number, WorldObject>();
@@ -266,6 +270,7 @@ export class World {
       h.int(o.id);
       for (const [k, v] of Object.entries(o.stats)) h.int(k.length).int(k.charCodeAt(0)).int(Math.round(v * 1000));
     }
+    for (const c of this.clouds) h.int(c.obj).int(Math.round(c.x * 1000)).int(Math.round(c.y * 1000)).int(Math.round(c.water * 1000));
     h
       .int(this.w)
       .int(this.h)

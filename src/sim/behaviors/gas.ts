@@ -6,6 +6,7 @@ import { DUST } from '../elements/dust';
 import { RAIN } from '../elements/rain';
 import { STEAM } from '../elements/steam';
 import { at, BLOCKED, canRise, FREE, moveCell, REPLACEABLE } from '../physics';
+import { cloudAt, soak } from './cloud';
 import { defineTunables } from '../tunables';
 
 export const gasTunables = defineTunables(
@@ -21,8 +22,12 @@ export const gasTunables = defineTunables(
     drift: 0.3,
     /** Average dust lifetime in ticks. */
     dustLife: 26,
+    /** Steam that cools above this fraction of the sky's height (from the top) leaves a small cloud. */
+    cloudLine: 0.45,
+    /** Chance that steam cooling up there becomes a cloud puff instead of vanishing. */
+    puff: 0.6,
   },
-  { smokeLife: [10, 250, 5], steamLife: [10, 250, 5], condense: [0, 1, 0.05], drift: [0, 1, 0.05], dustLife: [4, 120, 2] },
+  { smokeLife: [10, 250, 5], steamLife: [10, 250, 5], condense: [0, 1, 0.05], drift: [0, 1, 0.05], dustLife: [4, 120, 2], cloudLine: [0, 1, 0.05], puff: [0, 1, 0.05] },
 );
 
 /** life 0 means "not started yet" (e.g. painted), so it gets a randomized lifetime first. */
@@ -59,11 +64,24 @@ export function rise(world: World, x: number, y: number, drift: number): void {
 function updateGas(world: World, x: number, y: number): void {
   const i = y * world.w + x;
   const me = world.el[i];
+  if (me === STEAM) {
+    // steam that rises into a cloud soaks into it
+    const c = world.clouds.length > 0 ? cloudAt(world, x, y) : undefined;
+    if (c) {
+      soak(world, x, y, c);
+      world.set(x, y, El.EMPTY);
+      world.flags[i] |= Flag.UPDATED;
+      return;
+    }
+  }
   if (world.life[i] === 0) {
     world.life[i] = startLife(world, me === STEAM ? gasTunables.steamLife : me === DUST ? gasTunables.dustLife : gasTunables.smokeLife);
   } else if (--world.life[i] === 0) {
     if (me === STEAM && world.rng.chance(gasTunables.condense)) world.set(x, y, RAIN, { aux: world.rng.int(256) });
-    else world.set(x, y, El.EMPTY);
+    else if (me === STEAM && y < world.h * gasTunables.cloudLine && world.rng.chance(gasTunables.puff)) {
+      soak(world, x, y); // cooled high up: into a cloud there, or a little new one
+      world.set(x, y, El.EMPTY);
+    } else world.set(x, y, El.EMPTY);
     world.flags[i] |= Flag.UPDATED;
     return;
   }

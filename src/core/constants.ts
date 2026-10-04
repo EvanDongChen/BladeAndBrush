@@ -27,6 +27,12 @@ export const Flag = {
   HAS_BEHIND: 16,
   /** The position is already in World's pending-promotion list this tick. */
   QUEUED: 32,
+  /**
+   * Generated material the painting left a cell or two apart from what holds it (a canopy beside
+   * its trunk, a sliver beside its mountain): it holds on to solid material within 2 cells, and
+   * falls once that is gone. Stays with the position, like CUT.
+   */
+  CLING: 64,
 } as const;
 
 /** Materials that can be stacked behind a position's front cell (front + this many = a full stack). */

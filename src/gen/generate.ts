@@ -108,22 +108,25 @@ function markFeet(bp: Blueprint): void {
 
 /**
  * Bits of the painting that are not joined to any foot as generated (a canopy the rasterizer left
- * apart from its trunk, a sliver of rock) are part of the picture, not loose: mark them as feet too,
- * so only what the player cuts or burns free ever falls.
+ * a cell apart from its trunk, a sliver of rock) are part of the picture, not loose: mark them
+ * bp.cling, so they hold on to whatever is next to them and only fall once that is cut or burnt away.
  */
 function anchorLoose(bp: Blueprint): void {
   const foot = bp.foot;
   if (!foot) return;
+  const cling = (bp.cling = new Uint8Array(bp.w * bp.h));
   const { w, h, el } = bp;
   const size = w * h;
   const seen = new Uint8Array(size);
   const stack = new Int32Array(size);
   let top = 0;
   const solid = (i: number) => el[i] !== 0 && IS_STATIC[el[i]] === 1;
+  const added: number[] = []; // cells the last flood reached
   const visit = (i: number) => {
     if (!seen[i] && solid(i)) {
       seen[i] = 1;
       stack[top++] = i;
+      added.push(i);
     }
   };
   const flood = () => {
@@ -138,5 +141,53 @@ function anchorLoose(bp: Blueprint): void {
   };
   for (let i = 0; i < size; i++) if (foot[i] || i >= (h - 1) * w) visit(i);
   flood();
-  for (let i = 0; i < size; i++) if (solid(i) && !seen[i]) foot[i] = 1;
+  // what clings, by the sim's rule (sim/behaviors/rigid.ts): held material within 2 cells, or held
+  // material of its own object or of what it stands on within 6 (in front or stacked behind),
+  // clings; anything else floats in the picture on its own and stays where it was painted
+  const owner = bp.owner;
+  const groupOf = (id: number) => (id === 0 ? 0 : (bp.registry.strokes.get(id)?.group ?? 0));
+  const kin = (pos: number, id: number, group: number): boolean => {
+    if (!seen[pos]) return false;
+    const o = owner[pos];
+    if (o !== 0 && (o === id || o === group)) return true;
+    for (const layer of bp.behind ?? []) {
+      const b = layer.owner[pos];
+      if (b !== 0 && (b === id || b === group)) return true;
+    }
+    return false;
+  };
+  for (let changed = true; changed; ) {
+    changed = false;
+    for (let i = 0; i < size; i++) {
+      if (seen[i] || !solid(i)) continue;
+      const x = i % w;
+      const y = (i / w) | 0;
+      const id = owner[i];
+      const group = groupOf(id);
+      let held = false;
+      for (let dy = -6; dy <= 6 && !held; dy++) {
+        const ny = y + dy;
+        if (ny < 0 || ny >= h) continue;
+        for (let dx = -6; dx <= 6; dx++) {
+          const nx = x + dx;
+          if (nx < 0 || nx >= w) continue;
+          const pos = ny * w + nx;
+          const near = dx >= -2 && dx <= 2 && dy >= -2 && dy <= 2;
+          if ((near && seen[pos]) || (id !== 0 && kin(pos, id, group))) {
+            held = true;
+            break;
+          }
+        }
+      }
+      if (!held) continue;
+      added.length = 0;
+      seen[i] = 1;
+      stack[top++] = i;
+      added.push(i);
+      flood();
+      changed = true;
+      for (const j of added) cling[j] = 1;
+    }
+  }
+  for (let i = 0; i < size; i++) if (!seen[i] && solid(i)) foot[i] = 1;
 }

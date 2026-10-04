@@ -1633,6 +1633,11 @@ header.top nav .sound-toggle {
   margin-right: 10px;
 }
 
+.site-nav .sound-toggle {
+  padding: 0 7px;
+  font-size: 16px;
+}
+
 /* sound is on but the browser is waiting for a click: breathe until it starts */
 .sound-toggle.waiting {
   animation: sound-wait 1.6s ease-in-out infinite;

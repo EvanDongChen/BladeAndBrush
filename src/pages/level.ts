@@ -36,6 +36,12 @@ function levelHeader(sub: string): HTMLElement {
   return h('header', { class: 'top' }, h('h1', {}, brand), h('nav', {}, soundToggle(), h('a', { href: './index.html' }, 'All levels')));
 }
 
+/** The site header with the music's mute button at the end of its links. */
+function withSoundToggle(header: HTMLElement): HTMLElement {
+  header.querySelector('.site-nav')?.append(soundToggle());
+  return header;
+}
+
 /** Ticks the painting gets to settle after the last stroke (or the seal) before it is judged. */
 const SETTLE = 240;
 /** ...and at most this many more while pieces are still falling. */
@@ -327,7 +333,7 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
 
   stage.append(frame, status, complete.node);
   root.replaceChildren(
-    siteHeader('levels', level.title ?? level.id),
+    withSoundToggle(siteHeader('levels', level.title ?? level.id)),
     h(
       'main',
       { class: 'layout level-layout', id: 'main' },

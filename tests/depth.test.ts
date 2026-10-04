@@ -10,8 +10,6 @@ describe('FAR_ROCK', () => {
 });
 
 import { defaultParams } from '../src/core/params';
-import { artOf } from '../src/gen/artState';
-import { groundTop } from '../src/gen/features/ground';
 import { generate } from '../src/gen/generate';
 
 describe('background plane', () => {
@@ -23,16 +21,15 @@ describe('background plane', () => {
     expect(bp.el.some((v) => v === 32)).toBe(false);
   });
 
-  it('turning far ridges off leaves the foreground identical and the bg empty', () => {
+  it('turning far ridges off leaves the foreground identical and no far cells', () => {
     const on = gen();
     const off = gen({ farRidges: false });
     expect(Buffer.from(off.el).equals(Buffer.from(on.el))).toBe(true);
     expect(off.bg!.every((v) => v === 0)).toBe(true);
-    expect(off.art!.bg.every((v) => v === 0)).toBe(true);
   });
 
-  it('far art is translucent everywhere, so the paper shows through it', () => {
-    const bp = gen();
+  it('far ridge art is translucent everywhere, so the paper shows through it (the water lines are separate)', () => {
+    const bp = gen({ mountains: false });
     let max = 0;
     let painted = 0;
     for (const c of bp.art!.bg) {
@@ -44,36 +41,18 @@ describe('background plane', () => {
   });
 });
 
-describe('mid row at low height', () => {
-  it('has no vertical walls: the foreground skyline never jumps more than a few cells', () => {
-    for (let s = 1; s <= 3; s++) {
-      const bp = generate(s, { ...defaultParams(), mountainHeight: 0.2 }, { k: 2, features: { trees: false } });
-      const aw = bp.w * 2;
-      const ah = bp.h * 2;
-      let prev = -1;
-      let worst = 0;
-      for (let x = 0; x < aw; x++) {
-        let y = 0;
-        while (y < ah && Math.max(bp.art!.planes[1][y * aw + x] >>> 24, bp.art!.planes[3][y * aw + x] >>> 24) < 128) y++;
-        if (prev >= 0) worst = Math.max(worst, Math.abs(y - prev));
-        prev = y;
-      }
-      expect(worst).toBeLessThan(12);
-    }
-  });
-});
-
-describe('ground bank', () => {
-  it('is drawn in front of every mountain: the art just under its edge is ground', () => {
-    const K = 4;
-    for (let s = 1; s <= 3; s++) {
-      const bp = generate(s, defaultParams(), { k: K, dims: { w: 320, h: 96 }, features: { trees: false } });
-      const ground = bp.registry.strokes.get(bp.planes![1].owner[(bp.h - 1) * bp.w])!;
-      const own = artOf(bp).planes[1].buf.own;
-      const aw = bp.w * K;
-      // The wavy top edge stays within +-K of groundTop * K, so this row is always inside the bank.
-      const y = groundTop(bp.h) * K + K - 1;
-      for (let x = 0; x < aw; x++) expect(own[y * aw + x]).toBe(ground.id);
+describe('plateau scenes', () => {
+  it('boulders and trees on a plateau are grouped under it, and nothing grows on a boulder', () => {
+    const bp = generate(4, defaultParams(), { k: 2 });
+    const strokes = [...bp.registry.strokes.values()];
+    const grouped = strokes.filter((q) => (q.kind === 'rock' || q.kind === 'tree') && q.group !== undefined);
+    expect(grouped.length).toBeGreaterThan(0);
+    for (const q of grouped) expect(bp.registry.strokes.get(q.group!)?.kind).toBe('mountain');
+    // objects planes (0 and 2): a cell is either a tree or a boulder, never both, by construction;
+    // check no tree's anchor sits inside a boulder cell
+    for (const q of strokes.filter((s) => s.kind === 'tree')) {
+      const [ax, ay] = q.anchor;
+      for (const pl of [0, 2]) expect(bp.planes![pl].el[ay * bp.w + ax] === 1).toBe(false);
     }
   });
 });

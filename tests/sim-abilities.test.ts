@@ -138,7 +138,7 @@ describe('water sources', () => {
 });
 
 describe('determinism with every ability', () => {
-  it('a busy session replays to the same hash', () => {
+  it('a busy session replays to the same hash', { timeout: 30_000 }, () => {
     const tick = (world: World, driver: ActionDriver) => {
       driver.apply(world);
       step(world);

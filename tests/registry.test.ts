@@ -34,7 +34,7 @@ describe('registries', () => {
   it('every other extension point rejects duplicates too', () => {
     const noop = () => {};
     expect(() => registerAbility({ id: 'paint', name: 'x', begin: noop, move: noop, end: noop })).toThrow(/Duplicate ability/);
-    expect(() => registerFeature({ name: 'ground', order: 0, run: noop })).toThrow(/Duplicate feature/);
+    expect(() => registerFeature({ name: 'mountains', order: 0, run: noop })).toThrow(/Duplicate feature/);
     expect(() => registerMetric('trees', () => 0)).toThrow(/Duplicate metric/);
     expect(() => registerGoal('metric', () => ({ pass: true, progress: 1 }))).toThrow(/Duplicate goal/);
     expect(() => registerLayer({ name: 'cells', order: 0, kind: 'pixels', draw: noop })).toThrow(/Duplicate layer/);

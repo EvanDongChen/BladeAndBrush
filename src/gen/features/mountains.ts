@@ -35,7 +35,7 @@ registerFeature({
   label: 'Mountains',
   order: 10,
   run: ({ bp, dims, params, rng, noise, newStroke }) => {
-    const { planes, bgPaint, u } = artOf(bp);
+    const { planes, u } = artOf(bp);
     const K = u.k;
     const rugged = Math.max(1, Math.min(8, params.ruggedness));
     const placements = planOf(bp)
@@ -54,7 +54,7 @@ registerFeature({
       const id = newStroke({ kind: 'mountain', bbox: [0, 0, 0, 0], anchor: [cell(pr.peakX), cell(pr.peakY)] });
       ids.push(id);
 
-      ripples(bgPaint, pr, base, tone, rng, noise, u);
+      ripples(plane.paint, pr, base, tone, rng, noise, u, id); // part of the mountain: same plane, same owner
 
       // occluder: down to the foot, plus a shallow wedge below its middle so it hides what is behind
       const n = pr.tops.length;
@@ -191,11 +191,12 @@ function feet(paint: Painter, pr: Profile, tone: Tone, rng: Rng, noise: Noise, u
 }
 
 /**
- * Water lines at the foot, in the background plane (behind everything): about ten long, fairly dark
- * wavy strokes, 400-800 units long whatever the mountain's size, so they stick out sideways past
- * its ends and make the mountain look like it sits in a body of water that fills the space.
+ * The lines at the foot: about ten long, fairly dark wavy strokes, 400-800 units long whatever the
+ * mountain's size, so they stick out sideways past its ends and fill the space around it. For now
+ * they are part of the mountain (its plane, its owner, drawn behind its own fill); real water is
+ * a separate feature later.
  */
-function ripples(paint: Painter, pr: Profile, base: number, tone: Tone, rng: Rng, noise: Noise, u: Units): void {
+function ripples(paint: Painter, pr: Profile, base: number, tone: Tone, rng: Rng, noise: Noise, u: Units, owner: number): void {
   const cx = pr.x0 + pr.tops.length / 2;
   let yk = -u.toArt(20);
   for (let r = 0; r < 10; r++) {
@@ -204,7 +205,7 @@ function ripples(paint: Painter, pr: Profile, base: number, tone: Tone, rng: Rng
     const xk = u.toArt(rng.range(-50, 50));
     const pts: [number, number][] = [];
     for (let x = -half; x < half; x += u.toArt(5)) pts.push([cx + xk + x, base + yk + u.toArt(2) * Math.sin(x / u.toArt(5)) * noise.n1(Math.abs(x) * 0.02 + r * 3.1) * 2]);
-    if (pts.length > 1) inkStroke(paint, pts, noise, { wid: u.toArt(1.5), color: ink((0.3 + rng.next() * 0.3) * Math.min(1, tone.ripple * 3.4)), noi: 0.6, salt: r });
+    if (pts.length > 1) inkStroke(paint, pts, noise, { wid: u.toArt(1.5), color: ink((0.3 + rng.next() * 0.3) * Math.min(1, tone.ripple * 3.4)), noi: 0.6, salt: r, owner });
   }
 }
 

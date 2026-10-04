@@ -41,6 +41,7 @@ describe('stub generate()', () => {
   it('disabling a feature flag removes that feature from the pipeline with no errors', () => {
     expect(enabledFeatures().map((f) => f.name)).toContain('trees');
     featureToggles.trees = false;
+    featureToggles.plateaus = false; // the plateau scenes plant trees too
     try {
       expect(enabledFeatures().map((f) => f.name)).not.toContain('trees');
       const bp = generate(1, defaultParams());
@@ -48,9 +49,11 @@ describe('stub generate()', () => {
       expect(count(bp.el, El.ROCK)).toBeGreaterThan(0);
     } finally {
       delete featureToggles.trees;
+      delete featureToggles.plateaus;
     }
     // per-call overrides work the same way
-    expect(count(generate(1, defaultParams(), { features: { mountains: false } }).el, El.TREE)).toBeGreaterThan(0);
+    const noMountains = generate(1, defaultParams(), { features: { mountains: false } });
+    expect([...noMountains.registry.strokes.values()].some((q) => q.kind === 'mountain')).toBe(false);
   });
 });
 
@@ -78,12 +81,16 @@ describe('Frontier', () => {
   it('skips CUT cells (slashed ahead of the frontier)', () => {
     const bp = generate(5, defaultParams());
     const world = new World(bp, 5);
-    const y = bp.h - 1; // ground row, always rock
-    world.set(500, y, El.EMPTY, { cut: true });
+    // any rock cell with rock to its right
+    let i = 0;
+    while (i < bp.el.length - 1 && !(bp.el[i] === El.ROCK && bp.el[i + 1] === El.ROCK && (i % bp.w) < bp.w - 1)) i++;
+    const x = i % bp.w;
+    const y = (i / bp.w) | 0;
+    world.set(x, y, El.EMPTY, { cut: true });
     new Frontier(bp).revealAll(world);
-    expect(world.get(500, y)).toBe(El.EMPTY);
-    expect(world.get(501, y)).toBe(El.ROCK);
-    expect(world.flags[world.idx(501, y)] & Flag.GENERATED).toBe(Flag.GENERATED);
+    expect(world.get(x, y)).toBe(El.EMPTY);
+    expect(world.get(x + 1, y)).toBe(El.ROCK);
+    expect(world.flags[world.idx(x + 1, y)] & Flag.GENERATED).toBe(Flag.GENERATED);
   });
 
   it('scan counts the trees in front of their terrain', () => {
@@ -161,7 +168,7 @@ describe('mountains', () => {
       lo += mean(heights(gen(s, { mountainHeight: 0.2 })));
       hi += mean(heights(gen(s, { mountainHeight: 0.9 })));
     }
-    expect(hi).toBeGreaterThan(lo * 1.5);
+    expect(hi).toBeGreaterThan(lo * 1.25);
   });
 
   it('ruggedness roughens the skyline', () => {

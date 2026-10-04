@@ -38,8 +38,6 @@ function inkMountains(): SVGElement {
 
 function hero(): { node: HTMLElement; destroy(): void } {
   const scene = heroScene(inkMountains());
-  const repaint = h('button', { type: 'button', class: 'hero-tool' }, h('span', { 'aria-hidden': 'true' }, '繪'), 'Repaint');
-  repaint.addEventListener('click', () => scene.repaint());
   const node = h(
     'section',
     { class: 'hero', 'aria-labelledby': 'hero-title' },
@@ -68,7 +66,6 @@ function hero(): { node: HTMLElement; destroy(): void } {
       seal('墨客', 'hero-seal'),
     ),
     scene.node,
-    h('div', { class: 'hero-bar' }, h('p', { class: 'hero-hint' }, h('span', { class: 'hint-dot', 'aria-hidden': 'true' }), 'Drag across the mountains to cut them'), repaint),
     h('a', { class: 'scroll-cue', href: '#how', 'aria-label': 'Scroll to how it plays' }, h('span', { 'aria-hidden': 'true' }, '下')),
   );
   return { node, destroy: scene.destroy };

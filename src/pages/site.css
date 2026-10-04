@@ -460,8 +460,6 @@ canvas {
 .hero-canvas {
   width: auto;
   opacity: 0;
-  cursor: crosshair;
-  touch-action: none;
   image-rendering: auto;
   transition: opacity 1.2s var(--ease-out);
 }
@@ -500,73 +498,13 @@ canvas {
   opacity: 0.38;
 }
 
-.hero-bar {
-  position: absolute;
-  z-index: 3;
-  left: var(--gutter);
-  right: var(--gutter);
-  bottom: 18px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  pointer-events: none;
-}
 
-.hero-bar > * {
-  pointer-events: auto;
-}
 
-.hero-hint,
-.hero-tool {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  margin: 0;
-  padding: 9px 16px;
-  font: 500 13px var(--font-serif);
-  letter-spacing: 0.04em;
-  color: var(--ink);
-  background: rgba(250, 245, 232, 0.78);
-  -webkit-backdrop-filter: blur(8px);
-  backdrop-filter: blur(8px);
-  border: 1px solid rgba(29, 26, 23, 0.14);
-  border-radius: 999px;
-}
 
-.hero-tool {
-  cursor: pointer;
-  transition:
-    background-color 0.25s,
-    color 0.25s;
-}
 
-.hero-tool span {
-  font: 400 17px/1 var(--font-brush);
-  color: var(--seal);
-}
 
-.hero-tool:hover {
-  background: var(--ink);
-  color: var(--paper);
-}
 
-.hint-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--seal);
-  box-shadow: 0 0 0 0 rgba(179, 38, 30, 0.6);
-  animation: pulse 2s infinite;
-}
 
-.hero-scene.cut-once ~ .hero-bar .hero-hint {
-  opacity: 0;
-  transform: translateY(6px);
-  transition:
-    opacity 0.5s,
-    transform 0.5s;
-}
 
 .scroll-cue {
   position: absolute;
@@ -609,14 +547,6 @@ canvas {
   }
 }
 
-@media (max-width: 520px) {
-  .hero-hint {
-    display: none;
-  }
-  .hero-bar {
-    justify-content: flex-end;
-  }
-}
 
 /* ---------------------------------------------------------------- poem ribbon */
 
@@ -1245,7 +1175,7 @@ header.top {
   letter-spacing: 0.01em;
 }
 
-button:not(.btn):not(.blade):not(.hero-tool):not(.panel-toggle):not(.scroll-toggle) {
+button:not(.btn):not(.blade):not(.panel-toggle):not(.scroll-toggle) {
   border-radius: var(--radius);
 }
 
@@ -1324,14 +1254,6 @@ input[type='range'] {
   }
 }
 
-@keyframes pulse {
-  70% {
-    box-shadow: 0 0 0 10px rgba(179, 38, 30, 0);
-  }
-  100% {
-    box-shadow: 0 0 0 0 rgba(179, 38, 30, 0);
-  }
-}
 
 @keyframes bob {
   50% {

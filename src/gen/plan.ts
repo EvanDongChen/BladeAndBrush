@@ -50,6 +50,42 @@ export function minGap(spacing: number): number {
   return lerp(150, 700, Math.min(1, Math.max(0, spacing)));
 }
 
+/** Step-1 inputs of the near-row picker, as pure data. */
+export interface ScoreCurve {
+  /** Sample positions, painting units. */
+  xs: number[];
+  /** Noise score per sample, normalized 0..1. */
+  score: number[];
+  /** Acceptance bar: samples at or above this become peak candidates. */
+  bar: number;
+  /** Greedy minimum separation between picks, painting units. */
+  minApart: number;
+}
+
+/**
+ * The soundwave the planner picks peaks from. Pure: same (seed, spacing,
+ * width) gives the same curve, and makePlan() below consumes exactly this,
+ * so pages can draw the same curve the mountains come from. Editorial
+ * overrides (the noise-graph gate) pass barOver; otherwise the bar follows
+ * spacing, exactly as before.
+ */
+export function scoreCurve(seed: number, spacing: number, widthUnits: number, barOver?: number): ScoreCurve {
+  const noise = createNoise(hashSeed(seed, 'plan', 'noise'));
+  const sp = Math.min(1, Math.max(0, spacing));
+  const samp = 0.03 * lerp(1.35, 0.7, sp);
+  const xs: number[] = [];
+  for (let x = 0; x <= widthUnits; x += STEP / 2) xs.push(x);
+  const raw = xs.map((x) => noise.fbm1(x * samp, 4));
+  let lo = Infinity;
+  let hi = -Infinity;
+  for (const v of raw) {
+    lo = Math.min(lo, v);
+    hi = Math.max(hi, v);
+  }
+  const score = raw.map((v) => (hi > lo ? (v - lo) / (hi - lo) : 0));
+  return { xs, score, bar: barOver ?? lerp(0.72, 0.86, sp), minApart: lerp(260, 700, sp) };
+}
+
 /**
  * Where the mountains go. Pure: same (seed, params, units) gives the same plan.
  * - A slow noise curve scores every x; the best-scoring xs become mountains, greedily kept at
@@ -57,7 +93,7 @@ export function minGap(spacing: number): number {
  *   touching a neighbour in their row (a land gap that grows with spacing).
  * - Together the near and mid rows cover at most COVER_MAX of the scroll, so land shows.
  */
-export function makePlan(seed: number, params: GenParams, u: Units, hints?: PlanHints): Placement[] {
+export function makePlan(seed: number, params: GenParams, u: Units, hints?: PlanHints, barOver?: number): Placement[] {
   const rng = new Rng(hashSeed(seed, 'plan'));
   const noise = createNoise(hashSeed(seed, 'plan', 'noise'));
   const W = u.widthUnits;
@@ -84,20 +120,8 @@ export function makePlan(seed: number, params: GenParams, u: Units, hints?: Plan
 
   // 1. Where mountains rise: high points of a noise curve along x. Tighter spacing = a faster
   //    curve and a lower bar, so more of them.
-  const samp = 0.03 * lerp(1.35, 0.7, sp);
-  const xs: number[] = [];
-  for (let x = 0; x <= W; x += STEP / 2) xs.push(x);
-  const raw = xs.map((x) => noise.fbm1(x * samp, 4));
-  let lo = Infinity;
-  let hi = -Infinity;
-  for (const v of raw) {
-    lo = Math.min(lo, v);
-    hi = Math.max(hi, v);
-  }
-  const score = raw.map((v) => (hi > lo ? (v - lo) / (hi - lo) : 0));
-  const bar = lerp(0.72, 0.86, sp);
+  const { xs, score, bar, minApart } = scoreCurve(seed, params.spacing, W, barOver);
   const peaks: number[] = [...forced]; // free clusters keep their distance from the level's peaks
-  const minApart = lerp(260, 700, sp); // clusters keep open land between them
   const order = xs.map((_, i) => i).sort((a, b) => score[b] - score[a]);
   for (const i of order) {
     if (score[i] < bar) break;
@@ -188,7 +212,7 @@ const cache = new WeakMap<Blueprint, Placement[]>();
 export function planOf(bp: Blueprint): Placement[] {
   let pl = cache.get(bp);
   if (!pl) {
-    pl = makePlan(bp.seed, bp.params, artOf(bp).u, hintsOf(bp));
+    pl = makePlan(bp.seed, bp.params, artOf(bp).u, hintsOf(bp), bp.planBar);
     cache.set(bp, pl);
   }
   return pl;

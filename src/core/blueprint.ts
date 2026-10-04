@@ -27,6 +27,11 @@ export interface Blueprint {
   registry: Registry;
   /** What the level asked the generator to put in (core/setpieces.ts). Empty for a free painting. */
   setpieces: SetpieceSpec[];
+  /**
+   * Editorial acceptance-bar override for the mountain picker (the noise-graph gate).
+   * Undefined = the bar follows spacing, exactly as always.
+   */
+  planBar?: number;
   /** Vector draw commands for the art layer (empty in the Phase 0 stub). */
   draw: DrawCmd[];
   /** Background plane (same size as el): FAR_ROCK or EMPTY. Never simulated or scanned. */
@@ -153,7 +158,13 @@ export function flattenPlanes(bp: Blueprint): void {
   }
 }
 
-export function createBlueprint(seed: number, params: GenParams, dims: LevelDims, setpieces: SetpieceSpec[] = []): Blueprint {
+export function createBlueprint(
+  seed: number,
+  params: GenParams,
+  dims: LevelDims,
+  setpieces: SetpieceSpec[] = [],
+  planBar?: number,
+): Blueprint {
   return {
     seed,
     params: { ...params },
@@ -164,6 +175,7 @@ export function createBlueprint(seed: number, params: GenParams, dims: LevelDims
     registry: { strokes: new Map(), waterSources: [] },
     setpieces: setpieces.map((s) => ({ ...s })),
     draw: [],
+    ...(planBar === undefined ? {} : { planBar }),
   };
 }
 

@@ -1750,6 +1750,41 @@ input[type='number'] {
   touch-action: none;
 }
 
+/* the Height slider stands to the left of the graph: up is taller */
+.noise-graph-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 6px;
+  align-items: stretch;
+}
+
+.noise-height {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 40px;
+  font-size: 10.5px;
+  color: var(--ink-soft);
+  cursor: ns-resize;
+}
+
+.noise-height-input {
+  flex: 1;
+  min-height: 60px;
+  width: 22px;
+  margin: 0;
+  writing-mode: vertical-lr;
+  direction: rtl; /* the top of the track is the tallest */
+  accent-color: #b22222;
+  cursor: ns-resize;
+}
+
+.noise-height-input:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .noise-readout {
   margin: 0;
   font: 12px ui-monospace, Consolas, monospace;

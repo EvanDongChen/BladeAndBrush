@@ -359,8 +359,12 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
   );
   complete.node.hidden = true;
 
-  /** Has the player changed anything yet? Goals the fresh painting already meets do not count. */
-  const changed = () => used > 0 || shaped || Object.keys(initial).some((k) => !isPhysics(k) && params[k] !== initial[k]);
+  /**
+   * Has the player changed anything yet: a stroke, the mountain graph, a slider, or the wind and
+   * gravity? Goals the fresh painting already meets do not count, but a level may be won by
+   * shaping alone, without a single stroke.
+   */
+  const changed = () => used > 0 || shaped || Object.keys(initial).some((k) => params[k] !== initial[k]);
 
   let lastScan: ReturnType<typeof scan> | null = null;
   let lastScanWorld: World | null = null;
@@ -402,7 +406,7 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
     }
     for (const v of verses) if (!v.goal) v.row.classList.toggle('met', all && started);
     // every goal met: let the painting settle, then judge it (no need to spend the rest of the actions)
-    if (phase === 'play' && all && started && used > 0 && !down) {
+    if (phase === 'play' && all && started && !down) {
       finish();
       return;
     }

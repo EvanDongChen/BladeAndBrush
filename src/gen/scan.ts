@@ -2,6 +2,9 @@ import { SOLID_FOR_SCAN } from '../core/elements';
 import { DEFAULT_THRESHOLDS, metrics, type Peak, type ScanResult, type ScanThresholds } from '../core/scan';
 import type { World } from '../core/world';
 
+/** Grid height (cells) the default thresholds were written for. */
+export const REFERENCE_H = 256;
+
 /** PHASE 0: correct but naive. A replaces the internals; the signatures are the contract. */
 
 /** Height of the topmost solidForScan cell in column x (0 if none). */
@@ -79,8 +82,17 @@ export function countComponents(w: number, h: number, mask: Uint8Array): number 
 /** Reads cells only. counts has one entry per registered metric (gen/metrics/). */
 export function scan(world: World, thresholds: ScanThresholds = DEFAULT_THRESHOLDS): ScanResult {
   const heights = columnHeights(world);
-  const peaks = findPeaks(heights, thresholds.minProminence);
-  const ctx = { heights, peaks, thresholds };
+  // Thresholds are vertical lengths written for a REFERENCE_H-cell-high grid; scale them UP so the
+  // same painting scans the same on a finer grid (tallFrac is already a fraction). Coarser or
+  // toy grids keep the plain cell lengths: a threshold below one cell would mean nothing.
+  const k = Math.max(1, world.h / REFERENCE_H);
+  const scaled: ScanThresholds = {
+    ...thresholds,
+    minProminence: thresholds.minProminence * k,
+    waterfallMin: thresholds.waterfallMin * k,
+  };
+  const peaks = findPeaks(heights, scaled.minProminence);
+  const ctx = { heights, peaks, thresholds: scaled };
   const counts: Record<string, number> = {};
   for (const m of metrics.all()) counts[m.name] = m.measure(world, ctx);
   return { heights, peaks, counts };

@@ -1,14 +1,10 @@
-import type { ArtBuffers } from './blueprint';
+import type { ArtView } from './blueprint';
 import { flagOn } from './config';
 import type { LevelDims } from './constants';
 import { byOrder, ExtensionRegistry } from './registry';
 import type { World } from './world';
 
-/** The blueprint's art plus its cells, so the art layer can tell which cells still match. */
-export interface ArtView {
-  art: ArtBuffers;
-  el: Uint8Array;
-}
+export type { ArtView };
 
 /** Per-frame inputs from the page, beyond the world itself. */
 export interface RenderState {

@@ -14,7 +14,7 @@ export function blob(g: GrowCtx, cx: number, cy: number, rx: number, ry: number)
     tops[j] = hh > 0 ? cy - hh : Infinity;
     bots[j] = hh > 0 ? cy + hh : -Infinity;
   }
-  const shader = inkWash({ ink: g.ink, base: 0.45, edge: 0.4, edgeWidth: Math.max(1, ry * 0.4), speckle: 0.35, noise: g.noise, grain: 0.5 });
+  const shader = inkWash({ ink: g.ink, base: 0.45, edge: 0.4, edgeWidth: Math.max(1, ry * 0.4), speckle: 0, noise: g.noise });
   g.paint.fillColumns(x0, tops, bots, shader, g.owner);
 }
 

@@ -1,6 +1,7 @@
 import './bootstrap';
-import type { Blueprint } from '../core/blueprint';
+import { artView, type Blueprint } from '../core/blueprint';
 import { Clock } from '../core/clock';
+import { flags } from '../core/config';
 import { DEFAULT_DIMS } from '../core/constants';
 import { defaultParams } from '../core/params';
 import { Renderer } from '../core/render';
@@ -21,6 +22,7 @@ import {
   paramSliders,
   registryInspector,
   startLoop,
+  toCell,
 } from './ui';
 
 /** Person A's test page: seed + params -> blueprint, revealed left to right, with scan readout. */
@@ -76,6 +78,35 @@ export function mountGenerator(root: HTMLElement): () => void {
     frontier.columnsPerTick = columnsPerTick;
   });
 
+  // Dig tool: drag on the painting to break cells (leaves CUT scars, like a slash). Layers behind
+  // the cells you break come forward, so you can dig through a near mountain into the mid row.
+  let digRadius = 6;
+  let digging = false;
+  const digOn = h('input', { type: 'checkbox', checked: true });
+  const digInput = h('input', { type: 'range', min: 2, max: 30, step: 1, value: digRadius });
+  digInput.addEventListener('input', () => (digRadius = Number(digInput.value)));
+  const dig = (e: PointerEvent) => {
+    if (!digOn.checked) return;
+    const p = toCell(canvas, e);
+    world.clearCircle(p.x / DEFAULT_ART_K, p.y / DEFAULT_ART_K, digRadius, { cut: true });
+  };
+  const farOn = h('input', { type: 'checkbox' });
+  farOn.checked = flags.farLayerInteractive;
+  farOn.addEventListener('change', () => {
+    flags.farLayerInteractive = farOn.checked;
+    rebuild();
+  });
+  canvas.classList.add('paintable');
+  canvas.addEventListener('pointerdown', (e) => {
+    digging = true;
+    canvas.setPointerCapture(e.pointerId);
+    dig(e);
+  });
+  canvas.addEventListener('pointermove', (e) => digging && dig(e));
+  const stopDig = () => (digging = false);
+  canvas.addEventListener('pointerup', stopDig);
+  canvas.addEventListener('pointercancel', stopDig);
+
   rebuild();
 
   root.replaceChildren(
@@ -96,6 +127,13 @@ export function mountGenerator(root: HTMLElement): () => void {
           h('label', { class: 'row' }, h('span', {}, 'Columns / tick'), colsInput),
           button('Restart', rebuild),
         ),
+        panel(
+          'Dig (test layers)',
+          h('label', { class: 'row' }, h('span', {}, 'Drag to dig'), digOn),
+          h('label', { class: 'row' }, h('span', {}, 'Radius'), digInput),
+          h('label', { class: 'row' }, h('span', {}, 'Far ridges interactive'), farOn),
+          h('p', { class: 'home-note' }, 'Breaks cells; the layer behind comes forward. Restart (or change a slider) to refill.'),
+        ),
         panel('Scan', readout.node),
         panel('Layers', layerToggles(renderer)),
         panel('Registries', registryInspector()),
@@ -105,7 +143,7 @@ export function mountGenerator(root: HTMLElement): () => void {
 
   let frame = 0;
   const stop = startLoop(clock, () => {
-    renderer.draw(world, { frontierX: frontier.done ? undefined : frontier.x, art: bp.art ? { art: bp.art, el: bp.el } : undefined });
+    renderer.draw(world, { frontierX: frontier.done ? undefined : frontier.x, art: artView(bp) });
     if (frame++ % 10 === 0) {
       readout.update(scan(world));
       status.textContent = `seed ${seed} · tick ${world.tick} · frontier ${frontier.x}/${bp.w} · strokes ${bp.registry.strokes.size}`;

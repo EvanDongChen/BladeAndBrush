@@ -10,6 +10,7 @@ const base = u.artH - 20;
 const place = (kind: string, over: Partial<Placement> = {}): Placement => ({
   kind,
   x: 1500,
+  y: 700,
   halfWidth: 300,
   height: 400,
   depth: 'near',

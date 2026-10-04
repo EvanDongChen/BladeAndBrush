@@ -6,7 +6,11 @@ import type { Profile } from './shapes';
 export interface MountainRec {
   id: number;
   depth: Depth;
+  /** The generator plane the mountain is in (PLANE.NEAR or PLANE.MID). */
+  plane: number;
   profile: Profile;
+  /** Flat mountains: the ground slab on top (art px), where boulders, trees and huts stand. */
+  slab?: { x0: number; x1: number; y: number; depth: number };
 }
 
 /** Gen-only, per blueprint: filled by the mountains feature, read by features that run after it. */

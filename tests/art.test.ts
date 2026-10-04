@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { compose, over, PAPER_RGBA, prepareArt } from '../src/core/artCompose';
-import { createBlueprint, hashBlueprint } from '../src/core/blueprint';
+import { createBlueprint, hashBlueprint, type ArtView } from '../src/core/blueprint';
+import { NO_PLANE } from '../src/core/constants';
 import { El, rgba } from '../src/core/elements';
 import { defaultParams } from '../src/core/params';
 
@@ -25,61 +26,72 @@ describe('over()', () => {
   });
 });
 
-describe('compose()', () => {
-  // 3 cells wide, 1 high, k = 2 -> art is 6 x 2
-  const k = 2;
-  const w = 3;
-  const h = 1;
-  const ink = rgba(40, 40, 40);
-  const half = rgba(40, 40, 40, 128);
-  const fg = new Uint32Array(w * k * h * k).fill(ink);
-  const bg = new Uint32Array(w * k * h * k).fill(rgba(150, 150, 150));
-  fg[1] = half; // one soft edge pixel in cell 0
-  const art = { k, fg, bg };
-  const bpEl = Uint8Array.from([El.ROCK, El.ROCK, El.EMPTY]);
-  const px = (out: Uint32Array, cx: number) => [out[cx * k], out[cx * k + 1], out[w * k + cx * k], out[w * k + cx * k + 1]];
+describe('compose() with layered planes', () => {
+  // 4 cells in a row, k = 1, two planes: 0 (objects, a tree) in front of 1 (terrain, rock).
+  //   cell 0: tree over rock   cell 1: rock only   cell 2: nothing   cell 3: tree over nothing
+  const w = 4;
+  const tree = rgba(10, 80, 10);
+  const rock = rgba(90, 90, 90);
+  const bgc = rgba(150, 150, 170, 120);
+  const view: ArtView = {
+    art: { k: 1, planes: [Uint32Array.from([tree, 0, 0, tree]), Uint32Array.from([rock, rock, 0, 0])], bg: new Uint32Array(w).fill(bgc) },
+    w,
+    h: 1,
+    el: Uint8Array.from([El.TREE, El.ROCK, El.EMPTY, El.TREE]),
+    plane: Uint8Array.from([0, 1, NO_PLANE, 0]),
+    planes: [
+      { el: Uint8Array.from([El.TREE, 0, 0, El.TREE]), owner: new Uint16Array(w) },
+      { el: Uint8Array.from([El.ROCK, El.ROCK, 0, 0]), owner: new Uint16Array(w) },
+    ],
+  };
+  const run = (el: number[], plane: number[], fx = w) => {
+    const out = new Uint32Array(w);
+    compose(out, Uint8Array.from(el), Uint8Array.from(plane), prepareArt(view), fx);
+    return Array.from(out);
+  };
 
-  it('untouched solid cell shows fg over paper (soft pixel not see-through)', () => {
-    const out = new Uint32Array(fg.length);
-    compose(out, Uint8Array.from([El.ROCK, El.ROCK, El.EMPTY]), bpEl, w, h, prepareArt(art), w);
-    expect(px(out, 0)[0]).toBe(ink);
-    expect(A(px(out, 0)[1])).toBe(255);
+  it('an untouched world is the as-generated picture', () => {
+    const out = run([El.TREE, El.ROCK, El.EMPTY, El.TREE], [0, 1, NO_PLANE, 0]);
+    expect(out[0]).toBe(tree);
+    expect(out[1]).toBe(rock);
+    expect(A(out[2])).toBe(A(bgc)); // sky: the background plane only
   });
 
-  it('removed cell shows bg only; dynamic element cell is transparent', () => {
-    const out = new Uint32Array(fg.length);
-    compose(out, Uint8Array.from([El.EMPTY, El.WATER, El.EMPTY]), bpEl, w, h, prepareArt(art), w);
-    expect(px(out, 0)).toEqual([bg[0], bg[1], bg[6], bg[7]]);
-    expect(px(out, 1)).toEqual([0, 0, 0, 0]);
+  it('breaking the tree brings the rock behind it forward', () => {
+    expect(run([El.ROCK, El.ROCK, El.EMPTY, El.TREE], [1, 1, NO_PLANE, 0])[0]).toBe(rock);
   });
 
-  it('untouched empty cell shows fg over bg; nothing past the frontier', () => {
-    const out = new Uint32Array(fg.length);
-    compose(out, Uint8Array.from([El.ROCK, El.ROCK, El.EMPTY]), bpEl, w, h, prepareArt(art), 2);
-    expect(px(out, 2)).toEqual([0, 0, 0, 0]);
-    compose(out, Uint8Array.from([El.ROCK, El.ROCK, El.EMPTY]), bpEl, w, h, prepareArt(art), 3);
-    expect(px(out, 2)[0]).toBe(ink);
+  it('breaking everything at a cell leaves the background', () => {
+    const out = run([El.EMPTY, El.ROCK, El.EMPTY, El.TREE], [NO_PLANE, 1, NO_PLANE, 0]);
+    expect(out[0]).toBe(over(bgc, 0));
+    // a tree standing over nothing: breaking it shows the background too
+    expect(run([El.TREE, El.ROCK, El.EMPTY, El.EMPTY], [0, 1, NO_PLANE, NO_PLANE])[3]).toBe(over(bgc, 0));
   });
 
-  it('PAPER_RGBA is opaque', () => expect(A(PAPER_RGBA)).toBe(255));
+  it('dynamic cells are transparent so their own color shows; nothing is drawn past the frontier', () => {
+    expect(run([El.WATER, El.ROCK, El.EMPTY, El.TREE], [NO_PLANE, 1, NO_PLANE, 0])[0]).toBe(0);
+    const clipped = run([El.TREE, El.ROCK, El.EMPTY, El.TREE], [0, 1, NO_PLANE, 0], 2);
+    expect(clipped[2]).toBe(0);
+    expect(clipped[3]).toBe(0);
+  });
 
-  it('prepareArt caches and precomputes the blends', () => {
-    const prep = prepareArt(art);
-    expect(prepareArt(art)).toBe(prep);
-    for (let p = 0; p < fg.length; p++) {
-      expect(prep.sky[p]).toBe(over(fg[p], bg[p]));
-      expect(prep.solid[p]).toBe(over(over(fg[p], bg[p]), PAPER_RGBA));
-    }
+  it('solid cells sit on paper, so a soft edge never lets the flat cell color through', () => {
+    const soft = rgba(40, 40, 40, 128);
+    const v: ArtView = { ...view, art: { ...view.art, planes: [new Uint32Array(w), Uint32Array.from([soft, 0, 0, 0])], bg: new Uint32Array(w) } };
+    const out = new Uint32Array(w);
+    compose(out, Uint8Array.from([El.TREE, El.ROCK, El.EMPTY, El.TREE]), Uint8Array.from([0, 1, NO_PLANE, 0]), prepareArt(v), w);
+    expect(A(out[0])).toBe(255);
+    expect(out[0]).toBe(over(soft, PAPER_RGBA));
   });
 });
 
-describe('hashBlueprint with art', () => {
+describe('hashBlueprint with planes', () => {
   it('changes when one art pixel changes', () => {
     const bp = createBlueprint(1, defaultParams(), { w: 4, h: 2 });
     bp.bg = new Uint8Array(8);
-    bp.art = { k: 2, fg: new Uint32Array(32), bg: new Uint32Array(32) };
+    bp.art = { k: 2, planes: [new Uint32Array(32), new Uint32Array(32)], bg: new Uint32Array(32) };
     const a = hashBlueprint(bp);
-    bp.art.fg[5] = 7;
+    bp.art.planes[1][5] = 7;
     expect(hashBlueprint(bp)).not.toBe(a);
   });
 });

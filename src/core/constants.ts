@@ -18,9 +18,17 @@ export const Flag = {
   CUT: 2,
   /** Cell was written by the frontier reveal from the blueprint. */
   GENERATED: 4,
-  /**
-   * Fuel growing on rock (e.g. a tree painted over a mountain face): when it burns out it turns
-   * back into ROCK instead of leaving a hole. Stays with the position, like CUT.
-   */
-  ON_ROCK: 8,
+  /** The position has more material stacked behind its front cell (see World.behindEl). */
+  HAS_BEHIND: 16,
+  /** The position is already in World's pending-promotion list this tick. */
+  QUEUED: 32,
 } as const;
+
+/** Materials that can be stacked behind a position's front cell (front + this many = a full stack). */
+export const BEHIND_LAYERS = 4;
+
+/** World.plane value for cells that came from no blueprint plane (painted, spawned, dynamic). */
+export const NO_PLANE = 255;
+
+/** World.plane value for cells that came from the far (background) plane; see flags.farLayerInteractive. */
+export const FAR_PLANE = 4;

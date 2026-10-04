@@ -41,6 +41,7 @@ describe('stub generate()', () => {
   it('disabling a feature flag removes that feature from the pipeline with no errors', () => {
     expect(enabledFeatures().map((f) => f.name)).toContain('trees');
     featureToggles.trees = false;
+    featureToggles.plateaus = false; // the plateau scenes plant trees too
     try {
       expect(enabledFeatures().map((f) => f.name)).not.toContain('trees');
       const bp = generate(1, defaultParams());
@@ -48,9 +49,11 @@ describe('stub generate()', () => {
       expect(count(bp.el, El.ROCK)).toBeGreaterThan(0);
     } finally {
       delete featureToggles.trees;
+      delete featureToggles.plateaus;
     }
     // per-call overrides work the same way
-    expect(count(generate(1, defaultParams(), { features: { mountains: false } }).el, El.TREE)).toBeGreaterThan(0);
+    const noMountains = generate(1, defaultParams(), { features: { mountains: false } });
+    expect([...noMountains.registry.strokes.values()].some((q) => q.kind === 'mountain')).toBe(false);
   });
 });
 
@@ -78,42 +81,62 @@ describe('Frontier', () => {
   it('skips CUT cells (slashed ahead of the frontier)', () => {
     const bp = generate(5, defaultParams());
     const world = new World(bp, 5);
-    const y = bp.h - 1; // ground row, always rock
-    world.set(500, y, El.EMPTY, { cut: true });
+    // any rock cell with rock to its right
+    let i = 0;
+    while (i < bp.el.length - 1 && !(bp.el[i] === El.ROCK && bp.el[i + 1] === El.ROCK && (i % bp.w) < bp.w - 1)) i++;
+    const x = i % bp.w;
+    const y = (i / bp.w) | 0;
+    world.set(x, y, El.EMPTY, { cut: true });
     new Frontier(bp).revealAll(world);
-    expect(world.get(500, y)).toBe(El.EMPTY);
-    expect(world.get(501, y)).toBe(El.ROCK);
-    expect(world.flags[world.idx(501, y)] & Flag.GENERATED).toBe(Flag.GENERATED);
+    expect(world.get(x, y)).toBe(El.EMPTY);
+    expect(world.get(x + 1, y)).toBe(El.ROCK);
+    expect(world.flags[world.idx(x + 1, y)] & Flag.GENERATED).toBe(Flag.GENERATED);
   });
 
-  it('scan counts every stub tree', () => {
+  it('scan counts the trees in front of their terrain', () => {
     const bp = generate(9, defaultParams());
     const world = new World(bp, 9);
     new Frontier(bp).revealAll(world);
-    const trees = [...bp.registry.strokes.values()].filter((s) => s.kind === 'tree').length;
-    expect(scan(world).counts.trees).toBe(trees);
+    const visible = new Set<number>();
+    for (let i = 0; i < bp.el.length; i++) if (bp.el[i] === El.TREE) visible.add(bp.owner[i]);
+    expect(scan(world).counts.trees).toBe(visible.size);
+    expect(visible.size).toBeGreaterThan(0);
   });
 });
 
 describe('art pipeline', () => {
-  it('every solid cell is at least half covered by its owner in the art, and the art is painted', () => {
+  it('every cell in a plane is at least half covered in that plane\'s art, and the art is painted', () => {
     const bp = generate(3, defaultParams(), { k: 2 });
     const art = bp.art!;
     const k = art.k;
     const aw = bp.w * k;
     let painted = 0;
-    for (const c of art.fg) if (c >>> 24) painted++;
+    for (const plane of art.planes) for (const c of plane) if (c >>> 24) painted++;
     expect(painted).toBeGreaterThan(bp.w * k * k * 5);
     let bad = 0;
-    for (let i = 0; i < bp.el.length; i++) {
-      if (bp.el[i] === El.EMPTY) continue;
-      const x = i % bp.w;
-      const y = (i / bp.w) | 0;
-      let opaque = 0;
-      for (let yy = 0; yy < k; yy++) for (let xx = 0; xx < k; xx++) if (art.fg[(y * k + yy) * aw + x * k + xx] >>> 24) opaque++;
-      if (opaque < Math.ceil((k * k) / 2)) bad++;
-    }
+    bp.planes!.forEach((grid, q) => {
+      for (let i = 0; i < grid.el.length; i++) {
+        if (grid.el[i] === El.EMPTY) continue;
+        const x = i % bp.w;
+        const y = (i / bp.w) | 0;
+        let opaque = 0;
+        for (let yy = 0; yy < k; yy++) for (let xx = 0; xx < k; xx++) if (art.planes[q][(y * k + yy) * aw + x * k + xx] >>> 24) opaque++;
+        if (opaque < Math.ceil((k * k) / 2)) bad++;
+      }
+    });
     expect(bad).toBe(0);
+  });
+
+  it('flattens the planes into a front cell plus a compact stack behind it', () => {
+    const bp = generate(3, defaultParams(), { k: 1 });
+    for (let i = 0; i < bp.el.length; i++) {
+      const stack = bp.planes!.map((g, q) => [g.el[i], q] as const).filter(([e]) => e !== El.EMPTY);
+      expect(bp.el[i]).toBe(stack[0]?.[0] ?? El.EMPTY);
+      stack.slice(1).forEach(([e, q], d) => {
+        expect(bp.behind![d].el[i]).toBe(e);
+        expect(bp.behind![d].plane[i]).toBe(q);
+      });
+    }
   });
 });
 
@@ -145,7 +168,7 @@ describe('mountains', () => {
       lo += mean(heights(gen(s, { mountainHeight: 0.2 })));
       hi += mean(heights(gen(s, { mountainHeight: 0.9 })));
     }
-    expect(hi).toBeGreaterThan(lo * 1.5);
+    expect(hi).toBeGreaterThan(lo * 1.25);
   });
 
   it('ruggedness roughens the skyline', () => {

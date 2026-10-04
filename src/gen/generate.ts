@@ -1,4 +1,4 @@
-import { createBlueprint, type Blueprint } from '../core/blueprint';
+import { createBlueprint, flattenPlanes, type Blueprint } from '../core/blueprint';
 import { featureOn } from '../core/config';
 import { DEFAULT_DIMS, type LevelDims } from '../core/constants';
 import { features, type Feature, type FeatureCtx } from '../core/features';
@@ -49,5 +49,6 @@ export function generate(seed: number, params: GenParams, opts: GenerateOptions 
       newStroke,
     });
   }
+  flattenPlanes(bp); // layered pixels: planes -> front cells + the stack behind them
   return bp;
 }

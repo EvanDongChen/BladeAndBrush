@@ -5,7 +5,6 @@ import { farWash } from '../paint/shaders';
 import { planOf } from '../plan';
 import { rasterizeCoverage } from '../raster';
 import { getShape } from '../shapes';
-import { groundTop } from './ground';
 
 const INK: [number, number, number] = [118, 122, 126];
 
@@ -17,15 +16,14 @@ registerFeature({
   name: 'farRidges',
   label: 'Far ridges',
   order: 5,
-  run: ({ bp, dims, params, rng, noise }) => {
+  run: ({ bp, dims, params, noise }) => {
     const { bg, bgPaint, u } = artOf(bp);
     const K = u.k;
-    const ground = groundTop(dims.h) * K;
     const owner = new Uint16Array(dims.w * dims.h); // bg cells have no strokes; scratch only
     const far = planOf(bp).filter((p) => p.depth === 'far');
     far.forEach((p, i) => {
       const id = i + 1;
-      const base = ground - u.toArt(rng.range(90, 160));
+      const base = u.toArt(p.y);
       const pr = getShape(p.kind).build(p, { u, params, base });
       if (pr.tops.length === 0) return;
       const tops = pr.tops.map((t) => (t < base ? t : u.artH));

@@ -27,7 +27,13 @@ export interface Painter {
    * then pixels at least half covered are claimed for it (e.g. a tree's trunk and needles).
    */
   stroke(path: ArrayLike<readonly [number, number]>, brush: Brush, noise?: Noise, owner?: number): void;
+  /** Fill any closed polygon (even-odd), anti-aliased. Claims pixels at coverage >= 1/2 for `owner`. */
+  fillPolygon(pts: ArrayLike<readonly [number, number]>, color: Shader | number, owner?: number): void;
 }
+
+/** Vertical sub-samples per pixel row for polygon anti-aliasing. */
+const SUB = 4;
+let covScratch = new Float32Array(1024);
 
 export class PixelPainter implements Painter {
   constructor(readonly buf: ArtBuffer) {}
@@ -56,6 +62,74 @@ export class PixelPainter implements Painter {
         const cov = y === yTop ? frac : 1;
         const a = Math.round((c >>> 24) * cov);
         this.buf.blend(i, ((c & 0xffffff) | (a << 24)) >>> 0, cov >= 0.5 ? owner : undefined);
+      }
+    }
+  }
+
+  fillPolygon(pts: ArrayLike<readonly [number, number]>, color: Shader | number, owner?: number): void {
+    const n = pts.length;
+    if (n < 3) return;
+    const { w, h } = this.buf;
+    let minX = Infinity;
+    let maxX = -Infinity;
+    let minY = Infinity;
+    let maxY = -Infinity;
+    for (let i = 0; i < n; i++) {
+      const [x, y] = pts[i];
+      if (!(x === x && y === y)) return; // NaN guard
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
+    }
+    const x0 = Math.max(0, Math.floor(minX));
+    const x1 = Math.min(w - 1, Math.ceil(maxX));
+    const y0 = Math.max(0, Math.floor(minY));
+    const y1 = Math.min(h - 1, Math.ceil(maxY));
+    if (x1 < x0 || y1 < y0) return;
+    const bw = x1 - x0 + 1;
+    if (covScratch.length < bw) covScratch = new Float32Array(bw * 2);
+    const cov = covScratch;
+    const xs: number[] = [];
+    const shader = typeof color === 'number' ? null : color;
+    for (let y = y0; y <= y1; y++) {
+      cov.fill(0, 0, bw);
+      let any = false;
+      for (let s = 0; s < SUB; s++) {
+        const sy = y + (s + 0.5) / SUB;
+        xs.length = 0;
+        for (let i = 0, j = n - 1; i < n; j = i++) {
+          const ay = pts[i][1];
+          const by = pts[j][1];
+          if (ay > sy === by > sy) continue;
+          xs.push(pts[i][0] + ((sy - ay) / (by - ay)) * (pts[j][0] - pts[i][0]));
+        }
+        if (xs.length < 2) continue;
+        xs.sort((a, b) => a - b);
+        for (let k = 0; k + 1 < xs.length; k += 2) {
+          const a = Math.max(x0, xs[k]);
+          const b = Math.min(x1 + 1, xs[k + 1]);
+          if (b <= a) continue;
+          any = true;
+          const ia = Math.floor(a);
+          const ib = Math.floor(b);
+          if (ia === ib) {
+            cov[ia - x0] += (b - a) / SUB;
+            continue;
+          }
+          cov[ia - x0] += (ia + 1 - a) / SUB;
+          for (let x = ia + 1; x < ib; x++) cov[x - x0] += 1 / SUB;
+          if (ib <= x1) cov[ib - x0] += (b - ib) / SUB;
+        }
+      }
+      if (!any) continue;
+      for (let x = x0; x <= x1; x++) {
+        const c = Math.min(1, cov[x - x0]);
+        if (c <= 0.002) continue;
+        const col = shader ? shader(x, y, y - minY) : (color as number);
+        const a = Math.round((col >>> 24) * c);
+        if (a === 0 && !(owner !== undefined && c >= 0.5)) continue;
+        this.buf.blend(y * w + x, ((col & 0xffffff) | (a << 24)) >>> 0, owner !== undefined && c >= 0.5 ? owner : undefined);
       }
     }
   }

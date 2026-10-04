@@ -10,6 +10,7 @@ import.meta.glob('../gen/elements/*.ts', { eager: true });
 import.meta.glob('../sim/behaviors/*.ts', { eager: true });
 import.meta.glob('../sim/abilities/*.ts', { eager: true });
 import.meta.glob('../gen/features/*.ts', { eager: true });
+import.meta.glob('../gen/setpieces/*.ts', { eager: true });
 import.meta.glob('../gen/metrics/*.ts', { eager: true });
 import.meta.glob('../levels/goals/*.ts', { eager: true });
 import.meta.glob('../levels/*.ts', { eager: true });

@@ -51,7 +51,8 @@ registerFeature({
       const base = u.toArt(p.y);
       const pr = getShape(p.kind).build(p, { u, params, base });
       if (pr.tops.length === 0 || !pr.grid) continue;
-      const id = newStroke({ kind: 'mountain', bbox: [0, 0, 0, 0], anchor: [cell(pr.peakX), cell(pr.peakY)] });
+      // plateaus are land to stand on, not peaks to count (gen/scan.ts)
+      const id = newStroke({ kind: 'mountain', bbox: [0, 0, 0, 0], anchor: [cell(pr.peakX), cell(pr.peakY)], tags: pr.plateau ? ['plateau'] : undefined });
       ids.push(id);
 
       ripples(plane.paint, pr, base, tone, rng, noise, u, id); // part of the mountain: same plane, same owner

@@ -18,6 +18,11 @@ export const Flag = {
   CUT: 2,
   /** Cell was written by the frontier reveal from the blueprint. */
   GENERATED: 4,
+  /**
+   * Where generated land stands on its (unpainted) ground: the bottom cell of a mountain or plateau.
+   * Rigid material here counts as resting on the ground. Stays with the position, like CUT.
+   */
+  FOOT: 8,
   /** The position has more material stacked behind its front cell (see World.behindEl). */
   HAS_BEHIND: 16,
   /** The position is already in World's pending-promotion list this tick. */

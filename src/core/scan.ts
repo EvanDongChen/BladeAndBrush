@@ -1,3 +1,4 @@
+import type { ObjectIndex } from './objects';
 import { ExtensionRegistry } from './registry';
 import type { World } from './world';
 
@@ -22,6 +23,7 @@ export interface Peak {
 export interface ScanResult {
   /** Height of the topmost solidForScan cell per column (0 if none). */
   heights: Int16Array;
+  /** Peaks with at least minProminence, one per tracked mountain (its highest), left to right. */
   peaks: Peak[];
   /** One entry per registered metric, e.g. trees, tallMountains, shortMountains, waterfalls, water. */
   counts: Record<string, number>;
@@ -32,6 +34,8 @@ export interface ScanCtx {
   heights: Int16Array;
   peaks: Peak[];
   thresholds: ScanThresholds;
+  /** Which tracked objects still have cells, and where (core/objects.ts). Built once per scan. */
+  objects: ObjectIndex;
 }
 
 /** One number read from the cells. Drop a file into gen/metrics/ that calls registerMetric(). */

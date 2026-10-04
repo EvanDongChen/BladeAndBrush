@@ -14,7 +14,10 @@ export interface FeatureCtx {
   rng: Rng;
   noise: Noise;
   bp: Blueprint;
-  /** Allocate a stroke (owner) id and add it to the blueprint registry. */
+  /**
+   * Allocate an object id (core/objects.ts) and add it to the blueprint registry: a painted stroke
+   * (its cells get it as owner and obj) or anything else worth tracking, e.g. a creature to spawn.
+   */
   newStroke(info: Omit<StrokeInfo, 'id'>): number;
 }
 

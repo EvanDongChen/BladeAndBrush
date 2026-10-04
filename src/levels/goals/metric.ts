@@ -5,7 +5,10 @@ type Op = '>=' | '<=' | '>' | '<' | '==';
 const compare = (v: number, op: Op, n: number) =>
   op === '>=' ? v >= n : op === '<=' ? v <= n : op === '>' ? v > n : op === '<' ? v < n : v === n;
 
-/** { type: 'metric', metric: 'trees', op: '>=', n: 5 }: compare any scan metric to a number. */
+/**
+ * { type: 'metric', metric: 'trees', op: '>=', n: 5, text?: 'Keep five trees' }: compare any scan
+ * metric to a number. `text` is what the HUD shows (default: the comparison itself).
+ */
 registerGoal(
   'metric',
   (scan, args) => {
@@ -16,5 +19,5 @@ registerGoal(
     const progress = pass ? 1 : op === '>=' || op === '>' ? Math.min(1, n > 0 ? v / n : 0) : 0;
     return { pass, progress };
   },
-  (args) => `${String(args.metric)} ${String(args.op)} ${String(args.n)}`,
+  (args) => (typeof args.text === 'string' ? args.text : `${String(args.metric)} ${String(args.op)} ${String(args.n)}`),
 );

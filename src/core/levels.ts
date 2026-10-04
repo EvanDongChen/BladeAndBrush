@@ -1,6 +1,7 @@
 import type { LevelDims } from './constants';
 import type { GoalSpec } from './goals';
 import { ExtensionRegistry } from './registry';
+import type { SetpieceSpec } from './setpieces';
 
 export interface LevelParam {
   value: number;
@@ -13,6 +14,8 @@ export interface LevelParam {
 /** Levels are plain data. Drop a file into levels/ that calls registerLevel(). */
 export interface LevelDef {
   id: string;
+  /** Shown on the scroll and the level page (default: the id). */
+  title?: string;
   /** One line per array entry. */
   poem: string[];
   dims: LevelDims;
@@ -23,6 +26,8 @@ export interface LevelDef {
   actionBudget: number;
   /** Generator feature toggles for this level (missing = enabled). */
   featuresEnabled?: Record<string, boolean>;
+  /** What this level puts into the painting whatever the sliders say (core/setpieces.ts). */
+  setpieces?: SetpieceSpec[];
 }
 
 export const levels = new ExtensionRegistry<LevelDef>('level', (l) => l.id);

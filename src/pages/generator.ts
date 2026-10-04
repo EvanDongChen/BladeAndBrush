@@ -3,8 +3,10 @@ import { artView, type Blueprint } from '../core/blueprint';
 import { Clock } from '../core/clock';
 import { flags } from '../core/config';
 import { DEFAULT_DIMS } from '../core/constants';
+import { levels } from '../core/levels';
 import { defaultParams } from '../core/params';
 import { Renderer } from '../core/render';
+import type { SetpieceSpec } from '../core/setpieces';
 import { World } from '../core/world';
 import { DEFAULT_ART_K } from '../gen/artState';
 import { generate } from '../gen/generate';
@@ -30,6 +32,7 @@ export function mountGenerator(root: HTMLElement): () => void {
   const params = defaultParams();
   const toggles: Record<string, boolean> = {};
   let seed = 1;
+  let setpieces: SetpieceSpec[] = [];
   let playback = true;
   let columnsPerTick = 4;
 
@@ -45,7 +48,7 @@ export function mountGenerator(root: HTMLElement): () => void {
   const readout = metricReadout();
 
   function rebuild(): void {
-    bp = generate(seed, params, { features: toggles });
+    bp = generate(seed, params, { features: toggles, setpieces });
     world = new World(DEFAULT_DIMS, seed, params);
     frontier = new Frontier(bp, columnsPerTick);
     if (!playback) frontier.revealAll(world);
@@ -107,6 +110,32 @@ export function mountGenerator(root: HTMLElement): () => void {
   canvas.addEventListener('pointerup', stopDig);
   canvas.addEventListener('pointercancel', stopDig);
 
+  // A level's setpieces (moon, village...) on top of the free painting, with its seed and params.
+  const sliders = paramSliders(params, rebuild);
+  const levelSelect = h(
+    'select',
+    {},
+    h('option', { value: '' }, 'Free painting'),
+    ...levels.all().map((l) => h('option', { value: l.id }, l.title ?? l.id)),
+  );
+  levelSelect.addEventListener('change', () => {
+    const l = levels.get(levelSelect.value);
+    setpieces = l?.setpieces ?? [];
+    if (l) {
+      seed = l.seed;
+      seedInput.value = String(seed);
+      for (const [key, p] of Object.entries(l.params)) {
+        params[key] = p.value;
+        const input = sliders.querySelector<HTMLInputElement>(`[data-param="${key}"]`);
+        if (input) {
+          input.value = String(p.value);
+          if (input.nextElementSibling) input.nextElementSibling.textContent = String(p.value);
+        }
+      }
+    }
+    rebuild();
+  });
+
   rebuild();
 
   root.replaceChildren(
@@ -118,8 +147,8 @@ export function mountGenerator(root: HTMLElement): () => void {
       h(
         'aside',
         { class: 'controls' },
-        panel('Seed', h('div', { class: 'row' }, seedInput, randomize)),
-        panel('Params', paramSliders(params, rebuild)),
+        panel('Seed', h('div', { class: 'row' }, seedInput, randomize), h('label', { class: 'row' }, h('span', {}, 'Level'), levelSelect)),
+        panel('Params', sliders),
         panel('Features', featureToggles(toggles, rebuild)),
         panel(
           'Reveal',
@@ -146,7 +175,7 @@ export function mountGenerator(root: HTMLElement): () => void {
     renderer.draw(world, { frontierX: frontier.done ? undefined : frontier.x, art: artView(bp) });
     if (frame++ % 10 === 0) {
       readout.update(scan(world));
-      status.textContent = `seed ${seed} · tick ${world.tick} · frontier ${frontier.x}/${bp.w} · strokes ${bp.registry.strokes.size}`;
+      status.textContent = `seed ${seed} · tick ${world.tick} · frontier ${frontier.x}/${bp.w} · objects ${world.objects.size}/${bp.registry.strokes.size}`;
     }
   });
   return stop;

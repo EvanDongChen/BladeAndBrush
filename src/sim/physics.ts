@@ -110,6 +110,9 @@ export function windOf(world: World): number {
   return Math.max(-1, Math.min(1, world.params.wind ?? 0));
 }
 
+/** Wind up to this strength (the default breeze is 0.3) only moves clouds, smoke and rain; past it, it pushes water and creatures. */
+export const BREEZE = 0.35;
+
 /** The wind's vertical part, -1 (an updraft, blowing up) to 1 (a downdraft). Lifts or presses water and villagers. */
 export function windYOf(world: World): number {
   return Math.max(-1, Math.min(1, world.params.windY ?? 0));

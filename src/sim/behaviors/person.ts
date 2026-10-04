@@ -1,5 +1,5 @@
 import type { World } from '../../core/world';
-import { gravityOf, windOf, windYOf } from '../physics';
+import { BREEZE, gravityOf, windOf, windYOf } from '../physics';
 import { PERSON } from '../elements/person';
 import {
   canPose,
@@ -7,6 +7,7 @@ import {
   defineCreature,
   flee,
   groundedAt,
+  nudge,
   relocate,
   scanFire,
   type Creature,
@@ -59,9 +60,6 @@ const STRIDE: Pixel[] = [...BODY, [-1, 1, LEG], [1, 1, LEG]];
 const TOGETHER: Pixel[] = [...BODY, [0, 1, LEG]];
 const IDLE = 2;
 
-/** Wind above the default breeze starts to shove villagers. */
-const BREEZE = 0.35;
-
 /**
  * Fall: one cell per tick at the default gravity, faster when gravity is turned up. At zero
  * gravity villagers float slowly up; below zero they fly up, faster the lower it goes.
@@ -75,17 +73,17 @@ function fallPerson(world: World, def: CreatureDef, c: Creature): void {
     }
   } else if (g < 0) {
     const steps = Math.max(1, Math.round(-g / 2));
-    for (let k = 0; k < steps; k++) if (!relocate(world, def, c, 0, -1)) break;
+    for (let k = 0; k < steps; k++) if (!nudge(world, def, c, 0, -1)) break;
   } else if (world.tick % 3 === 0) {
-    relocate(world, def, c, 0, -1);
+    nudge(world, def, c, 0, -1);
   }
   blow(world, def, c, true);
 }
 
 /**
- * The wind shoves villagers downwind (and up or down with an updraft or downdraft): up to a cell a tick in a gale, faster in the air than on
- * the ground. On the ground they are pushed up small steps, and a gale now and then lifts them
- * off their feet.
+ * The wind shoves villagers downwind (and up or down with an updraft or downdraft): up to a cell
+ * a tick in a gale, faster in the air than on the ground. On the ground they are pushed up small
+ * steps, and a gale now and then lifts them off their feet. Pushes stop short of the edges.
  */
 function blow(world: World, def: CreatureDef, c: Creature, airborne: boolean): void {
   // up or down: an updraft lifts them (two cells a tick at full, so it beats normal gravity), a downdraft drags them down
@@ -95,7 +93,7 @@ function blow(world: World, def: CreatureDef, c: Creature, airborne: boolean): v
     const r = draft / (1 - BREEZE);
     if (wy < 0) {
       if (world.tick % Math.max(1, Math.round(4 * (1 - r))) === 0) {
-        for (let k = r > 0.6 ? 2 : 1; k > 0; k--) if (!relocate(world, def, c, 0, -1)) break;
+        for (let k = r > 0.6 ? 2 : 1; k > 0; k--) if (!nudge(world, def, c, 0, -1)) break;
       }
     } else if (airborne && world.tick % Math.max(1, Math.round(3 * (1 - r))) === 0) relocate(world, def, c, 0, 1);
   }
@@ -105,11 +103,11 @@ function blow(world: World, def: CreatureDef, c: Creature, airborne: boolean): v
   const dx = wind > 0 ? 1 : -1;
   const every = Math.max(1, Math.round((airborne ? 4 : 7) * (1 - gust / (1 - BREEZE))));
   if (world.tick % every !== 0) return;
-  if (relocate(world, def, c, dx, 0)) {
-    if (!airborne && gust > 0.4 && world.tick % 5 === 0) relocate(world, def, c, 0, -1); // swept off their feet
+  if (nudge(world, def, c, dx, 0)) {
+    if (!airborne && gust > 0.4 && world.tick % 5 === 0) nudge(world, def, c, 0, -1); // swept off their feet
     return;
   }
-  if (!airborne) relocate(world, def, c, dx, -1); // shoved up a step
+  if (!airborne) nudge(world, def, c, dx, -1); // shoved up a step
 }
 
 /**

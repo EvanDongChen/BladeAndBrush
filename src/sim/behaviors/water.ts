@@ -1,7 +1,7 @@
 import { registerBehavior } from '../../core/behaviors';
 import { El } from '../../core/elements';
 import type { World } from '../../core/world';
-import { at, BLOCKED, canSink, fall, fallDir, FLAMMABILITY, FREE, K_STATIC, KIND, moveCell, REPLACEABLE, slideDiagonal, windOf, windYOf } from '../physics';
+import { at, BLOCKED, BREEZE, canSink, fall, fallDir, FLAMMABILITY, FREE, K_STATIC, KIND, moveCell, REPLACEABLE, slideDiagonal, windOf, windYOf } from '../physics';
 import { defineTunables } from '../tunables';
 
 export const waterTunables = defineTunables(
@@ -12,9 +12,6 @@ export const waterTunables = defineTunables(
   },
   { dispersion: [1, 12, 1] },
 );
-
-/** Wind above the default breeze starts to push water around. */
-const BREEZE = 0.35;
 
 /**
  * Fall, else slide diagonally down, else flow sideways. The flow direction is kept in vx so a

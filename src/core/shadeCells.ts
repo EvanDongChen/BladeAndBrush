@@ -2,7 +2,7 @@ import { over } from './artCompose';
 import type { ArtView } from './blueprint';
 import { FAR_PLANE, NO_PLANE } from './constants';
 import { El, ELEMENTS, type CellView } from './elements';
-import { FAMILY, RUN, resolveShaders, anyShader, sampleTexture, smoothstep, SHADER, type ShadePx } from './shaders';
+import { FAMILY, RUN, resolveShaders, anyShader, sampleTexture, smoothstep, SHADER, type Shader, type ShadePx } from './shaders';
 import type { World } from './world';
 
 /** A set of square tiles of cells to draw, and where to report the tiles that animate. */
@@ -341,52 +341,72 @@ export function shadeCells(
     const pos = isRun ? runPos[ref] : 0;
     const len = isRun ? Math.max(MIN_RUN, runLen[ref]) : 1;
 
-    const sub = subFor(k);
-    for (let sy = 0; sy < k; sy++) {
-      const fy = sub.f[sy];
-      const rowIdx = (cy * k + sy) * aw + cx * k;
-      // the same for the whole pixel row
-      px.y = cy * k + sy;
-      px.fy = fy;
-      px.depth = len > 1 ? (pos + fy) / len : 0;
-      for (let sx = 0; sx < k; sx++) {
-        const s2 = (sy * k + sx) * 2;
-        const cover = cov[s2 + 1];
-        if (cover <= 0.01) continue;
-        px.x = cx * k + sx;
-        px.fx = sub.f[sx];
-        px.cover = cover;
-        px.v = cov[s2]; // interior reads ~1, an edge ~0.5
-        if (useBase) {
-          // blend the colors of the four nearest cells, weighted by occupancy
-          const s4 = (sy * k + sx) * 4;
-          let wr = 0;
-          let wg = 0;
-          let wb = 0;
-          let wa = 0;
-          let ws = 0;
-          for (let t = 0; t < 4; t++) {
-            const c = col9[sub.cell[s4 + t]];
-            if (c === 0) continue;
-            const wgt = sub.w[s4 + t];
-            wr += wgt * (c & 255);
-            wg += wgt * ((c >>> 8) & 255);
-            wb += wgt * ((c >>> 16) & 255);
-            wa += wgt * (c >>> 24);
-            ws += wgt;
-          }
-          px.base =
-            ws > 0.001
-              ? ((((wa / ws) | 0) << 24) | (((wb / ws) | 0) << 16) | (((wg / ws) | 0) << 8) | ((wr / ws) | 0)) >>> 0
-              : refColor;
+    paintCell(out, sh, cov, subFor(k), k, aw, cx, cy, pos, len, useBase, refColor);
+  }
+}
+
+/**
+ * One cell's k x k art pixels (kept small and separate so V8 can inline the shader call; the
+ * per-cell setup in shadeCells has already filled px and col9).
+ */
+function paintCell(
+  out: Uint32Array,
+  sh: Shader,
+  cov: Float64Array,
+  sub: { f: Float64Array; cell: Uint8Array; w: Float64Array },
+  k: number,
+  aw: number,
+  cx: number,
+  cy: number,
+  pos: number,
+  len: number,
+  useBase: boolean,
+  refColor: number,
+): void {
+  for (let sy = 0; sy < k; sy++) {
+    const fy = sub.f[sy];
+    const rowIdx = (cy * k + sy) * aw + cx * k;
+    // the same for the whole pixel row
+    px.y = cy * k + sy;
+    px.fy = fy;
+    px.depth = len > 1 ? (pos + fy) / len : 0;
+    for (let sx = 0; sx < k; sx++) {
+      const s2 = (sy * k + sx) * 2;
+      const cover = cov[s2 + 1];
+      if (cover <= 0.01) continue;
+      px.x = cx * k + sx;
+      px.fx = sub.f[sx];
+      px.cover = cover;
+      px.v = cov[s2]; // interior reads ~1, an edge ~0.5
+      if (useBase) {
+        // blend the colors of the four nearest cells, weighted by occupancy
+        const s4 = (sy * k + sx) * 4;
+        let wr = 0;
+        let wg = 0;
+        let wb = 0;
+        let wa = 0;
+        let ws = 0;
+        for (let t = 0; t < 4; t++) {
+          const c = col9[sub.cell[s4 + t]];
+          if (c === 0) continue;
+          const wgt = sub.w[s4 + t];
+          wr += wgt * (c & 255);
+          wg += wgt * ((c >>> 8) & 255);
+          wb += wgt * ((c >>> 16) & 255);
+          wa += wgt * (c >>> 24);
+          ws += wgt;
         }
-        const c = sh.shade(px);
-        const a = Math.round((c >>> 24) * cover);
-        if (a <= 0) continue;
-        const col = ((c & 0xffffff) | (a << 24)) >>> 0;
-        const at = rowIdx + sx;
-        out[at] = out[at] === 0 ? col : over(col, out[at]);
+        px.base =
+          ws > 0.001
+            ? ((((wa / ws) | 0) << 24) | (((wb / ws) | 0) << 16) | (((wg / ws) | 0) << 8) | ((wr / ws) | 0)) >>> 0
+            : refColor;
       }
+      const c = sh.shade(px);
+      const a = Math.round((c >>> 24) * cover);
+      if (a <= 0) continue;
+      const col = ((c & 0xffffff) | (a << 24)) >>> 0;
+      const at = rowIdx + sx;
+      out[at] = out[at] === 0 ? col : over(col, out[at]);
     }
   }
 }

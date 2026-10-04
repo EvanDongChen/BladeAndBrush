@@ -14,11 +14,10 @@ const ss = (a: number, b: number, x: number) => {
 };
 const byte = (v: number) => (v < 0 ? 0 : v > 255 ? 255 : v | 0);
 
-// the depth gradient is the same across a pixel row: remember the last one
-let lastT = -1;
-let wr = 0;
-let wg = 0;
-let wb = 0;
+// the depth gradient for a depth t, cached exactly (keyed by t itself): a body has few distinct depths
+const SLOTS = 4096;
+const slotT = new Float64Array(SLOTS).fill(-1);
+const slotC = new Int32Array(SLOTS);
 
 /**
  * Water as an ink painter draws it: ONE wash across the whole body (each vertical run of water is
@@ -34,13 +33,18 @@ registerShader({
   noBase: true,
   shade: (p) => {
     const t = clamp01(p.depth);
-    if (t !== lastT) {
-      lastT = t;
+    const slot = (t * 1048573) & (SLOTS - 1);
+    let wc: number;
+    if (slotT[slot] === t) wc = slotC[slot];
+    else {
       const d = Math.pow(t, 0.85);
-      wr = byte(TOP_R + (BOT_R - TOP_R) * d);
-      wg = byte(TOP_G + (BOT_G - TOP_G) * d);
-      wb = byte(TOP_B + (BOT_B - TOP_B) * d);
+      wc = byte(TOP_R + (BOT_R - TOP_R) * d) | (byte(TOP_G + (BOT_G - TOP_G) * d) << 8) | (byte(TOP_B + (BOT_B - TOP_B) * d) << 16);
+      slotT[slot] = t;
+      slotC[slot] = wc;
     }
+    const wr = wc & 255;
+    const wg = (wc >> 8) & 255;
+    const wb = (wc >> 16) & 255;
     const flow = texture('flow');
     const a = flow[((Math.floor(p.y * 1.5) & 255) << 8) | (Math.floor(p.x * 0.5 + p.tick * 0.8) & 255)] / 255;
     const c = flow[((Math.floor(p.y * 1.2 + 37) & 255) << 8) | (Math.floor(p.x * 0.38 - p.tick * 0.5 + 91) & 255)] / 255;

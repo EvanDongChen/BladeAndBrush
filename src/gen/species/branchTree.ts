@@ -41,17 +41,24 @@ function path(g: GrowCtx, x: number, y: number, len: number, ang: number, bend: 
   return pts;
 }
 
-/** A spray of leaf dabs at a twig end. */
+/**
+ * Foliage at a twig end: a soft clump of overlapping rounded dabs (a dense mass, not separate
+ * strips), darker toward its middle, the way the reference's tree crowns read.
+ */
 function leaves(g: GrowCtx, x: number, y: number, s: number, ang: number): void {
-  for (let j = 0; j < 5; j++) {
-    const d = (j - 2) * s * 0.18;
-    blob(g.paint, x + Math.cos(ang) * d, y + Math.sin(ang) * d - s * 0.08, g.noise, {
-      len: s * g.rng.range(0.28, 0.45),
-      wid: s * g.rng.range(0.1, 0.16),
-      ang: ang + Math.PI / 2 + (g.rng.next() - 0.5) * 0.6,
-      color: ink(g.rng.range(0.45, 0.7), g.ink),
-      noi: 0.5,
-      point: 0.9,
+  const n = 18 + g.rng.int(10);
+  const spread = s * 0.3;
+  for (let j = 0; j < n; j++) {
+    const gx = (g.rng.next() + g.rng.next() + g.rng.next() - 1.5) * spread * 1.4;
+    const gy = (g.rng.next() + g.rng.next() + g.rng.next() - 1.5) * spread * 0.9 - s * 0.05;
+    const len = s * g.rng.range(0.12, 0.22);
+    blob(g.paint, x + gx + Math.cos(ang) * s * 0.06, y + gy, g.noise, {
+      len,
+      wid: len * g.rng.range(0.6, 0.9),
+      ang: g.rng.range(-0.6, 0.6),
+      color: ink(g.rng.range(0.3, 0.5), g.ink),
+      noi: 0.55,
+      point: 0.15,
       owner: g.owner,
       salt: x * 0.01 + j,
     });
@@ -66,8 +73,8 @@ registerSpecies({
   name: 'branchTree',
   grow: (g) => {
     const { x, y, size, rng, noise } = g;
-    const wid = Math.max(g.k * 1.6, size * 0.034);
-    const trunk = path(g, x, y, size, -Math.PI / 2, Math.PI * 0.12, 3, 8);
+    const wid = Math.max(g.k * 1.4, size * 0.026);
+    const trunk = path(g, x, y, size, -Math.PI / 2, Math.PI * 0.16, 4, 6);
     const outline = (poly: [number, number][]) => {
       g.paint.fillPolygon(poly, PAPER, g.owner);
       inkStroke(g.paint, poly.concat([poly[0]]), noise, { wid: g.k * 0.5, color: ink(0.45, g.ink), noi: 0.8, widthFn: () => 1, salt: poly.length });
@@ -78,7 +85,7 @@ registerSpecies({
       const at = trunk[Math.floor(trunk.length * rng.range(0.4, 0.85))];
       const side = b % 2 === 0 ? -1 : 1;
       const ang = -Math.PI / 2 + side * rng.range(0.6, 1.2);
-      const br = path(g, at[0], at[1], size * rng.range(0.25, 0.45), ang, Math.PI * 0.15, 2, 6);
+      const br = path(g, at[0], at[1], size * rng.range(0.25, 0.45), ang, Math.PI * 0.2, 3, 5);
       outline(limb(g, br, wid * 0.5));
       const end = br[br.length - 1];
       twigEnds.push([end[0], end[1], ang]);
@@ -96,7 +103,7 @@ registerSpecies({
     for (const [tx, ty, ang] of twigEnds) {
       const tw = path(g, tx, ty, size * 0.12, ang - Math.PI / 6, 0.3, 2, 4);
       inkStroke(g.paint, tw, noise, { wid: g.k * 0.45, color: ink(0.5, g.ink), noi: 0.4, salt: tx });
-      leaves(g, tw[tw.length - 1][0], tw[tw.length - 1][1], size * 0.22, ang);
+      leaves(g, tw[tw.length - 1][0], tw[tw.length - 1][1], size * 0.34, ang);
     }
     return ownedBox(g);
   },

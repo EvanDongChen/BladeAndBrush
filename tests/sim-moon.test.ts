@@ -30,7 +30,7 @@ describe('the moon', () => {
     expect(rowsOf(world, MOON).top).toBe(5);
   });
 
-  it('keeps its main body up when only a chip is knocked off the edge, and the chip falls', () => {
+  it('falls entirely even when the cut only separates a small sliver', () => {
     const world = moonWorld();
     const before = count(world, MOON);
     clear(world, 55, 4, 55, 26); // a thin cut that leaves a sliver on the right edge
@@ -38,9 +38,8 @@ describe('the moon', () => {
     markUnsupported(world);
     run(world, 300);
     expect(left).toBeLessThan(before);
-    expect(inSky(world)).toBeGreaterThan(before / 2); // the main body is still up
+    expect(inSky(world)).toBe(0); // the big piece and the sliver both fell
     expect(count(world, MOON)).toBe(left); // nothing else was lost
-    expect(rowsOf(world, MOON).bottom).toBeGreaterThan(40); // the chip landed on the floor
   });
 
   it('comes loose and falls, every piece, once it is cut in two', () => {

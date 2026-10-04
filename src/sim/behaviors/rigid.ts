@@ -177,8 +177,6 @@ export function launchBody(
 let stack = new Int32Array(0);
 /** How far (cells) loose generated material looks for anchored material of its own object (Flag.CLING). */
 const CLING_REACH = 6;
-/** A piece of hanging material (the moon) smaller than this share (percent) of it is only a chip: it falls alone and does not count as splitting the rest. */
-const HANG_CHIP = 10;
 /** Per cell during detection: 0 = not free solid, 1 = free solid not yet visited, 2 = visited. */
 let cellState = new Uint8Array(0);
 
@@ -265,8 +263,8 @@ function detect(world: World, s: State): void {
     }
   }
 
-  // 1b. hanging material (the moon) stays up while it is one piece. Cut into two or more real pieces,
-  //     all of them come loose and fall; a chip knocked off the edge just falls by itself
+  // 1b. hanging material (the moon) stays up while it is one piece. Cut into two or more pieces,
+  //     however small, every piece comes loose and falls
   const hangingParts = new Map<number, number[][]>();
   for (let i = 0; i < size; i++) {
     if (cell[i] !== 1 || !HANGING[el[i]]) continue;
@@ -278,11 +276,7 @@ function detect(world: World, s: State): void {
   }
   for (const parts of hangingParts.values()) {
     if (parts.length < 2) continue;
-    let total = 0;
-    for (const part of parts) total += part.length;
-    const real = parts.filter((part) => part.length * 100 >= total * HANG_CHIP);
-    const keep = real.length === 1 ? real[0] : null;
-    for (const part of parts) if (part !== keep) for (const i of part) cell[i] = 1;
+    for (const part of parts) for (const i of part) cell[i] = 1;
   }
 
   // 2. every other solid component becomes a falling body

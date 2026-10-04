@@ -93,8 +93,8 @@ function hatchCloud(g: CanvasRenderingContext2D, c: Cloud, base: { y: number; x0
  * One cloud as an ink painter draws it (like a brush drawing of billowing cumulus): big rounded
  * lobes joined into one scalloped silhouette that is cut off flat along a base line, an ink outline
  * of varying weight along the OUTSIDE of the lobes only (where they overlap there is no line, just a
- * cusp), the base itself drawn as a line rather than left as lobes, a weak vertical shading that
- * deepens towards the base, a few sparse wavy strokes hatched across the lower half the way flat land
+ * cusp), the base itself drawn as a line rather than left as lobes, shading from white at the crown
+ * to mid grey at the base, a few sparse wavy strokes hatched across the lower half the way flat land
  * and water are drawn elsewhere, and a few thin lines trailing out past the ends. The paper tone
  * itself greys as the cloud fills with water.
  */
@@ -119,11 +119,13 @@ function drawCloud(g: CanvasRenderingContext2D, c: Cloud, ox: number): void {
   const boxH = base.y - base.top;
   g.fillStyle = `rgba(${paper[0]}, ${paper[1]}, ${paper[2]}, 0.97)`;
   g.fillRect(boxX, boxY, boxW, boxH);
-  // A slight vertical shading, deeper at the base, so the mass has some depth. Kept weak and
-  // vertical on purpose: a wash shaped like the cloud turns back into a blob or a set of circles.
+  // Shading from white at the crown to mid grey at the base, so the mass has depth. It is a straight
+  // vertical ramp rather than a wash shaped like the cloud, which would turn back into a blob.
+  const deep = 0.6 + 0.12 * wet;
   const shade = g.createLinearGradient(0, base.top, 0, base.y);
-  shade.addColorStop(0, `rgba(140, 143, 150, ${0.02 + 0.02 * wet})`);
-  shade.addColorStop(1, `rgba(140, 143, 150, ${0.1 + 0.07 * wet})`);
+  shade.addColorStop(0, 'rgba(112, 116, 126, 0)');
+  shade.addColorStop(0.62, `rgba(112, 116, 126, ${deep * 0.38})`);
+  shade.addColorStop(1, `rgba(112, 116, 126, ${deep})`);
   g.fillStyle = shade;
   g.fillRect(boxX, boxY, boxW, boxH);
   hatchCloud(g, c, base, wet);

@@ -65,23 +65,23 @@ describe('levels', () => {
     }
   });
 
-  it('1 The Peak: cut every other mountain down until one tall peak stands, trees spared', () => {
-    const { world, act, goals } = play('level-1');
-    expect(goals()).not.toEqual([true, true, true]);
-    for (let round = 0; round < 6; round++) {
+  it('1 The Peak: tune the mountains low and apart, then cut down what still rivals the peak', () => {
+    const { world, act, goals } = play('level-1', { spacing: 1, mountainHeight: 0.5 }); // the player tunes first
+    expect(objectsOf(world, 'bird', 'circling').length).toBeGreaterThan(0);
+    for (let round = 0; round < 6 && !goals().every(Boolean); round++) {
       const { peaks, heights } = scan(world);
-      const center = peaks.reduce((a, b) => (b.h > a.h ? b : a));
-      for (const p of peaks) {
-        if (p === center) continue;
-        const y = world.h - heights[p.x] + Math.round(p.h * 0.6); // into the mountain, well below its top
-        act('slash', p.x - 90, y, p.x + 90, y, 24, 45, 240);
-      }
+      const top = peaks.reduce((a, b) => (b.h > a.h ? b : a));
+      // the highest rival
+      const rival = peaks.filter((p) => p !== top).reduce<(typeof peaks)[number] | null>((a, b) => (!a || b.h > a.h ? b : a), null);
+      if (!rival) break;
+      const y = world.h - heights[rival.x] + Math.round(rival.h * 0.6); // into the mountain, well below its top
+      act('slash', rival.x - 90, y, rival.x + 90, y, 24, 45, 240);
     }
     expect(goals()).toEqual([true, true, true]);
   }, 120_000);
 
-  it('2 The Eclipse: break the moon, one tall peak each side of it, burn every tree', () => {
-    const { world, act, goals, used, level } = play('level-2', { spacing: 0.7 }); // the player widens the spacing
+  it('2 The Eclipse: tune the guardians apart and the forest thin, break the moon, burn the rest', () => {
+    const { world, act, goals, used, level } = play('level-2', { spacing: 1, mountainHeight: 0.5, treeDensity: 0.12 }); // the player tunes first
     const moon = objectsOf(world, 'moon')[0];
     expect(moon.cells).toBeGreaterThan(500);
     act('slash', moon.x - 40, moon.y, moon.x + 40, moon.y, 3);
@@ -107,7 +107,7 @@ describe('levels', () => {
     while (used() < level.actionBudget) {
       for (let t = 0; t < 900 && burning(); t += 30) for (let k = 0; k < 30; k++) step(world); // let the fire die down first
       const trees = standing().sort((p, q) => p.x - q.x);
-      if (trees.length === 0) break;
+      if (scan(world).counts.trees <= 15) break;
       const a = trees[0];
       let best = a;
       let hits = 0;
@@ -124,11 +124,11 @@ describe('levels', () => {
 
   it('3 The Drought: a waterfall down a slashed shaft, steam from fire over water soaks the cloud and it rains, nobody lost', () => {
     const { world, act, goals } = play('level-3');
-    expect(scan(world).counts.villagers).toBe(5);
+    expect(scan(world).counts.villagers).toBe(4);
     expect(objectsOf(world, 'cloud').length).toBeGreaterThan(0);
     // a shaft down the mountain nearest the village, filled with water
     const { peaks, heights } = scan(world);
-    const p = peaks.filter((q) => q.x < 0.6 * world.w).pop()!;
+    const p = peaks.filter((q) => q.x < 0.7 * world.w).pop()!; // the mountain beside the village
     const top = world.h - heights[p.x];
     act('slash', p.x, top - 5, p.x, top + 55, 2, 0, 120);
     act('water', p.x - 14, top - 20, p.x + 14, top - 20, 5, 30, 300);

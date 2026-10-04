@@ -15,6 +15,7 @@ function drawCloud(g: CanvasRenderingContext2D, c: Cloud, ox: number): void {
   const shade = [214 - 120 * wet, 214 - 116 * wet, 212 - 108 * wet].map(Math.round);
   const puff = (x: number, y: number, r: number, alpha: number) => {
     const grad = g.createRadialGradient(x, y - r * 0.25, r * 0.1, x, y, r);
+    if (!grad) return; // a canvas without gradients (headless tests)
     grad.addColorStop(0, `rgba(${lit[0]}, ${lit[1]}, ${lit[2]}, ${alpha})`);
     grad.addColorStop(0.6, `rgba(${shade[0]}, ${shade[1]}, ${shade[2]}, ${alpha * 0.75})`);
     grad.addColorStop(1, `rgba(${shade[0]}, ${shade[1]}, ${shade[2]}, 0)`);

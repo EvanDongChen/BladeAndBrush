@@ -74,7 +74,7 @@ export function makePlan(seed: number, params: GenParams, u: Units, hints?: Plan
   const forced: number[] = [];
   for (const f of hints?.mountains ?? []) {
     const flat = f.kind === 'flat';
-    const h = Math.max(0, Math.min(1.5, f.height ?? 1));
+    const h = Math.max(0, Math.min(2.5, f.height ?? 1));
     const y = (f.y ?? (flat ? 0.88 : 0.9)) * H;
     const x = f.x * W;
     const halfWidth = f.halfWidth !== undefined ? f.halfWidth * W : flat ? 340 : 250;

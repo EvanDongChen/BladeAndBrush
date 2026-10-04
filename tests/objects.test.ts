@@ -64,6 +64,18 @@ describe('object tracking: cells keep their object id', () => {
     expect(idx.alive(o)).toBe(false);
   });
 
+  it('an invulnerable creature re-forms instead of dying', () => {
+    const w = boxWorld(120, 40);
+    const o = track(w, 9, 'villager', PERSON, ['invulnerable']);
+    expect(placers.get(PERSON)!.place(w, 40, 36, { obj: 9, variant: 2, face: 1 })).toBe(true);
+    for (let k = 0; k < 3; k++) {
+      const i = indexObjects(w).firstCell(9);
+      w.set(i % w.w, (i / w.w) | 0, El.EMPTY); // cut a piece out of it, anchor or not
+      run(w, 3);
+      expect(indexObjects(w).alive(o)).toBe(true);
+    }
+  });
+
   it('rain credits the object it lands on, through a puddle', () => {
     const w = boxWorld();
     const roof = track(w, 4, 'hut', 0, ['village']);

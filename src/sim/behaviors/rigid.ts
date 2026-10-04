@@ -214,6 +214,30 @@ function detect(world: World, s: State): void {
   //    ground (Flag.FOOT: the painting has no ground strip), is anchored
   for (let i = (h - 1) * w; i < size; i++) if (cell[i] === 1) flood(i, null);
   for (let i = 0; i < size; i++) if (cell[i] === 1 && flags[i] & Flag.FOOT) flood(i, null);
+  //    and so is generated material that clings (Flag.CLING) to anchored material within 2 cells
+  for (let changed = true; changed; ) {
+    changed = false;
+    for (let i = 0; i < size; i++) {
+      if (cell[i] !== 1 || !(flags[i] & Flag.CLING)) continue;
+      const x = i % w;
+      const y = (i / w) | 0;
+      let held = false;
+      for (let dy = -2; dy <= 2 && !held; dy++) {
+        for (let dx = -2; dx <= 2; dx++) {
+          const nx = x + dx;
+          const ny = y + dy;
+          if (nx >= 0 && ny >= 0 && nx < w && ny < h && cell[ny * w + nx] === 2) {
+            held = true;
+            break;
+          }
+        }
+      }
+      if (held) {
+        flood(i, null);
+        changed = true;
+      }
+    }
+  }
 
   // 2. every other solid component becomes a falling body
   for (let i = 0; i < size; i++) {
@@ -701,6 +725,9 @@ function moveBody(world: World, s: State, b: Body): boolean {
 
   if (shifts > 0) b.stuck = 0;
   const tipping = rotateBody(world, s, b) && b.stuck < 8; // wedged tight: give up and settle
+  // Wedged: each blocked turn leaves a little spin (tip adds, the bounce flips it), so it would
+  // never reach exactly 0 and the piece would hang in the air as a body forever. Stop it.
+  if (b.stuck >= 8) b.omega = 0;
 
   if (!tipping && b.omega === 0 && Math.abs(b.vx) < 0.3 && b.vy <= rigidTunables.gravity && supported(world, s, b)) {
     // resting on a piece that may still move away: re-check support soon so it can't end up floating

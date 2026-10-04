@@ -108,12 +108,13 @@ function markFeet(bp: Blueprint): void {
 
 /**
  * Bits of the painting that are not joined to any foot as generated (a canopy the rasterizer left
- * apart from its trunk, a sliver of rock) are part of the picture, not loose: mark them as feet too,
- * so only what the player cuts or burns free ever falls.
+ * a cell apart from its trunk, a sliver of rock) are part of the picture, not loose: mark them
+ * bp.cling, so they hold on to whatever is next to them and only fall once that is cut or burnt away.
  */
 function anchorLoose(bp: Blueprint): void {
   const foot = bp.foot;
   if (!foot) return;
+  const cling = (bp.cling = new Uint8Array(bp.w * bp.h));
   const { w, h, el } = bp;
   const size = w * h;
   const seen = new Uint8Array(size);
@@ -138,5 +139,5 @@ function anchorLoose(bp: Blueprint): void {
   };
   for (let i = 0; i < size; i++) if (foot[i] || i >= (h - 1) * w) visit(i);
   flood();
-  for (let i = 0; i < size; i++) if (solid(i) && !seen[i]) foot[i] = 1;
+  for (let i = 0; i < size; i++) if (solid(i) && !seen[i]) cling[i] = 1;
 }

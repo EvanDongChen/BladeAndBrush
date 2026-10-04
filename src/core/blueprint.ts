@@ -33,6 +33,8 @@ export interface Blueprint {
   bg?: Uint8Array;
   /** 1 at the bottom cell of every column of every mountain and plateau (any plane): revealed as Flag.FOOT. */
   foot?: Uint8Array;
+  /** 1 on generated material not joined to any foot (revealed as Flag.CLING). */
+  cling?: Uint8Array;
   /**
    * High-res art (section 3.8): k x k art pixels per cell, one buffer per plane. A cell's block is
    * shown only while the cell still matches the blueprint, so every visible pixel is backed by a cell.
@@ -177,6 +179,7 @@ export function hashBlueprint(bp: Blueprint): number {
   for (const b of bp.behind ?? []) h.bytes(b.el).u16(b.owner).bytes(b.plane);
   if (bp.bg) h.bytes(bp.bg);
   if (bp.foot) h.bytes(bp.foot);
+  if (bp.cling) h.bytes(bp.cling);
   if (bp.art) {
     h.int(bp.art.k).u32(bp.art.bg);
     for (const p of bp.art.planes) h.u32(p);

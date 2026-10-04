@@ -20,9 +20,9 @@ const R = SIZE / 2 - 10; // radius of the full-strength rim, in CSS pixels
 const NAMES = ['E', 'SE', 'S', 'SW', 'W', 'NW', 'N', 'NE'];
 
 export function windPad(initial: { x: number; y: number }, onChange: (x: number, y: number) => void): WindPad {
-  const canvas = h('canvas', { class: 'wind-dial', tabindex: 0, role: 'slider', 'aria-label': 'Wind direction and strength' });
-  const readout = h('output', { class: 'wind-readout' });
-  const node = h('div', { class: 'wind-pad' }, canvas, readout);
+  const canvas = h('canvas', { class: 'nature-dial wind-dial', tabindex: 0, role: 'slider', 'aria-label': 'Wind direction and strength' });
+  const readout = h('output', { class: 'nature-readout' });
+  const node = h('div', { class: 'nature-pad' }, h('span', { class: 'nature-title' }, 'Wind'), canvas, readout);
   const dpr = Math.min(2, window.devicePixelRatio || 1);
   canvas.width = SIZE * dpr;
   canvas.height = SIZE * dpr;

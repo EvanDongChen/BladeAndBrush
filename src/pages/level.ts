@@ -27,6 +27,7 @@ import { generateAsync } from './genClient';
 import { arsenal } from './arsenal';
 import { nameMenu } from './nameMenu';
 import { noiseGraph } from './noiseGraph';
+import { gravityPad } from './gravityPad';
 import { windPad } from './windPad';
 import { brushCursor, button, displayScale, fixedPanel, h, handscroll, panel, seal, soundToggle, startLoop, toCell } from './ui';
 
@@ -516,25 +517,14 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
     params[key] = v;
     world.params[key] = v; // live: behaviors read it every tick
   };
-  const physicsRows = h('div', { class: 'rows physics' });
+  // gravity gauge and wind compass side by side: drag them to change how things move
   const gravityDef = paramDefs.get('gravity');
-  if (gravityDef) {
-    const fmt = (v: number) => (v === 0 ? 'float' : `${v < 0 ? '↑' : '↓'} ${Math.abs(v)}`);
-    const out = h('output', {}, fmt(params.gravity));
-    // gravity goes below zero here: 0 is weightless, negative turns it over so things fly up
-    const input = h('input', { type: 'range', min: -6, max: gravityDef.max, step: gravityDef.step, value: params.gravity, 'aria-label': gravityDef.label });
-    input.addEventListener('input', () => {
-      setPhysics('gravity', Number(input.value));
-      out.textContent = fmt(params.gravity);
-    });
-    physicsRows.append(h('label', { class: 'row' }, h('span', {}, gravityDef.label), input, out));
-  }
-  // the wind compass: drag the arrow to set where the wind blows and how hard
+  const gravity = gravityPad(params.gravity, { min: -6, max: gravityDef?.max ?? 8, normal: gravityDef?.default ?? 2 }, (v) => setPhysics('gravity', v));
   const wind = windPad({ x: params.wind ?? 0, y: params.windY ?? 0 }, (x, y) => {
     setPhysics('wind', x);
     setPhysics('windY', y);
   });
-  physicsRows.append(h('div', { class: 'row wind-row' }, h('span', {}, 'Wind'), wind.node));
+  const physicsRows = h('div', { class: 'nature' }, gravity.node, wind.node);
 
   stage.append(frame, status, complete.node);
   root.replaceChildren(
@@ -577,6 +567,7 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
         renderer.inCells((g) => drawAim(g, ability, aim, radius, chargeOf(world.tick - pressedTick)));
       }
       showActions();
+      gravity.frame(dt);
       wind.frame(dt);
       if (frames++ % 10 === 0 && frontier.done && !pending) queueCheck();
       bar.setSpent(phase !== 'play');

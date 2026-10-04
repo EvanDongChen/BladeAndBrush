@@ -1274,41 +1274,48 @@ input[type='number'] {
   color: var(--ink-soft);
 }
 
-.controls .wind-row {
-  align-items: center;
-}
-
-.wind-pad {
+.nature {
   display: flex;
-  align-items: center;
-  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 28px;
+  margin-bottom: 6px;
 }
 
-.wind-dial {
-  cursor: crosshair;
+.nature-pad {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.nature-title {
+  font: 600 13px var(--font-serif);
+  color: var(--ink-soft);
+}
+
+.nature-dial {
+  cursor: ns-resize;
   touch-action: none;
-  border-radius: 50%;
+  border-radius: 6px;
   background: rgba(246, 240, 225, 0.6);
   box-shadow: inset 0 0 0 1px var(--line);
 }
 
-.wind-dial:focus-visible {
+.nature-dial.wind-dial {
+  cursor: crosshair;
+  border-radius: 50%;
+}
+
+.nature-dial:focus-visible {
   outline: 2px solid var(--seal);
   outline-offset: 2px;
 }
 
-.controls .physics .wind-readout {
-  min-width: 0;
-  text-align: left;
-  white-space: nowrap;
+.nature-readout {
   font: 13px var(--font-serif);
   color: var(--ink-soft);
-  font-variant-numeric: tabular-nums;
-}
-
-.controls .physics output {
-  min-width: 4.5em;
-  text-align: right;
+  white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
 

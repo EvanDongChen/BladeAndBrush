@@ -18,5 +18,5 @@ registerElement({
   color: (c) => shade(236, 226, 196, c.aux),
 });
 
-/** A faint cool light around it. */
-registerGlow({ el: MOON, r: 246, g: 240, b: 214, near: 0.12, far: 0.1 });
+/** A barely-there light: a big disc of cells adds up fast (16 cells per glow block), so these are tiny. */
+registerGlow({ el: MOON, r: 240, g: 238, b: 226, near: 0.01, far: 0.004 });

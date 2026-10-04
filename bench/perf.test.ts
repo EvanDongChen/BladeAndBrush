@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterAll, describe, expect, it } from 'vitest';
 import '../src/pages/bootstrap';
 import { compose, prepareArt } from '../src/core/artCompose';
 import { ArtFrame } from '../src/core/artFrame';
@@ -206,6 +206,8 @@ describe('benchmarks', () => {
     for (let d = 0; d < w.behindEl.length; d++) cellsBytes += w.behindEl[d].byteLength + w.behindOwner[d].byteLength + w.behindPlane[d].byteLength;
     value('memory: World arrays', 'MB', cellsBytes / MB);
     expect(art).toBeGreaterThan(0);
-    finish();
   });
+
+  // after every test, so a filtered run (-t) still prints its rows
+  afterAll(finish);
 });

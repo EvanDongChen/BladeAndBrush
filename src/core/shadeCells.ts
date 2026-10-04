@@ -83,6 +83,39 @@ function tapsFor(k: number): { b: Int8Array; w: Float32Array } {
   return t;
 }
 
+/**
+ * Coverage tables: the B-spline blend `v` and the soft coverage of every sub-pixel depend only on
+ * the 5x5 occupancy pattern (25 bits) and k, so each pattern is computed once. Entry s*2 = v,
+ * s*2+1 = cover, for sub-pixel s = sy*k + sx.
+ */
+const coverCache = new Map<number, Map<number, Float64Array>>();
+function coverFor(k: number, key: number): Float64Array {
+  let byKey = coverCache.get(k);
+  if (!byKey) coverCache.set(k, (byKey = new Map()));
+  let tab = byKey.get(key);
+  if (tab) return tab;
+  if (byKey.size > 65536) byKey.clear(); // a pathological scene: start over rather than grow forever
+  const T = tapsFor(k);
+  tab = new Float64Array(k * k * 2);
+  for (let sy = 0; sy < k; sy++) {
+    const by = T.b[sy];
+    for (let sx = 0; sx < k; sx++) {
+      const bx = T.b[sx];
+      let v = 0;
+      for (let j = 0; j < 4; j++) {
+        const row = (by + 1 + j) * 5; // tap cell offset by-1+j, +2 for the array
+        let rs = 0;
+        for (let i2 = 0; i2 < 4; i2++) rs += T.w[sx * 4 + i2] * ((key >>> (row + bx + 1 + i2)) & 1);
+        v += T.w[sy * 4 + j] * rs;
+      }
+      tab[(sy * k + sx) * 2] = v;
+      tab[(sy * k + sx) * 2 + 1] = smoothstep(0.22, 0.56, v);
+    }
+  }
+  byKey.set(key, tab);
+  return tab;
+}
+
 /** For `run` shaders: where each cell sits in its vertical run of the same family. */
 function computeRuns(world: World): boolean {
   const { w, h, el } = world;
@@ -152,7 +185,6 @@ export function shadeCells(
   const haveRuns = computeRuns(world);
   px.tick = world.tick;
   cellView.tick = world.tick;
-  const T = tapsFor(k);
 
   // pass A: queue every shaded cell that needs drawing, and its 8 neighbours (for the spill)
   let n = 0;
@@ -238,6 +270,7 @@ export function shadeCells(
 
     const fam = FAMILY[e];
     // 5x5 occupancy of this family (the left, right and bottom world edges are walls)
+    let key = 0;
     for (let oy = -2; oy <= 2; oy++) {
       for (let ox = -2; ox <= 2; ox++) {
         const nx = cx + ox;
@@ -250,8 +283,10 @@ export function shadeCells(
           o = SHADER[ne] && FAMILY[ne] === fam ? 1 : 0;
         }
         occ5[(oy + 2) * 5 + ox + 2] = o;
+        key |= o << ((oy + 2) * 5 + ox + 2);
       }
     }
+    const cov = coverFor(k, key);
     const selfOcc = occ5[12];
     const useBase = !sh.noBase;
     if (useBase) {
@@ -278,23 +313,14 @@ export function shadeCells(
     for (let sy = 0; sy < k; sy++) {
       const fy = (sy + 0.5) / k;
       const uy = fy - 0.5;
-      const by = T.b[sy];
       const dyDir = uy < 0 ? -1 : 1;
       const ay = Math.abs(uy);
       const rowIdx = (cy * k + sy) * aw + cx * k;
       for (let sx = 0; sx < k; sx++) {
         const fx = (sx + 0.5) / k;
         const ux = fx - 0.5;
-        const bx = T.b[sx];
-        // cubic B-spline coverage over the 4x4 cells around this pixel
-        let v = 0;
-        for (let j = 0; j < 4; j++) {
-          const row = (by + 1 + j) * 5; // tap cell offset by-1+j, +2 for the array
-          let rs = 0;
-          for (let i2 = 0; i2 < 4; i2++) rs += T.w[sx * 4 + i2] * occ5[row + bx + 1 + i2];
-          v += T.w[sy * 4 + j] * rs;
-        }
-        const cover = smoothstep(0.22, 0.56, v);
+        const v = cov[(sy * k + sx) * 2];
+        const cover = cov[(sy * k + sx) * 2 + 1];
         if (cover <= 0.01) continue;
         px.x = cx * k + sx;
         px.y = cy * k + sy;

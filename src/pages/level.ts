@@ -15,7 +15,8 @@ import { aimEnd, chargeOf, drawAim, isLineAbility } from '../sim/lineAbility';
 import { step } from '../sim/step';
 import { tunables } from '../sim/tunables';
 import { Fx } from './fx';
-import { abilityBar, button, h, handscroll, panel, seal, startLoop, toCell } from './ui';
+import { audio } from '../audio/engine';
+import { abilityBar, button, h, handscroll, panel, seal, soundToggle, startLoop, toCell } from './ui';
 
 /** Header for players: no links to the workshops. */
 function levelHeader(sub: string): HTMLElement {
@@ -26,7 +27,7 @@ function levelHeader(sub: string): HTMLElement {
     h('span', { class: 'brand-name' }, 'Blade & Brush'),
     h('span', { class: 'brand-sub' }, sub),
   );
-  return h('header', { class: 'top' }, h('h1', {}, brand), h('nav', {}, h('a', { href: './index.html' }, 'All levels')));
+  return h('header', { class: 'top' }, h('h1', {}, brand), h('nav', {}, soundToggle(), h('a', { href: './index.html' }, 'All levels')));
 }
 
 /**
@@ -62,6 +63,7 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
     won = false;
     complete?.close();
     fx.attach(world);
+    audio.attach(world, level.seed); // the music reads this painting
     clock.reset();
   }
 
@@ -71,6 +73,7 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
     step(world);
   });
   let complete: ReturnType<typeof handscroll> | undefined;
+  audio.armOnGesture();
   regenerate();
 
   // ---- pointer input -> action driver ----
@@ -162,6 +165,7 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
     }
     if (all && changed() && !won) {
       won = true;
+      world.events.emit('levelWin', { levelId: level.id });
       complete!.node.hidden = false;
       requestAnimationFrame(() => complete!.open());
     }
@@ -227,6 +231,11 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
     (dt) => {
       renderer.draw(world, { cursor, frontierX: frontier.done ? undefined : frontier.x, art: bp.art });
       fx.draw(renderer.g);
+      const at = audio.playhead(); // a faint ink line follows the music across the scroll
+      if (at !== null) {
+        renderer.g.fillStyle = 'rgba(38, 34, 30, 0.3)';
+        renderer.g.fillRect(Math.floor(at * level.dims.w), 0, 1, level.dims.h);
+      }
       if (down && cursor && isLineAbility(ability)) {
         const aim = aimEnd(pressedAt.x, pressedAt.y, cursor.x, cursor.y);
         drawAim(renderer.g, ability, aim, radius, chargeOf(world.tick - pressedTick));
@@ -245,6 +254,7 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
   return () => {
     stop();
     fx.detach();
+    audio.detach();
   };
 }
 

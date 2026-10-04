@@ -1066,3 +1066,14 @@ input[type='number'] {
 .stage .handscroll {
   margin: 26px 0 8px;
 }
+
+.sound-toggle {
+  padding: 1px 8px;
+  font: 400 18px/1.4 var(--font-brush);
+  border-color: var(--line);
+  background: transparent;
+}
+
+header.top nav .sound-toggle {
+  margin-right: 10px;
+}

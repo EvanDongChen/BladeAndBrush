@@ -56,6 +56,7 @@ function hero(): { node: HTMLElement; destroy(): void } {
         'div',
         { class: 'hero-actions' },
         h('a', { class: 'btn btn-seal', href: './level.html?level=level-1' }, h('span', { class: 'btn-glyph', 'aria-hidden': 'true' }, '始'), 'Begin the first scroll'),
+        h('a', { class: 'btn btn-ghost', href: './tutorial.html' }, h('span', { class: 'btn-glyph', 'aria-hidden': 'true' }, '習'), 'Tutorial'),
         h('a', { class: 'btn btn-ghost', href: '#how' }, 'How it plays'),
       ),
     ),

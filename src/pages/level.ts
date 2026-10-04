@@ -16,7 +16,6 @@ import { step } from '../sim/step';
 import { tunables } from '../sim/tunables';
 import { Fx } from './fx';
 import { arsenal } from './arsenal';
-import { SlashFx } from './slashFx';
 import { button, h, handscroll, panel, seal, startLoop, toCell } from './ui';
 
 /** Header for players: no links to the workshops. */
@@ -68,9 +67,7 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
   const stamp = h('div', { class: 'stamp', 'aria-hidden': 'true' }, seal('完成', 'stamp-seal'));
   let winTimer = 0;
   const mount = h('span', { class: 'mount', 'aria-hidden': 'true' }); // the silk the painting is mounted on
-  const swordLayer = h('div', { class: 'slash-layer', 'aria-hidden': 'true' });
-  const slashFx = new SlashFx(swordLayer, canvas, level.dims.w);
-  const frame = h('div', { class: 'frame' }, mount, canvas, swordLayer, hudTool, banner, stamp, rollLeft, rollLead);
+  const frame = h('div', { class: 'frame' }, mount, canvas, hudTool, banner, stamp, rollLeft, rollLead);
   let tip = '';
 
   function regenerate(): void {
@@ -85,7 +82,6 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
     complete?.close();
     banner.hidden = true;
     fx.attach(world);
-    slashFx.attach(world);
     clock.reset();
   }
 
@@ -127,10 +123,7 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
     driver.move({ ...p, speed });
   });
   const release = () => {
-    if (down) {
-      driver.end();
-      slashFx.release();
-    }
+    if (down) driver.end();
     down = false;
   };
   canvas.addEventListener('pointerup', release);
@@ -293,7 +286,6 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
       if (down && cursor && isLineAbility(ability)) {
         const aim = aimEnd(pressedAt.x, pressedAt.y, cursor.x, cursor.y);
         drawAim(renderer.g, ability, aim, radius, chargeOf(world.tick - pressedTick));
-        slashFx.aim(ability, aim.x0, aim.y0, aim.x1, aim.y1);
       }
       showInk();
       if (frames++ % 10 === 0 && frontier.done) checkGoals();
@@ -319,7 +311,6 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
   return () => {
     stop();
     fx.detach();
-    slashFx.dispose();
     clearTimeout(winTimer);
     removeEventListener('keydown', onKey);
   };

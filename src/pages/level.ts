@@ -88,7 +88,10 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
     dims: level.dims,
     levelForced: () =>
       (level.setpieces ?? []).flatMap((s) => (s.type === 'mountain' && typeof s.x === 'number' ? [s.x * scrollW] : [])),
-    locks: { height: mhRule?.locked ?? true, spacing: spRule?.locked ?? true },
+    locks: {
+      height: mhRule === undefined || mhRule.visible === false || mhRule.locked === true,
+      spacing: spRule === undefined || spRule.visible === false || spRule.locked === true,
+    },
     onChange: () => {
       shaped = true;
       regenerate();

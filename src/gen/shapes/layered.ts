@@ -32,6 +32,7 @@ export function layeredMountain(p: Placement, ctx: ShapeCtx, o: LayeredOpts = {}
   const chop = o.chop;
 
   const grid: [number, number][][] = [];
+  const chopped: [number, number][] = []; // silhouette points that were cut flat (the plateau top)
   let sink = 0;
   for (let j = 0; j < L; j++) {
     sink += rng.next() * u.toArt(p.y / 100); // deeper layers sit a little lower
@@ -41,8 +42,10 @@ export function layeredMountain(p: Placement, ctx: ShapeCtx, o: LayeredOpts = {}
       const t = (i / (POINTS - 1) - 0.5) * Math.PI;
       const env = chop === undefined ? Math.cos(t) : (Math.cos(2 * t) + 1) / 2;
       let h = env * noise.fbm2(t * freq + 10, j * 0.15, octaves) * H * scale;
-      if (chop !== undefined && h > chop * H) h = chop * H + (h - chop * H) * 0.04;
+      const cut = chop !== undefined && h > chop * H;
+      if (cut) h = chop * H + (h - chop * H) * 0.04;
       row.push([cx + (t / Math.PI) * 2 * hw * scale, base - h + sink]);
+      if (cut && j === 0) chopped.push(row[row.length - 1]);
     }
     grid.push(row);
   }
@@ -74,11 +77,6 @@ export function layeredMountain(p: Placement, ctx: ShapeCtx, o: LayeredOpts = {}
   });
   let peak = 0;
   for (let j = 1; j < n; j++) if (tops[j] < tops[peak]) peak = j;
-  let plateau: [number, number][] | undefined;
-  if (chop !== undefined) {
-    const lim = base - chop * H + u.toArt(1);
-    const top = sil.filter((q) => q[1] <= lim);
-    if (top.length >= 2) plateau = top;
-  }
+  const plateau = chopped.length >= 2 ? chopped : undefined;
   return { x0, tops, layers, base, peakX: x0 + peak, peakY: n > 0 ? tops[peak] : base, grid, plateau };
 }

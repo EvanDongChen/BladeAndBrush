@@ -5,7 +5,6 @@ import { mountainsOf } from '../mountainStore';
 import type { Depth } from '../plan';
 import { rasterizeCoverage } from '../raster';
 import { getSpecies } from '../species';
-import { foregroundTrees } from './foregroundTrees';
 
 /** Ink per depth row: farther trees are paler. */
 const INK: Record<Depth, [number, number, number]> = { near: [92, 94, 90], mid: [126, 128, 124], far: [160, 162, 160] };
@@ -122,6 +121,5 @@ registerFeature({
         else if (info) info.bbox = cells;
       }
     }
-    foregroundTrees(ctx);
   },
 });

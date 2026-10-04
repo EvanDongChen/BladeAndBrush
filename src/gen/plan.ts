@@ -91,22 +91,39 @@ export function makePlan(seed: number, params: GenParams, u: Units): Placement[]
     }
   }
 
-  // 3. Plateaus (flat mountains) where nothing else stands: the foreground land.
-  for (let c = 0; c < cover.length; c++) {
-    if (cover[c] || !rng.chance(0.012 * lerp(1.5, 0.6, sp))) continue;
-    const n = 1 + rng.int(3);
-    for (let j = 0; j < n; j++) {
-      const y = lerp(DEPTH.flatBottom, DEPTH.flatTop, j / 3) * H;
-      out.push({
-        kind: 'flat',
-        x: Math.min(W, Math.max(0, c * STEP + rng.range(-1, 1) * 450)),
-        y,
-        halfWidth: rng.range(300, 500),
-        height: mh * rng.range(70, 120),
-        depth: depthOf(y),
-        seed: 0,
-      });
+  // 3. Plateaus (flat mountains) in the open stretches between clusters: the foreground land.
+  for (let c = 0; c < cover.length; ) {
+    if (cover[c]) {
+      c++;
+      continue;
     }
+    let e = c;
+    while (e < cover.length && !cover[e]) e++;
+    const run = (e - c) * STEP;
+    if (run >= 260) {
+      const n = 1 + rng.int(run > 700 ? 3 : 2);
+      for (let j = 0; j < n; j++) {
+        const y = lerp(DEPTH.flatBottom, DEPTH.flatTop, (j + rng.next()) / 3) * H;
+        out.push({
+          kind: 'flat',
+          x: c * STEP + run * rng.range(0.2, 0.8),
+          y,
+          halfWidth: Math.min(run * 0.6, rng.range(260, 420)),
+          height: mh * rng.range(80, 130),
+          depth: depthOf(y),
+          seed: 0,
+        });
+      }
+    }
+    c = e;
+  }
+
+  // 3b. The foreground band: plateaus along the bottom of the scroll, in front of everything
+  //     (they overlap the mountains' feet), so there is always land, rocks and trees nearby.
+  for (let x = rng.range(-100, 250); x < W + 100; x += rng.range(420, 820) * lerp(0.8, 1.3, sp)) {
+    if (!rng.chance(0.8)) continue;
+    const y = rng.range(0.82, 0.95) * H;
+    out.push({ kind: 'flat', x: Math.min(W, Math.max(0, x)), y, halfWidth: rng.range(260, 440), height: mh * rng.range(70, 120), depth: depthOf(y), seed: 0 });
   }
 
   // 4. Distant ridges, high on the page, across the whole scroll (background plane).

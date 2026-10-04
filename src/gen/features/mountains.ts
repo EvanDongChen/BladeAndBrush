@@ -66,11 +66,12 @@ registerFeature({
       feet(plane.paint, pr, tone, rng, noise, u);
       texture(plane.paint, pr, tone, rugged, rng, noise, u);
       inkStroke(plane.paint, pr.grid[0], noise, { wid: u.toArt(2.2), color: ink(0.3 * tone.line, tone.ink), noi: 1, salt: id * 1.7 });
+      const slab = pr.plateau ? groundSlab(plane.paint, pr.plateau, id, tone, rng, noise, u) : undefined;
 
-      let maxBottom = 0;
+      let maxBottom = slab ? slab.y + slab.depth : 0;
       for (const b of bottoms) if (b > maxBottom) maxBottom = b;
       rasterizeCoverage(bp, plane.buf, K, id, El.ROCK, plane.grid, [cell(pr.x0) - 1, cell(pr.peakY) - 1, cell(pr.x0 + n) + 1, cell(maxBottom) + 1], true);
-      recordMountain(bp, { id, depth: p.depth, plane: planeIdx, profile: pr });
+      recordMountain(bp, { id, depth: p.depth, plane: planeIdx, profile: pr, slab });
     }
     pruneHidden();
 
@@ -202,4 +203,35 @@ function ripples(paint: Painter, pr: Profile, base: number, tone: Tone, rng: Rng
     for (let x = -half; x < half; x += u.toArt(5)) pts.push([cx + xk + x, base + yk + u.toArt(2) * Math.sin(x * 0.12) * noise.n1(x * 0.04 + r)]);
     if (pts.length > 1) inkStroke(paint, pts, noise, { wid: u.toArt(0.9), color: ink((0.3 + rng.next() * 0.3) * tone.ripple), noi: 0.5, salt: r });
   }
+}
+
+/**
+ * The ground on top of a plateau: a paper-white slab a little wider than the flat top, its far edge
+ * straight-ish and its near edge bulging toward the viewer, outlined faintly. Boulders, trees and
+ * huts stand on it (features/plateaus.ts). Returns where its surface is.
+ */
+function groundSlab(paint: Painter, top: [number, number][], owner: number, tone: Tone, rng: Rng, noise: Noise, u: Units) {
+  const xl = top[0][0];
+  const xr = top[top.length - 1][0];
+  let y = 0;
+  for (const q of top) y += q[1];
+  y /= top.length;
+  const extra = (xr - xl) * rng.range(0.1, 0.25);
+  const x0 = xl - extra;
+  const x1 = xr + extra;
+  const depth = u.toArt(rng.range(18, 34));
+  const pts: [number, number][] = [];
+  const steps = 24;
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    pts.push([x0 + (x1 - x0) * t, y - u.toArt(3) * Math.sin(Math.PI * t) + u.toArt(2) * (noise.n2(t * 4, 1.5) - 0.5)]);
+  }
+  for (let i = steps; i >= 0; i--) {
+    const t = i / steps;
+    const bulge = Math.pow(Math.sin(Math.PI * t), 0.7);
+    pts.push([x0 + (x1 - x0) * t + u.toArt(6) * (noise.n2(t * 5, 7.1) - 0.5), y + depth * bulge]);
+  }
+  paint.fillPolygon(pts, rgba(PAPER[0], PAPER[1], PAPER[2]), owner);
+  inkStroke(paint, pts, noise, { wid: u.toArt(1.6), color: ink(0.2 * tone.line, tone.ink), noi: 0.6, widthFn: () => 1, salt: owner });
+  return { x0, x1, y: y + depth * 0.35, depth };
 }

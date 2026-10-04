@@ -35,11 +35,17 @@ function toEntry(r: EntryRow) {
     png: r.png_url,
     result: r.result,
     scan: r.scan,
-    worldHash: r.world_hash,
+    worldHash: r.world_hash >>> 0, // stored signed (see toDbHash)
     appVersion: r.app_version,
     createdAt: new Date(r.created_at).getTime(),
   };
 }
+
+/**
+ * World hashes are unsigned 32-bit (0..4294967295) but the column is a Postgres INTEGER (signed,
+ * up to 2147483647): store the same 32 bits as a signed value, read them back with >>> 0.
+ */
+const toDbHash = (h: number) => h | 0;
 
 const SELECT = `id, player_name, level_id, seed, params, action_log, png_url,
   result, scan, world_hash, app_version, created_at`;
@@ -109,7 +115,7 @@ export function createApp({ pool }: AppDeps): Hono {
           pngUrl,
           JSON.stringify(sub.result),
           sub.scan ? JSON.stringify(sub.scan) : null,
-          sub.worldHash,
+          toDbHash(sub.worldHash),
           sub.appVersion,
         ],
       )

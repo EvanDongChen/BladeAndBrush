@@ -1,10 +1,9 @@
 import { El, rgba } from '../../core/elements';
-import type { Noise } from '../../core/noise';
 import { num, registerSetpiece } from '../../core/setpieces';
 import { artOf, PLANE } from '../artState';
 import { WOOD } from '../elements/wood';
 import { mountainsOf } from '../mountainStore';
-import type { Shader } from '../paint/painter';
+import { ink, inkStroke } from '../paint/strokes';
 import { rasterizeCoverage } from '../raster';
 import { elementId, reserveSpan, topAt, topIn } from '../setpieceKit';
 import { getSpecies } from '../species';
@@ -128,45 +127,56 @@ registerSetpiece({
       const ax1 = (x1 + 1) * K;
       const n = ax1 - ax0;
 
-      // walls: down into the ground in every column, so the hut never floats
+      // walls: paper-white planks down into the ground in every column, so the hut never floats
       const tops = new Float32Array(n).fill(eave * K);
       const bots = new Float32Array(n);
       for (let j = 0; j < n; j++) bots[j] = Math.min(dims.h, floorAt(Math.floor((ax0 + j) / K)) + 1) * K;
-      objects.paint.fillColumns(ax0, tops, bots, planks(noise, K, ax0, ax1), id);
+      objects.paint.fillColumns(ax0, tops, bots, wallWash, id);
+      const line = (pts: [number, number][], wid: number, alpha: number, salt: number) =>
+        inkStroke(objects.paint, pts, noise, { wid, color: ink(alpha, [74, 72, 68]), noi: 0.5, salt, widthFn: (t) => 0.55 + 0.45 * Math.sin(t * Math.PI) });
+      // plank seams
+      for (let x = ax0 + K * 1.6; x < ax1 - K; x += K * 1.6) line([[x, eave * K + K], [x + noise.n1(x) * K * 0.3, floor * K]], K * 0.22, 0.28, x);
 
-      // door and window: dark openings in the art (the cells stay wood)
+      // door and window: dark ink openings (the cells stay wood)
       const doorX = ((x0 + x1) >> 1) + doorSide * Math.max(0, ((x1 - x0) >> 2) - 1);
       dark(doorX - 1, floor - Math.min(wallH - 1, 4), doorX + 1, floor - 1);
       const winX = ((x0 + x1) >> 1) - doorSide * Math.max(2, (x1 - x0) >> 2);
       dark(winX, eave + 2, winX + 1, eave + 3);
 
-      // roof: a gable with eaves, thatch streaks
+      // roof: a gable with eaves, paper-pale, drawn with parallel thatch strokes down each slope
       const over = 2 * K;
       const rx0 = ax0 - over;
       const rx1 = ax1 + over;
       const midX = (rx0 + rx1) / 2;
       const apex = (eave - roofH) * K;
+      const eaveY = eave * K + K * 0.7;
       const rt = new Float32Array(rx1 - rx0);
       const rb = new Float32Array(rx1 - rx0);
       for (let j = 0; j < rt.length; j++) {
         const f = Math.abs(rx0 + j + 0.5 - midX) / ((rx1 - rx0) / 2);
-        rt[j] = apex + f * (eave * K + K * 0.5 - apex);
-        rb[j] = eave * K + K * 0.75;
+        rt[j] = apex + f * (eaveY - apex);
+        rb[j] = eaveY + K * 0.05;
       }
-      objects.paint.fillColumns(rx0, rt, rb, thatch(noise), id);
+      objects.paint.fillColumns(rx0, rt, rb, roofWash, id);
+      for (let x = rx0 + K * 0.8; x < rx1 - K * 0.5; x += K * 0.95) {
+        const f = Math.abs(x - midX) / ((rx1 - rx0) / 2);
+        const top = apex + f * (eaveY - apex) + K * (0.6 + 1.2 * noise.n1(x * 0.3));
+        line([[x, top], [x + (x < midX ? -1 : 1) * K * 0.5, eaveY - K * 0.1]], K * 0.2, 0.3 + 0.25 * noise.n1(x * 0.17 + 9), x + 5);
+      }
 
-      // ink outline
-      const brush = { width: K * 0.45, color: rgba(58, 44, 32, 210), noise: 0.4, taper: 0.2 };
-      objects.paint.stroke([[rx0, eave * K + K * 0.6], [midX, apex], [rx1, eave * K + K * 0.6]], brush, noise);
-      objects.paint.stroke([[ax0, eave * K + K], [ax0, floor * K]], brush, noise);
-      objects.paint.stroke([[ax1, eave * K + K], [ax1, floor * K]], brush, noise);
+      // ink outline: eaves and ridge a little heavier, the walls fine
+      line([[rx0, eaveY], [midX, apex], [rx1, eaveY]], K * 0.55, 0.85, 1);
+      line([[rx0 + K * 0.5, eaveY + K * 0.3], [rx1 - K * 0.5, eaveY + K * 0.3]], K * 0.3, 0.5, 2);
+      line([[ax0, eave * K + K], [ax0, floor * K]], K * 0.4, 0.7, 3);
+      line([[ax1, eave * K + K], [ax1, floor * K]], K * 0.4, 0.7, 4);
+      line([[ax0, floor * K], [ax1, floor * K]], K * 0.35, 0.5, 5);
 
       return rasterizeCoverage(bp, objects.buf, K, id, WOOD, objects.grid, [x0 - 2, eave - roofH - 1, x1 + 2, Math.min(dims.h - 1, floor)], false);
     }
 
     /** Darken the art over cells x0..x1, y0..y1 (a door, a window). */
     function dark(x0: number, y0: number, x1: number, y1: number): void {
-      const c = rgba(48, 36, 28, 230);
+      const c = rgba(44, 42, 40, 225);
       for (let y = y0 * K; y < (y1 + 1) * K; y++) {
         for (let x = x0 * K + 1; x < (x1 + 1) * K - 1; x++) if (x >= 0 && y >= 0 && x < u.artW && y < u.artH) objects.buf.blend(y * u.artW + x, c);
       }
@@ -174,23 +184,14 @@ registerSetpiece({
   },
 });
 
-/** Warm planks with darker seams every 1.5 cells and darker corner posts. */
-function planks(noise: Noise, K: number, ax0: number, ax1: number): Shader {
-  const seam = K * 1.5;
-  return (x, y) => {
-    let t = 0.5 + 0.25 * (noise.n2(x * 0.08, y * 0.6) - 0.5);
-    if (y % seam < 1) t += 0.3;
-    if (x - ax0 < K * 0.8 || ax1 - x < K * 0.8) t += 0.25;
-    t = Math.min(1, t);
-    return rgba(Math.round(168 - 90 * t), Math.round(124 - 70 * t), Math.round(82 - 46 * t));
-  };
+/** Wall wash: paper with the faintest warm-grey tone. */
+function wallWash(x: number, y: number): number {
+  const t = 0.04 + 0.03 * ((x * 7 + y * 13) % 5);
+  return rgba(Math.round(241 - 70 * t), Math.round(235 - 72 * t), Math.round(220 - 76 * t));
 }
 
-/** Straw thatch: light gold with vertical streaks, darker near the eave. */
-function thatch(noise: Noise): Shader {
-  return (x, y, dTop) => {
-    const streak = noise.n2(x * 0.45, y * 0.05);
-    const t = Math.min(1, 0.25 + 0.5 * streak + Math.min(0.3, dTop * 0.004));
-    return rgba(Math.round(196 - 70 * t), Math.round(160 - 66 * t), Math.round(88 - 44 * t));
-  };
+/** Roof wash: a little darker than the walls, deepest under the ridge. */
+function roofWash(_x: number, _y: number, dTop: number): number {
+  const t = Math.min(0.2, 0.08 + dTop * 0.003);
+  return rgba(Math.round(238 - 80 * t), Math.round(231 - 80 * t), Math.round(214 - 84 * t));
 }

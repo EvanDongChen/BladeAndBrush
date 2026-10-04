@@ -8,45 +8,104 @@ function rand(seed: number, k: number): number {
   return ((n ^ (n >>> 16)) >>> 0) / 4294967296;
 }
 
+interface Lobe {
+  x: number;
+  y: number;
+  r: number;
+}
+
+/** The cloud's billows: a few big lobes along the top, smaller ones along a flat base. */
+function lobesOf(c: Cloud, cx: number): Lobe[] {
+  const out: Lobe[] = [];
+  // enough lobes to overlap along the width, so a wide cloud is one billowing mass, not separate blobs
+  const n = Math.max(3, Math.min(8, Math.round((c.hw * 1.55) / (c.hh * 1.25)) + Math.floor(rand(c.seed, 0) * 2)));
+  for (let k = 0; k < n; k++) {
+    const t = (k + 0.5) / n;
+    const r = c.hh * (0.85 + 0.6 * Math.sin(Math.PI * t)) * (0.9 + 0.25 * rand(c.seed, k + 1));
+    out.push({ x: cx + (t - 0.5) * c.hw * 1.55, y: c.y + c.hh * 0.35 - r * 0.85, r });
+  }
+  const m = n + 2;
+  for (let k = 0; k < m; k++) {
+    const t = (k + 0.5) / m;
+    const r = c.hh * (0.38 + 0.22 * rand(c.seed, 30 + k));
+    out.push({ x: cx + (t - 0.5) * c.hw * 1.95, y: c.y + c.hh * 0.45 - r * 0.75, r });
+  }
+  return out;
+}
+
 /**
- * One cloud as an ink painter draws it: overlapping rounded puffs, back to front, each a paper-white
- * wash (greying as the cloud fills with water) edged with a fine grey line that the puffs in front
- * cover, so only the outer outline reads; a few light strokes under the flat base.
+ * One cloud as an ink painter draws it (like a brush drawing of billowing cumulus): big rounded
+ * lobes joined into one scalloped silhouette, an ink outline of varying weight along the OUTSIDE of
+ * the lobes only (where they overlap there is no line, just a cusp), soft grey wash layered under
+ * the lobes, and a few ragged strokes trailing out along the flat base. Greys as it fills with water.
  */
 function drawCloud(g: CanvasRenderingContext2D, c: Cloud, ox: number): void {
   const wet = Math.min(1, c.water / Math.max(1, cloudCapacity(c) * 0.5));
-  const wash = [246 - 96 * wet, 243 - 92 * wet, 232 - 84 * wet].map(Math.round);
-  const puff = (x: number, y: number, rx: number, ry: number, alpha: number) => {
-    g.beginPath();
-    g.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2);
-    g.fillStyle = `rgba(${wash[0]}, ${wash[1]}, ${wash[2]}, ${alpha})`;
-    g.fill();
-    g.strokeStyle = `rgba(100, 100, 100, ${0.45 - 0.15 * wet})`;
-    g.lineWidth = 0.45;
-    g.stroke();
-  };
   const cx = c.x + ox;
-  const lobes = 3 + Math.floor(rand(c.seed, 0) * 4);
-  // the flat base: wide low puffs along the underside
-  for (let k = 0; k < lobes + 1; k++) {
-    const t = (k + 0.5) / (lobes + 1) - 0.5;
-    puff(cx + t * c.hw * 1.7, c.y + c.hh * 0.25, c.hh * 1.5, c.hh * 0.6, 0.94);
+  const lobes = lobesOf(c, cx);
+  const baseY = c.y + c.hh * 0.45;
+  const paper = [248 - 80 * wet, 245 - 78 * wet, 234 - 70 * wet].map(Math.round);
+
+  // the silhouette: every lobe, filled as one shape
+  g.save();
+  g.beginPath();
+  for (const l of lobes) {
+    g.moveTo(l.x + l.r, l.y);
+    g.arc(l.x, l.y, l.r, 0, Math.PI * 2);
   }
-  // the lobes: bigger toward the middle, drawn left to right so each overlaps the last
-  for (let k = 0; k < lobes; k++) {
-    const t = (k + 0.5) / lobes;
-    const r = c.hh * (0.75 + 0.75 * Math.sin(Math.PI * t)) * (0.85 + 0.3 * rand(c.seed, k + 1));
-    puff(cx + (t - 0.5) * c.hw * 1.6, c.y - r * 0.3, r, r * 0.9, 0.96);
-  }
-  // light strokes under the base
-  g.strokeStyle = `rgba(110, 110, 112, ${0.3 + 0.2 * wet})`;
-  g.lineWidth = 0.35;
-  for (let k = 0; k < 3; k++) {
-    const y = c.y + c.hh * (0.95 + 0.3 * k);
-    const half = c.hw * (0.9 - 0.25 * k) * (0.8 + 0.2 * rand(c.seed, 20 + k));
+  g.fillStyle = `rgba(${paper[0]}, ${paper[1]}, ${paper[2]}, 0.97)`;
+  g.fill();
+  // soft grey wash, layered (alpha stacks where lobes overlap), kept inside the silhouette
+  g.clip();
+  for (const l of lobes) {
     g.beginPath();
-    g.moveTo(cx - half, y);
-    g.lineTo(cx + half, y);
+    g.ellipse(l.x + l.r * 0.18, l.y + l.r * 0.42, l.r * 0.95, l.r * 0.6, 0, 0, Math.PI * 2);
+    g.fillStyle = `rgba(112, 116, 126, ${0.08 + 0.07 * wet})`;
+    g.fill();
+  }
+  g.beginPath();
+  g.ellipse(cx, baseY, c.hw * 0.95, c.hh * 0.5, 0, 0, Math.PI * 2);
+  g.fillStyle = `rgba(112, 116, 126, ${0.1 + 0.08 * wet})`;
+  g.fill();
+  g.restore();
+
+  // the outline: only the arcs of each lobe that are not inside another, and not the underside
+  g.lineCap = 'round';
+  g.strokeStyle = `rgba(52, 52, 56, ${0.85 - 0.15 * wet})`;
+  let seg = 0;
+  for (let li = 0; li < lobes.length; li++) {
+    const l = lobes[li];
+    let prev: [number, number] | null = null;
+    for (let a = 0; a <= Math.PI * 2 + 0.001; a += 0.14) {
+      const x = l.x + Math.cos(a) * l.r;
+      const y = l.y + Math.sin(a) * l.r;
+      const inside = lobes.some((o, oi) => oi !== li && (x - o.x) ** 2 + (y - o.y) ** 2 < (o.r * 0.97) ** 2);
+      if (inside || y > baseY - c.hh * 0.05) {
+        prev = null;
+        continue;
+      }
+      if (prev) {
+        g.lineWidth = 0.35 + 0.5 * rand(c.seed, 100 + seg++);
+        g.beginPath();
+        g.moveTo(prev[0], prev[1]);
+        g.lineTo(x, y);
+        g.stroke();
+      }
+      prev = [x, y];
+    }
+  }
+
+  // ragged strokes along the flat base, trailing out past the ends
+  g.strokeStyle = `rgba(70, 70, 76, ${0.5 + 0.2 * wet})`;
+  for (let k = 0; k < 4; k++) {
+    const dir = k % 2 === 0 ? -1 : 1;
+    const x0 = cx + dir * c.hw * (0.2 + 0.2 * rand(c.seed, 60 + k));
+    const x1 = cx + dir * c.hw * (1.0 + 0.3 * rand(c.seed, 70 + k));
+    const y = baseY + c.hh * (0.05 + 0.12 * k);
+    g.lineWidth = 0.3 + 0.2 * rand(c.seed, 80 + k);
+    g.beginPath();
+    g.moveTo(x0, y);
+    g.quadraticCurveTo((x0 + x1) / 2, y + c.hh * 0.12 * dir, x1, y - c.hh * 0.05);
     g.stroke();
   }
 }

@@ -9,6 +9,11 @@ export interface LevelParam {
   locked?: boolean;
   /** Shown in the UI at all. */
   visible?: boolean;
+  /** What the slider is called on this level (default: the param's own label). */
+  label?: string;
+  /** The range the player may tune it in on this level (default: the param's whole range). */
+  min?: number;
+  max?: number;
 }
 
 /** Levels are plain data. Drop a file into levels/ that calls registerLevel(). */
@@ -16,6 +21,8 @@ export interface LevelDef {
   id: string;
   /** Shown on the scroll and the level page (default: the id). */
   title?: string;
+  /** A hint shown with the sliders: what tuning the painting can do for this puzzle. */
+  tip?: string;
   /** One line per array entry. */
   poem: string[];
   dims: LevelDims;

@@ -12,9 +12,11 @@ import { Frontier } from '../gen/frontier';
 import { generate } from '../gen/generate';
 import { scan } from '../gen/scan';
 import type { Blueprint } from '../core/blueprint';
-import { aimEnd, chargeOf, drawAim, isLineAbility, lineColor } from '../sim/lineAbility';
+import type { GoalSpec } from '../core/goals';
+import type { Peak } from '../core/scan';
+import { bodyCount } from '../sim/behaviors/rigid';
+import { aimEnd, aimTunables, chargeOf, drawAim, isLineAbility, lineColor } from '../sim/lineAbility';
 import { step } from '../sim/step';
-import { tunables } from '../sim/tunables';
 import { Fx } from './fx';
 import { arsenal } from './arsenal';
 import { button, h, handscroll, panel, seal, startLoop, toCell } from './ui';
@@ -31,9 +33,22 @@ function levelHeader(sub: string): HTMLElement {
   return h('header', { class: 'top' }, h('h1', {}, brand), h('nav', {}, h('a', { href: './index.html' }, 'All levels')));
 }
 
+/** Ticks the painting gets to settle after the last stroke (or the seal) before it is judged. */
+const SETTLE = 240;
+/** ...and at most this many more while pieces are still falling. */
+const SETTLE_MAX = 600;
+
+/** Does the level ask about mountains (so the page marks the peaks it counts)? */
+function aboutPeaks(goals: GoalSpec[]): boolean {
+  return goals.some((g) =>
+    g.type === 'all' && Array.isArray(g.of) ? aboutPeaks(g.of as GoalSpec[]) : /Mountain|Moon|peak/i.test(String(g.metric ?? '')) && g.metric !== 'moonBroken',
+  );
+}
+
 /**
- * Player-facing level page: ?level=<id>. The player gets the abilities, a Regenerate button,
- * and the level's params and tuning. Nothing else from the workshops is exposed here.
+ * Player-facing level page: ?level=<id>. The player tunes the few sliders the level offers (the
+ * painting repaints when one is let go), then spends the ink. When the ink is gone (or the player
+ * seals the painting early) the painting settles and is judged against the poem.
  */
 export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
   const params: GenParams = defaultParams();
@@ -45,9 +60,13 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
   let driver = new ActionDriver();
   let ability: AbilityId = '';
   let radius = 4;
-  let used = 0; // ability uses spent this round
-  let won = false;
-  let tuningTouched = false;
+  let used = 0; // strokes released this round
+  /** play: strokes left; settling: ink spent or sealed, waiting for things to come to rest; then judged. */
+  let phase: 'play' | 'settling' | 'won' | 'failed' = 'play';
+  let judgeAt = 0;
+  let peaks: Peak[] = [];
+  let heights: Int16Array | null = null;
+  const markPeaks = aboutPeaks(level.goals);
   const initial = { ...params };
 
   const canvas = h('canvas', { class: 'grid paintable' });
@@ -59,8 +78,9 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
   const hudGlyph = h('span', { class: 'hud-glyph', 'aria-hidden': 'true' });
   const hudName = h('strong', {});
   const hudTool = h('div', { class: 'hud-tool' }, hudGlyph, hudName);
-  const retry = button('Regenerate', () => regenerate(), { class: 'hud-retry' });
-  const banner = h('div', { class: 'hud-banner', hidden: true, role: 'status' }, h('p', {}, 'Out of ink.'), retry);
+  const retry = button('Try again', () => regenerate(), { class: 'hud-retry' });
+  const bannerText = h('p', {}, 'Out of ink.');
+  const banner = h('div', { class: 'hud-banner', hidden: true, role: 'status' }, bannerText, retry);
   // two rollers: one fixed at the left edge, one riding the frontier so the paper unrolls as the landscape draws
   const rollLeft = h('span', { class: 'roll', 'aria-hidden': 'true' });
   const rollLead = h('span', { class: 'roll lead', 'aria-hidden': 'true' });
@@ -77,7 +97,9 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
     frontier = new Frontier(bp);
     driver = new ActionDriver();
     used = 0;
-    won = false;
+    phase = 'play';
+    peaks = [];
+    heights = null;
     clearTimeout(winTimer);
     stamp.classList.remove('on');
     complete?.close();
@@ -102,10 +124,9 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
   let cursor: { x: number; y: number; r: number } | null = null;
 
   canvas.addEventListener('pointerdown', (e) => {
-    if (!ability || !frontier.done || used >= level.actionBudget) return;
+    if (!ability || !frontier.done || phase !== 'play' || used >= level.actionBudget) return;
     canvas.setPointerCapture?.(e.pointerId);
     const p = toCell(canvas, e);
-    used++;
     down = true;
     pressedAt = p;
     pressedTick = world.tick;
@@ -123,9 +144,20 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
     last = { ...p, t: now };
     driver.move({ ...p, speed });
   });
+  /** Settle for a while, then judge the painting. */
+  const finish = (ticks = SETTLE) => {
+    phase = 'settling';
+    judgeAt = world.tick + ticks;
+  };
   const release = () => {
-    if (down) driver.end();
+    if (!down) return;
+    driver.end();
     down = false;
+    // ink is spent when a stroke is actually made (a line too short to fire costs nothing)
+    const fired = !isLineAbility(ability) || (cursor !== null && Math.hypot(cursor.x - pressedAt.x, cursor.y - pressedAt.y) >= aimTunables.minLength);
+    if (!fired) return;
+    used++;
+    if (used >= level.actionBudget) finish();
   };
   canvas.addEventListener('pointerup', release);
   canvas.addEventListener('pointercancel', release);
@@ -199,10 +231,13 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
   complete.node.hidden = true;
 
   /** Has the player changed anything yet? Goals the fresh painting already meets do not count. */
-  const changed = () => used > 0 || tuningTouched || Object.keys(initial).some((k) => params[k] !== initial[k]);
+  const changed = () => used > 0 || Object.keys(initial).some((k) => params[k] !== initial[k]);
 
+  /** Light the verses as the painting changes; once it has settled after the last stroke, judge it. */
   function checkGoals(): void {
     const result = scan(world);
+    peaks = result.peaks;
+    heights = result.heights;
     const started = changed();
     let all = true;
     for (const v of verses) {
@@ -213,47 +248,72 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
       v.row.style.setProperty('--p', `${Math.round(progress * 100)}%`);
     }
     for (const v of verses) if (!v.goal) v.row.classList.toggle('met', all && started);
-    if (all && started && !won) {
-      won = true;
+    if (phase !== 'settling' || world.tick < judgeAt) return;
+    if (bodyCount(world) > 0 && world.tick < judgeAt + SETTLE_MAX - SETTLE) return; // still falling
+    if (all && started) {
+      phase = 'won';
       stamp.classList.add('on'); // the seal lands first, then the scroll unrolls
       winTimer = window.setTimeout(() => {
         complete!.node.hidden = false;
         complete!.open();
       }, 1100);
+    } else {
+      phase = 'failed';
+      bannerText.textContent = used >= level.actionBudget ? 'Out of ink: the painting does not match the poem yet.' : 'The painting does not match the poem yet.';
     }
   }
 
-  // ---- params: the level decides which are visible or locked ----
+  /** The peaks the scanner counts, marked on the painting: a red mark for a tall one, a ring for a lesser one. */
+  function drawPeaks(g: CanvasRenderingContext2D): void {
+    if (!markPeaks || !heights || !frontier.done) return;
+    const tall = 0.3 * level.dims.h; // DEFAULT_THRESHOLDS.tallFrac
+    g.save();
+    g.lineWidth = 1;
+    for (const p of peaks) {
+      const y = level.dims.h - heights[p.x] - 4;
+      if (p.h >= tall) {
+        g.fillStyle = 'rgba(178, 34, 34, 0.85)';
+        g.beginPath();
+        g.moveTo(p.x, y);
+        g.lineTo(p.x - 3, y - 5);
+        g.lineTo(p.x + 3, y - 5);
+        g.closePath();
+        g.fill();
+      } else {
+        g.strokeStyle = 'rgba(60, 60, 60, 0.75)';
+        g.beginPath();
+        g.arc(p.x, y - 2.5, 2.2, 0, Math.PI * 2);
+        g.stroke();
+      }
+    }
+    g.restore();
+  }
+
+  // ---- params: only the ones the level offers, under its own names and ranges ----
+  // Letting go of a slider repaints the painting (and starts the round over): tuning is part of the puzzle.
   const paramRows = h('div', { class: 'rows' });
   for (const def of paramDefs.all()) {
     const rule = level.params[def.key];
-    if (rule?.visible === false) continue;
+    if (!rule || rule.visible === false) continue;
     const out = h('output', {}, String(params[def.key]));
-    const input = h('input', { type: 'range', min: def.min, max: def.max, step: def.step, value: params[def.key], disabled: rule?.locked });
+    const input = h('input', {
+      type: 'range',
+      min: rule.min ?? def.min,
+      max: rule.max ?? def.max,
+      step: def.step,
+      value: params[def.key],
+      disabled: rule.locked,
+    });
     input.addEventListener('input', () => {
       params[def.key] = Number(input.value);
       out.textContent = input.value;
-      world.params[def.key] = params[def.key]; // live for the sim; the painting changes on Regenerate
     });
-    paramRows.append(h('label', { class: 'row' }, h('span', {}, def.label), input, out));
+    input.addEventListener('change', () => regenerate());
+    paramRows.append(h('label', { class: 'row' }, h('span', {}, rule.label ?? def.label), input, out));
   }
-
-  // ---- tuning: how each ability and behavior feels ----
-  const tuning = h('div', { class: 'registries' });
-  for (const g of tunables.all()) {
-    const rows = h('div', { class: 'rows' });
-    for (const [key, [min, max, stepSize]] of Object.entries(g.ranges)) {
-      const out = h('output', {}, String(g.values[key]));
-      const input = h('input', { type: 'range', min, max, step: stepSize, value: g.values[key] });
-      input.addEventListener('input', () => {
-        g.values[key] = Number(input.value);
-        out.textContent = input.value;
-        tuningTouched = true;
-      });
-      rows.append(h('label', { class: 'row' }, h('span', {}, key), input, out));
-    }
-    tuning.append(h('details', {}, h('summary', {}, g.name), rows));
-  }
+  const sealButton = button('Seal the painting', () => {
+    if (phase === 'play' && frontier.done && used > 0) finish(60);
+  });
 
   stage.append(frame, status, complete.node);
   root.replaceChildren(
@@ -265,14 +325,13 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
       h(
         'aside',
         { class: 'controls' },
-                panel('Abilities', bar.node, ink, h('label', { class: 'row brush-row' }, h('span', {}, 'Brush size'), radiusInput, radiusDot)),
-        panel(
-          'Painting',
+                panel(
+          'Shape the painting',
+          h('p', { class: 'home-note' }, level.tip ?? 'Tune the painting before you cut: it repaints when you let go of a slider.'),
           paramRows,
-          h('p', { class: 'home-note' }, 'Shape changes apply when you regenerate.'),
-          button('Regenerate', regenerate),
+          button('Start over', regenerate),
         ),
-        panel('Tuning', tuning),
+        panel('Abilities', bar.node, ink, h('label', { class: 'row brush-row' }, h('span', {}, 'Brush size'), radiusInput, radiusDot), sealButton),
       ),
     ),
   );
@@ -284,18 +343,27 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
     (dt) => {
       renderer.draw(world, { cursor, frontierX: frontier.done ? undefined : frontier.x, art: artView(bp) });
       fx.draw(renderer.g);
+      drawPeaks(renderer.g);
       if (down && cursor && isLineAbility(ability)) {
         const aim = aimEnd(pressedAt.x, pressedAt.y, cursor.x, cursor.y);
         drawAim(renderer.g, ability, aim, radius, chargeOf(world.tick - pressedTick));
       }
       showInk();
       if (frames++ % 10 === 0 && frontier.done) checkGoals();
-      const spent = frontier.done && used >= level.actionBudget && !won;
-      bar.setSpent(spent);
-      banner.hidden = !spent;
+      bar.setSpent(phase !== 'play');
+      banner.hidden = phase !== 'failed';
+      sealButton.toggleAttribute('disabled', phase !== 'play' || used === 0);
       frame.style.setProperty('--p', String(frontier.x / level.dims.w));
       frame.classList.toggle('ready', frontier.done);
-      status.textContent = !frontier.done ? 'The landscape is painting itself…' : spent ? 'Out of ink. Regenerate to try again.' : tip;
+      status.textContent = !frontier.done
+        ? 'The landscape is painting itself…'
+        : phase === 'settling'
+          ? 'The ink is drying…'
+          : phase === 'failed'
+            ? 'Not yet. Try again: tune the painting, then cut.'
+            : phase === 'won'
+              ? 'The landscape matches the poem.'
+              : tip;
       fx.endFrame(canvas, dt);
     },
     () => fx.shouldAdvance(),

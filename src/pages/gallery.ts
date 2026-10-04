@@ -1,7 +1,8 @@
 import './bootstrap';
 import { getGalleryStore } from '../gallery';
 import type { GalleryEntry } from '../gallery';
-import { h, handscroll, siteNav } from './ui';
+import { h, handscroll } from './ui';
+import { siteFooter, siteHeader } from './chrome';
 
 /** Gallery shell. Entries appear here once the play loop can submit wins. */
 function entryCard(e: GalleryEntry, onRemove: () => void): HTMLElement {
@@ -68,13 +69,14 @@ export function mountGallery(root: HTMLElement): () => void {
       });
   };
   root.replaceChildren(
-    siteNav('Gallery'),
+    siteHeader('gallery'),
     h(
       'main',
-      { class: 'shell home' },
+      { class: 'shell home', id: 'main' },
       h('header', { class: 'page-title' }, h('h2', {}, h('span', { class: 'cn' }, '畫廊'), ' Gallery'), h('p', { class: 'home-note' }, 'Paintings that matched their poem.')),
       grid,
     ),
+    siteFooter(),
   );
   refresh();
   return () => {};

@@ -1,11 +1,16 @@
 import './bootstrap';
+import { activeAbilities } from '../core/abilities';
 import { describeGoal } from '../core/goals';
 import { levels, type LevelDef } from '../core/levels';
-import { h, handscroll, hangingScroll, revealOnScroll, siteNav, type ScrollHandle } from './ui';
+import { lineColor } from '../sim/lineAbility';
+import { siteFooter, siteHeader } from './chrome';
+import { heroScene } from './heroScene';
+import { h, revealOnScroll, seal } from './ui';
 
 /**
- * Home landing page. Presentational only: reads the level registry,
- * never touches World, frontier, or abilities (those land with integration).
+ * The landing page: a living landscape as the hero, then how to play (一 二 三), the strokes of the
+ * blade, the four scrolls, and the workshop. Reads the level and ability registries; the hero runs
+ * the real generator and sim.
  */
 
 const SVG = 'http://www.w3.org/2000/svg';
@@ -17,140 +22,203 @@ function svg(tag: string, attrs: Record<string, string | number>, ...kids: SVGEl
   return e;
 }
 
-/** Layered ink-wash ridges for the hero scroll. Hand-drawn paths, no generator involved. */
+/** Layered ink-wash ridges: what the hero shows while the real painting is being generated. */
 function inkMountains(): SVGElement {
   const ridge = (d: string, cls: string) => svg('path', { d, class: cls });
   return svg(
     'svg',
-    { class: 'ink-mountains', viewBox: '0 0 1200 360', preserveAspectRatio: 'xMidYMax slice', 'aria-hidden': 'true' },
-    svg(
-      'defs',
-      {},
-      svg(
-        'linearGradient',
-        { id: 'wash', x1: 0, y1: 0, x2: 0, y2: 1 },
-        svg('stop', { offset: '0%', 'stop-color': 'currentColor', 'stop-opacity': 0.9 }),
-        svg('stop', { offset: '100%', 'stop-color': 'currentColor', 'stop-opacity': 0 }),
-      ),
-    ),
-    ridge('M0 250 C80 200 130 120 210 150 S320 90 380 140 S500 210 560 170 S700 60 790 120 S930 200 1010 150 S1140 110 1200 160 V360 H0Z', 'ridge far'),
-    ridge('M0 290 C60 260 120 180 190 210 S300 260 360 200 S440 110 520 170 S640 280 720 230 S860 140 940 200 S1080 270 1200 220 V360 H0Z', 'ridge mid'),
-    ridge('M0 330 C90 300 150 250 240 280 S380 330 470 290 S600 240 700 300 S860 340 960 300 S1120 270 1200 300 V360 H0Z', 'ridge near'),
+    { class: 'ink-mountains', viewBox: '0 0 1200 320', preserveAspectRatio: 'xMidYMax slice' },
+    ridge('M0 230 C80 180 130 100 210 130 S320 70 380 120 S500 190 560 150 S700 40 790 100 S930 180 1010 130 S1140 90 1200 140 V320 H0Z', 'ridge far'),
+    ridge('M0 270 C60 240 120 160 190 190 S300 240 360 180 S440 90 520 150 S640 260 720 210 S860 120 940 180 S1080 250 1200 200 V320 H0Z', 'ridge mid'),
+    ridge('M0 310 C90 280 150 230 240 260 S380 310 470 270 S600 220 700 280 S860 320 960 280 S1120 250 1200 280 V320 H0Z', 'ridge near'),
   );
 }
 
-function hero(): { node: HTMLElement; scroll: ScrollHandle } {
-  const scroll = handscroll(
-    'the title scroll',
-    inkMountains(),
+// ---------------------------------------------------------------- hero
+
+function hero(): { node: HTMLElement; destroy(): void } {
+  const scene = heroScene(inkMountains());
+  const node = h(
+    'section',
+    { class: 'hero', 'aria-labelledby': 'hero-title' },
+    h('div', { class: 'hero-sun', 'aria-hidden': 'true' }),
     h(
       'div',
-      { class: 'hero-text' },
-      h('h2', { class: 'home-title' }, h('span', { class: 'cn' }, '斬山水'), h('span', { class: 'en' }, 'Blade & Brush')),
-      h('p', { class: 'home-tag' }, 'A landscape that paints itself. Cut it until it matches the poem.'),
+      { class: 'hero-copy' },
+      h('p', { class: 'hero-kicker' }, h('span', { class: 'kicker-rule', 'aria-hidden': 'true' }), 'A landscape you cut into a poem'),
+      h('h1', { class: 'hero-title', id: 'hero-title' }, 'Blade ', h('i', {}, '&'), h('br'), 'Brush'),
+      h(
+        'p',
+        { class: 'hero-lede' },
+        'Every scroll paints itself from a seed, in the manner of the old shan shui masters. Read the poem, shape the painting, then take up the blade until the mountains, the water and the sky match the verse.',
+      ),
+      h(
+        'div',
+        { class: 'hero-actions' },
+        h('a', { class: 'btn btn-seal', href: './level.html?level=level-1' }, h('span', { class: 'btn-glyph', 'aria-hidden': 'true' }, '始'), 'Begin the first scroll'),
+        h('a', { class: 'btn btn-ghost', href: '#how' }, 'How it plays'),
+      ),
     ),
+    h(
+      'div',
+      { class: 'hero-calligraphy', 'aria-hidden': 'true' },
+      h('span', { class: 'hero-glyphs' }, h('span', {}, '斬'), h('span', {}, '山'), h('span', {}, '水')),
+      seal('墨客', 'hero-seal'),
+    ),
+    scene.node,
+    h('a', { class: 'scroll-cue', href: '#how', 'aria-label': 'Scroll to how it plays' }, h('span', { 'aria-hidden': 'true' }, '下')),
   );
-  return { node: h('section', { class: 'home-hero' }, scroll.node), scroll };
+  return { node, destroy: scene.destroy };
 }
 
-function sectionTitle(text: string): HTMLElement {
-  return h('h3', { class: 'section-title' }, text);
+// ---------------------------------------------------------------- poem ribbon
+
+function poemRibbon(): HTMLElement {
+  const lines = levels.all().flatMap((l) => l.poem);
+  const run = () => h('div', { class: 'ribbon-run' }, ...lines.map((line) => h('span', {}, line, h('i', { 'aria-hidden': 'true' }, '◆'))));
+  return h('div', { class: 'ribbon', 'aria-hidden': 'true' }, h('div', { class: 'ribbon-track' }, run(), run()));
 }
+
+// ---------------------------------------------------------------- how to play
+
+const STEPS: [string, string, string, string][] = [
+  ['一', 'yī', 'Read the poem', 'Each scroll opens with a few lines of verse. Every line is a goal: a lone peak, a broken moon, rain on a thirsty village.'],
+  ['二', 'èr', 'Shape the painting', 'Tune the mountains, the forest and the wind. The landscape repaints itself as you let go of each slider.'],
+  ['三', 'sān', 'Take up the blade', 'Your ink is measured in strokes. Slash, burn, pour and push until the painting matches the poem, then seal it.'],
+];
 
 function howTo(): HTMLElement {
   return h(
     'section',
-    { class: 'home-block how' },
-    sectionTitle('How it plays'),
+    { class: 'section how reveal', id: 'how', 'aria-labelledby': 'how-title' },
+    sectionHead('玩法', 'How it plays', 'how-title', 'Three strokes, in order.'),
     h(
       'ol',
-      { class: 'home-steps' },
-      h('li', {}, 'Read the poem. Each level names its goals: peaks, trees, water.'),
-      h('li', {}, 'Watch the landscape paint itself from left to right.'),
-      h('li', {}, 'Cut it into shape. Slash grooves, burn trees, flood valleys. The scanner counts the result.'),
-    ),
-    h(
-      'p',
-      { class: 'home-note' },
-      'The full paint-and-play loop arrives after the generator and abilities branches land. For now, explore the workshops below.',
-    ),
-  );
-}
-
-function levelScroll(l: LevelDef): HTMLElement {
-  const goals = h('ul', { class: 'home-goals' });
-  for (const g of l.goals) goals.append(h('li', {}, describeGoal(g)));
-  const poem = h('p', { class: 'poem home-poem' });
-  l.poem.forEach((line, i) => {
-    if (i) poem.append(h('br'));
-    poem.append(line);
-  });
-  return hangingScroll(
-    l.title ?? l.id,
-    poem,
-    goals,
-    h('p', { class: 'home-meta' }, `Ink budget ${l.actionBudget} · seed ${l.seed} · ${l.dims.w}×${l.dims.h}`),
-    h(
-      'p',
-      { class: 'cta-row' },
-      h('a', { class: 'home-cta', href: `./level.html?level=${encodeURIComponent(l.id)}` }, 'Play'),
-    ),
-  ).node;
-}
-
-function levelsSection(): HTMLElement {
-  const all = levels.all();
-  const wrap = h('div', { class: 'hang-row levels' });
-  for (const l of all) wrap.append(levelScroll(l));
-  if (!all.length) wrap.append(h('p', {}, 'No levels registered yet.'));
-  return h(
-    'section',
-    { class: 'home-block', id: 'levels' },
-    sectionTitle('Levels'),
-    h('p', { class: 'home-note' }, 'Click a scroll to unroll it.'),
-    wrap,
-  );
-}
-
-const WORKSHOPS: [string, string, string][] = [
-  ['Generator', './generator.html', 'Seed, params, frontier reveal, scan'],
-  ['Sandbox', './sandbox.html', 'Elements, abilities, record and replay'],
-  ['Gallery', './gallery.html', 'Winning paintings'],
-];
-
-function workshops(): HTMLElement {
-  const grid = h('div', { class: 'workshops' });
-  WORKSHOPS.forEach(([name, href, text]) =>
-    grid.append(
-      h(
-        'a',
-        { class: 'workshop', href },
-        h('strong', {}, name),
-        h('span', {}, text),
+      { class: 'steps' },
+      ...STEPS.map(([num, pinyin, title, text]) =>
+        h(
+          'li',
+          { class: 'step' },
+          h('span', { class: 'step-num', 'aria-hidden': 'true' }, num),
+          h('span', { class: 'step-pinyin' }, pinyin),
+          h('h3', { class: 'step-title' }, title),
+          h('p', { class: 'step-text' }, text),
+        ),
       ),
     ),
   );
-  return h('section', { class: 'home-block' }, sectionTitle('Workshops'), grid);
 }
 
-function credits(): HTMLElement {
+// ---------------------------------------------------------------- the blade's strokes
+
+const STROKES: Record<string, string> = {
+  slash: 'Cuts rock and wood. What you cut loose falls.',
+  fire: 'Lights wood and leaves. Flames spread on their own.',
+  water: 'Pours a sheet of water that runs downhill.',
+  push: 'Hurls loose rock, sand and water along the line.',
+  null: 'Quietly erases a strip. No scar, no splatter.',
+};
+
+function strokes(): HTMLElement {
+  const list = activeAbilities(false);
   return h(
-    'footer',
-    { class: 'home-foot' },
-    h('hr', { class: 'rule' }),
-    h('p', {}, 'Blade & Brush · built with Vite, TypeScript and Canvas 2D.'),
+    'section',
+    { class: 'section strokes reveal', 'aria-labelledby': 'strokes-title' },
+    sectionHead('筆法', 'The strokes of the blade', 'strokes-title', 'Aim a line, hold to charge, release to strike.'),
+    h(
+      'ul',
+      { class: 'stroke-list' },
+      ...list.map((a) =>
+        h(
+          'li',
+          { class: 'stroke', style: `--stroke: ${lineColor(a.id)}` },
+          h('span', { class: 'stroke-glyph', 'aria-hidden': 'true' }, a.icon ?? a.name.slice(0, 1)),
+          h('span', { class: 'stroke-name' }, a.name),
+          h('span', { class: 'stroke-text' }, STROKES[a.id] ?? ''),
+        ),
+      ),
+    ),
+  );
+}
+
+// ---------------------------------------------------------------- the scrolls
+
+/** Formal numerals for the scroll numbers, as on old ledgers. */
+const NUMERALS = ['壹', '貳', '參', '肆', '伍', '陸', '柒', '捌', '玖', '拾'];
+const ORDINALS = ['one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'];
+/** The one character each scroll is about. */
+const EMBLEM: Record<string, string> = { 'level-1': '峰', 'level-2': '月', 'level-3': '雨', 'level-4': '鳥' };
+
+function scrollCard(l: LevelDef, i: number): HTMLElement {
+  const href = `./level.html?level=${encodeURIComponent(l.id)}`;
+  return h(
+    'article',
+    { class: 'scroll-card reveal', style: `--i: ${i}` },
+    h('span', { class: 'card-emblem', 'aria-hidden': 'true' }, EMBLEM[l.id] ?? (l.title ?? l.id).slice(0, 1)),
+    h('p', { class: 'card-num' }, h('span', { class: 'card-numeral', 'aria-hidden': 'true' }, NUMERALS[i] ?? String(i + 1)), `Scroll ${ORDINALS[i] ?? i + 1}`),
+    h('h3', { class: 'card-title' }, h('a', { href }, l.title ?? l.id)),
+    h('blockquote', { class: 'card-poem' }, ...l.poem.map((line) => h('span', {}, line))),
+    h('ul', { class: 'card-goals', 'aria-label': 'Goals' }, ...l.goals.map((g) => h('li', {}, describeGoal(g)))),
+    h(
+      'div',
+      { class: 'card-foot' },
+      h('span', { class: 'card-ink' }, h('span', { class: 'card-ink-glyph', 'aria-hidden': 'true' }, '墨'), `${l.actionBudget} strokes of ink`),
+      h('a', { class: 'card-play', href, 'aria-label': `Play ${l.title ?? l.id}` }, 'Unroll', h('span', { 'aria-hidden': 'true' }, ' →')),
+    ),
+  );
+}
+
+function scrolls(): HTMLElement {
+  const all = levels.all();
+  return h(
+    'section',
+    { class: 'section scrolls', id: 'levels', 'aria-labelledby': 'levels-title' },
+    sectionHead('卷軸', 'The scrolls', 'levels-title', 'Four poems, four paintings. Each one is generated fresh from its seed.'),
+    all.length ? h('div', { class: 'scroll-grid' }, ...all.map(scrollCard)) : h('p', {}, 'No scrolls yet.'),
+  );
+}
+
+// ---------------------------------------------------------------- workshop
+
+const WORKSHOP: [string, string, string, string][] = [
+  ['生', 'Generator', './generator.html', 'Seeds, sliders and the painting drawing itself, with the scanner reading it.'],
+  ['沙', 'Sandbox', './sandbox.html', 'Every element and ability, freely. Record a session and replay it exactly.'],
+  ['藏', 'Gallery', './gallery.html', 'Paintings that matched their poem.'],
+];
+
+function workshop(): HTMLElement {
+  return h(
+    'section',
+    { class: 'section workshop-section reveal', 'aria-labelledby': 'workshop-title' },
+    sectionHead('工坊', 'The workshop', 'workshop-title', 'Where the paintings are made and taken apart.'),
+    h(
+      'div',
+      { class: 'tiles' },
+      ...WORKSHOP.map(([glyph, name, href, text]) =>
+        h('a', { class: 'tile', href }, h('span', { class: 'tile-glyph', 'aria-hidden': 'true' }, glyph), h('strong', {}, name), h('span', {}, text)),
+      ),
+    ),
+  );
+}
+
+// ---------------------------------------------------------------- pieces
+
+function sectionHead(cn: string, title: string, id: string, sub: string): HTMLElement {
+  return h(
+    'header',
+    { class: 'section-head' },
+    h('span', { class: 'section-cn', 'aria-hidden': 'true' }, cn),
+    h('h2', { class: 'section-title', id }, title),
+    h('p', { class: 'section-sub' }, sub),
   );
 }
 
 export function mountHome(root: HTMLElement): () => void {
   const top = hero();
-  const main = h('main', { class: 'shell home' }, top.node, howTo(), levelsSection(), workshops(), credits());
-  root.replaceChildren(siteNav('Home'), main);
-
-  // Unroll the title scroll shortly after load.
-  const timer = window.setTimeout(top.scroll.open, 350);
+  const main = h('main', { class: 'landing', id: 'main' }, top.node, poemRibbon(), howTo(), strokes(), scrolls(), workshop());
+  root.replaceChildren(siteHeader('home'), main, siteFooter());
   revealOnScroll(main);
-  return () => clearTimeout(timer);
+  return () => top.destroy();
 }
 
 const app = document.getElementById('app');

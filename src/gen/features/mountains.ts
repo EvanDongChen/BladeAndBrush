@@ -190,18 +190,21 @@ function feet(paint: Painter, pr: Profile, tone: Tone, rng: Rng, noise: Noise, u
   }
 }
 
-/** Short wavy ripple strokes under the foot, in the background plane (behind everything). */
+/**
+ * Water lines at the foot, in the background plane (behind everything): about ten long, fairly dark
+ * wavy strokes, 400-800 units long whatever the mountain's size, so they stick out sideways past
+ * its ends and make the mountain look like it sits in a body of water that fills the space.
+ */
 function ripples(paint: Painter, pr: Profile, base: number, tone: Tone, rng: Rng, noise: Noise, u: Units): void {
   const cx = pr.x0 + pr.tops.length / 2;
-  const len = pr.tops.length;
-  let yk = -u.toArt(12);
+  let yk = -u.toArt(20);
   for (let r = 0; r < 10; r++) {
-    yk += u.toArt(rng.range(0.5, 5));
-    const half = len * rng.range(0.25, 0.5);
-    const xk = rng.range(-0.5, 0.5) * len * 0.12;
+    yk += u.toArt(rng.next() * 5);
+    const half = u.toArt(rng.range(200, 400));
+    const xk = u.toArt(rng.range(-50, 50));
     const pts: [number, number][] = [];
-    for (let x = -half; x < half; x += u.toArt(5)) pts.push([cx + xk + x, base + yk + u.toArt(2) * Math.sin(x * 0.12) * noise.n1(x * 0.04 + r)]);
-    if (pts.length > 1) inkStroke(paint, pts, noise, { wid: u.toArt(0.9), color: ink((0.3 + rng.next() * 0.3) * tone.ripple), noi: 0.5, salt: r });
+    for (let x = -half; x < half; x += u.toArt(5)) pts.push([cx + xk + x, base + yk + u.toArt(2) * Math.sin(x / u.toArt(5)) * noise.n1(Math.abs(x) * 0.02 + r * 3.1) * 2]);
+    if (pts.length > 1) inkStroke(paint, pts, noise, { wid: u.toArt(1.5), color: ink((0.3 + rng.next() * 0.3) * Math.min(1, tone.ripple * 3.4)), noi: 0.6, salt: r });
   }
 }
 

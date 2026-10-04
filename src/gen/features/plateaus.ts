@@ -41,8 +41,20 @@ registerFeature({
         const cy = cell(y);
         return cx >= 0 && cy >= 0 && cx < dims.w && cy < dims.h && grid.owner[cy * dims.w + cx] === m.id;
       };
-      const place = (kind: 'rock' | 'tree', draw: (id: number) => [number, number, number, number], ax: number, ay: number) => {
-        if (!ours(ax, ay)) return;
+      /** Anything of the other kind already in the way: boulders carry no trees, trees stand clear of boulders. */
+      const crowded = (kind: 'rock' | 'tree', ax: number, ay: number, r: number) => {
+        const other = kind === 'rock' ? El.TREE : El.ROCK;
+        for (let dy = -r; dy <= r; dy++) {
+          for (let dx = -r; dx <= r; dx++) {
+            const cx = cell(ax) + dx;
+            const cy = cell(ay) + dy;
+            if (cx >= 0 && cy >= 0 && cx < dims.w && cy < dims.h && objects.grid.el[cy * dims.w + cx] === other) return true;
+          }
+        }
+        return false;
+      };
+      const place = (kind: 'rock' | 'tree', draw: (id: number) => [number, number, number, number], ax: number, ay: number, r: number) => {
+        if (!ours(ax, ay) || crowded(kind, ax, ay, r)) return;
         const id = newStroke({ kind, bbox: [0, 0, 0, 0], anchor: [cell(ax), cell(ay)], group: m.id });
         const box = draw(id);
         const cells = rasterizeCoverage(bp, objects.buf, K, id, kind === 'rock' ? El.ROCK : El.TREE, objects.grid, [cell(box[0]), cell(box[1]), cell(box[2]), cell(box[3])], false);
@@ -53,11 +65,11 @@ registerFeature({
       const groundY = () => slab.y + slab.depth * rng.range(-0.15, 0.25);
       const rock = (x: number, w: number, h: number) => {
         const y = groundY();
-        place('rock', (id) => paintRock(objects.paint, x, y, u.toArt(w), u.toArt(h), id, rng, noise, u.toArt(1.2), inkRGB), x, y);
+        place('rock', (id) => paintRock(objects.paint, x, y, u.toArt(w), u.toArt(h), id, rng, noise, u.toArt(1.2), inkRGB), x, y, Math.ceil(u.toArt(w) / K / 2));
       };
       const tree = (species: string, x: number, size: number) => {
         const y = groundY();
-        place('tree', (id) => getSpecies(species).grow({ paint: objects.paint, x, y, size: u.toArt(size), owner: id, rng, noise, ink: inkRGB, k: K }), x, y);
+        place('tree', (id) => getSpecies(species).grow({ paint: objects.paint, x, y, size: u.toArt(size), owner: id, rng, noise, ink: inkRGB, k: K }), x, y, 2);
       };
 
       // trees and rocks are drawn back to front along the slab's depth by their own y (groundY)
@@ -68,7 +80,7 @@ registerFeature({
       if (kind === 1 && trees > 0) {
         const a = rng.range(0, 0.4);
         const b = rng.range(0.6, 1);
-        for (let t = a; t < b; t += 24 / Math.max(1, u.artToUnit(span)) / Math.max(0.3, trees)) tree('slim', at(t), rng.range(50, 100));
+        for (let t = a; t < b; t += 24 / Math.max(1, u.artToUnit(span)) / Math.max(0.3, trees)) tree('round', at(t), rng.range(30, 50));
       }
       if (kind === 2 && trees > 0) {
         for (let i = 0; i < Math.max(1, Math.round((1 + rng.int(3)) * Math.min(1, trees))); i++) {
@@ -77,15 +89,15 @@ registerFeature({
           for (let r = 0; r < Math.round(rng.int(3) * rocks); r++) rock(x + u.toArt(rng.range(-50, 50)), rng.range(30, 55), rng.range(22, 40));
         }
       }
-      if (kind === 3 && trees > 0) for (let i = 0; i < Math.round((1 + rng.int(3)) * trees); i++) tree('edgeTree', at(rng.range(0.1, 0.9)), rng.range(60, 110));
+      if (kind === 3 && trees > 0) for (let i = 0; i < Math.round((1 + rng.int(3)) * trees); i++) tree('tall', at(rng.range(0.1, 0.9)), rng.range(50, 90));
       if (kind === 4 && trees > 0) {
         const a = rng.range(0, 0.4);
         const b = rng.range(0.6, 1);
-        for (let t = a; t < b; t += 18 / Math.max(1, u.artToUnit(span)) / Math.max(0.3, trees)) tree('leafCluster', at(t), rng.range(14, 24));
+        for (let t = a; t < b; t += 18 / Math.max(1, u.artToUnit(span)) / Math.max(0.3, trees)) tree('pine', at(t), rng.range(28, 50));
       }
       // always: a few small boulders, and a sprinkle of small leaf clusters
       for (let i = 0; i < Math.round((2 + rng.int(4)) * rocks); i++) rock(at(rng.range(0.05, 0.95)), rng.range(22, 55), rng.range(18, 42));
-      for (let i = 0; i < Math.round(rng.int(12) * trees); i++) tree('leafCluster', at(rng.range(0.05, 0.95)), rng.range(9, 15));
+      for (let i = 0; i < Math.round(rng.int(12) * trees); i++) tree('round', at(rng.range(0.05, 0.95)), rng.range(18, 30));
     }
   },
 });

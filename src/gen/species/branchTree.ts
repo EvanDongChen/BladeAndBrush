@@ -66,7 +66,7 @@ registerSpecies({
   name: 'branchTree',
   grow: (g) => {
     const { x, y, size, rng, noise } = g;
-    const wid = Math.max(g.k * 1.2, size * 0.022);
+    const wid = Math.max(g.k * 1.6, size * 0.034);
     const trunk = path(g, x, y, size, -Math.PI / 2, Math.PI * 0.12, 3, 8);
     const outline = (poly: [number, number][]) => {
       g.paint.fillPolygon(poly, PAPER, g.owner);

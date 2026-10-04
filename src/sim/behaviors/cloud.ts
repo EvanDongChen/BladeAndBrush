@@ -1,79 +1,99 @@
-import { registerBehavior } from '../../core/behaviors';
-import { Flag, NO_PLANE } from '../../core/constants';
-import { El } from '../../core/elements';
+import { registerPass } from '../../core/behaviors';
+import { cloudCapacity, inCloud, type Cloud } from '../../core/clouds';
+import { Flag } from '../../core/constants';
+import { registerPlacer } from '../../core/objects';
+import { registerParam } from '../../core/params';
 import type { World } from '../../core/world';
 import { CLOUD } from '../elements/cloud';
 import { RAIN } from '../elements/rain';
 import { REPLACEABLE } from '../physics';
 import { defineTunables } from '../tunables';
 
+registerParam({ key: 'wind', label: 'Wind', min: -1, max: 1, step: 0.05, default: 0.3 });
+
 export const cloudTunables = defineTunables(
   'cloud',
   {
-    /** Water a cloud cell takes in from one cell of steam (or a raindrop, or water landing on it). */
+    /** Cells per tick a cloud drifts at full wind (the Wind param is -1..1, negative = to the left). */
+    speed: 0.15,
+    /** Water a cloud takes in from one cell of steam. */
     soak: 70,
-    /** Chance per tick that a soaked cloud cell lets a raindrop fall (scaled by how wet it is). */
-    rain: 0.05,
+    /** Raindrops per tick from a cloud that is full of water (fewer as it dries). */
+    rain: 0.6,
     /** Water a raindrop takes out of the cloud. */
     drop: 18,
   },
-  { soak: [0, 255, 5], rain: [0, 0.5, 0.005], drop: [1, 120, 1] },
+  { speed: [0, 1, 0.01], soak: [0, 255, 5], rain: [0, 3, 0.05], drop: [1, 120, 1] },
 );
 
-/**
- * A drop of water or rain resting on top of a cloud falls through it: it moves to the first free
- * cell under the cloud (within reach). Returns true if it went through. Clouds are only soaked by
- * steam, so pouring water on one does not make it rain.
- */
-export function dropThroughCloud(world: World, x: number, y: number): boolean {
-  const { w, h, el } = world;
-  let ny = y + 1;
-  while (ny < h && ny - y <= 40 && el[ny * w + x] === CLOUD) ny++;
-  if (ny === y + 1 || ny >= h || ny - y > 40 || !REPLACEABLE[el[ny * w + x]]) return false;
-  const i = y * w + x;
-  const e = el[i];
-  const aux = world.aux[i];
-  world.set(x, y, El.EMPTY);
-  world.set(x, ny, e, { aux, vy: 1 });
-  world.flags[ny * w + x] |= Flag.UPDATED;
-  return true;
+/** The cloud (x, y) is inside, if any. */
+export function cloudAt(world: World, x: number, y: number): Cloud | undefined {
+  for (const c of world.clouds) if (inCloud(c, x, y, world.w)) return c;
+  return undefined;
 }
 
-/** Add water to the cloud cell at index i. A wet cell shows its own grey, not the painted cloud. */
-export function soak(world: World, i: number, amount: number): void {
-  world.life[i] = Math.min(255, world.life[i] + amount);
-  world.plane[i] = NO_PLANE;
+/** Steam reached a cloud, or cooled up high: the water goes into that cloud, or a new little puff. */
+export function soak(world: World, x: number, y: number, into?: Cloud): void {
+  const c = into ?? cloudAt(world, x, y);
+  if (c) {
+    c.water = Math.min(cloudCapacity(c), c.water + cloudTunables.soak);
+    return;
+  }
+  world.clouds.push({ obj: 0, x, y, hw: 4, hh: 2, water: cloudTunables.soak, puff: true, seed: (x * 31 + y * 17 + world.tick) | 0 });
 }
 
 /**
- * A wet cloud cell shares its water with a drier cloud neighbour (so a soaked patch spreads through
- * the cloud), and now and then lets a raindrop fall from its underside. A cloud made of cooled
- * steam is gone once it is dry.
+ * Every tick: clouds drift with the wind (wrapping around the scroll), wet ones rain from their
+ * underside into whatever free cell is there, and puffs of steam that have rained out are gone.
+ * Small puffs that drift into a bigger cloud merge into it.
  */
-function updateCloud(world: World, x: number, y: number): void {
-  const { w, h, el, life, rng } = world;
-  const i = y * w + x;
-  const water = life[i];
-  if (water === 0) return; // dry: nothing to do (most of the time)
+registerPass({
+  name: 'clouds',
+  phase: 'post',
+  order: 0,
+  run: (world) => {
+    const list = world.clouds;
+    if (list.length === 0) return;
+    const { w, h, el, rng } = world;
+    const vx = Math.max(-1, Math.min(1, world.params.wind ?? 0)) * cloudTunables.speed;
+    let keep = 0;
+    for (const c of list) {
+      c.x += vx;
+      if (c.x - c.hw > w) c.x -= w + 2 * c.hw;
+      else if (c.x + c.hw < 0) c.x += w + 2 * c.hw;
 
-  // share with a random neighbour
-  const k = rng.int(4);
-  const n = k === 0 ? i - 1 : k === 1 ? i + 1 : k === 2 ? i - w : i + w;
-  const nx = k === 0 ? x - 1 : k === 1 ? x + 1 : x;
-  if (nx >= 0 && nx < w && n >= 0 && n < world.size && el[n] === CLOUD && life[n] + 8 < water) {
-    const give = (water - life[n]) >> 2;
-    life[i] -= give;
-    soak(world, n, give);
-  }
+      if (c.water > 0) {
+        const n = rng.next() * cloudTunables.rain * (c.water / cloudCapacity(c)) * Math.max(1, c.hw / 10);
+        for (let k = 0; k < Math.floor(n) + (rng.chance(n % 1) ? 1 : 0); k++) {
+          const x = Math.round(c.x + rng.range(-0.8, 0.8) * c.hw);
+          const rx = ((x % w) + w) % w;
+          const y = Math.round(c.y + c.hh * 0.8);
+          if (y < 0 || y >= h || !REPLACEABLE[el[y * w + rx]]) continue;
+          world.set(rx, y, RAIN, { aux: rng.int(256), vy: 1 });
+          world.flags[y * w + rx] |= Flag.UPDATED;
+          c.water = Math.max(0, c.water - cloudTunables.drop);
+          if (c.water === 0) break;
+        }
+      }
+      if (c.puff) {
+        const big = list.find((o) => o !== c && !o.puff && inCloud(o, c.x, c.y, w));
+        if (big) {
+          big.water = Math.min(cloudCapacity(big), big.water + c.water);
+          continue;
+        }
+        if (c.water === 0) continue; // rained out
+      }
+      list[keep++] = c;
+    }
+    list.length = keep;
+  },
+});
 
-  // rain from the underside
-  if (y + 1 < h && REPLACEABLE[el[i + w]] && rng.chance(cloudTunables.rain * (life[i] / 255))) {
-    world.set(x, y + 1, RAIN, { aux: rng.int(256) });
-    world.flags[i + w] |= Flag.UPDATED;
-    life[i] = Math.max(0, life[i] - cloudTunables.drop);
-  }
-
-  if (life[i] === 0 && world.vx[i] === 1) world.set(x, y, El.EMPTY); // a puff of steam, rained out
-}
-
-registerBehavior(CLOUD, updateCloud);
+/** A cloud the generator asks for: centred on (x, y), `variant` cells half-wide and `face` cells half-tall. */
+registerPlacer({
+  el: CLOUD,
+  place: (world, x, y, o) => {
+    world.clouds.push({ obj: o.obj, x, y, hw: Math.max(4, o.variant ?? 30), hh: Math.max(2, o.face ?? 6), water: 0, puff: false, seed: o.obj });
+    return true;
+  },
+});

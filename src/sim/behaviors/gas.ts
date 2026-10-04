@@ -2,12 +2,11 @@ import { registerBehavior } from '../../core/behaviors';
 import { Flag } from '../../core/constants';
 import { El } from '../../core/elements';
 import type { World } from '../../core/world';
-import { CLOUD } from '../elements/cloud';
 import { DUST } from '../elements/dust';
 import { RAIN } from '../elements/rain';
 import { STEAM } from '../elements/steam';
-import { at, BLOCKED, canRise, FREE, moveCell, NEIGHBORS4, REPLACEABLE } from '../physics';
-import { cloudTunables, soak } from './cloud';
+import { at, BLOCKED, canRise, FREE, moveCell, REPLACEABLE } from '../physics';
+import { cloudAt, soak } from './cloud';
 import { defineTunables } from '../tunables';
 
 export const gasTunables = defineTunables(
@@ -66,12 +65,10 @@ function updateGas(world: World, x: number, y: number): void {
   const i = y * world.w + x;
   const me = world.el[i];
   if (me === STEAM) {
-    // steam that reaches a cloud soaks into it
-    for (let k = 0; k < 8; k += 2) {
-      const nx = x + NEIGHBORS4[k];
-      const ny = y + NEIGHBORS4[k + 1];
-      if (at(world, nx, ny) !== CLOUD || !world.inBounds(nx, ny)) continue;
-      soak(world, ny * world.w + nx, cloudTunables.soak);
+    // steam that rises into a cloud soaks into it
+    const c = world.clouds.length > 0 ? cloudAt(world, x, y) : undefined;
+    if (c) {
+      soak(world, x, y, c);
       world.set(x, y, El.EMPTY);
       world.flags[i] |= Flag.UPDATED;
       return;
@@ -82,7 +79,8 @@ function updateGas(world: World, x: number, y: number): void {
   } else if (--world.life[i] === 0) {
     if (me === STEAM && world.rng.chance(gasTunables.condense)) world.set(x, y, RAIN, { aux: world.rng.int(256) });
     else if (me === STEAM && y < world.h * gasTunables.cloudLine && world.rng.chance(gasTunables.puff)) {
-      world.set(x, y, CLOUD, { life: cloudTunables.soak, vx: 1, aux: world.rng.int(256) }); // cooled high up: a little rain cloud
+      soak(world, x, y); // cooled high up: into a cloud there, or a little new one
+      world.set(x, y, El.EMPTY);
     } else world.set(x, y, El.EMPTY);
     world.flags[i] |= Flag.UPDATED;
     return;

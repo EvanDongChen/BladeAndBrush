@@ -17,7 +17,7 @@ interface EntryRow {
   params: Record<string, number>;
   action_log: unknown[];
   png_url: string;
-  result: { pass: boolean; progress: number };
+  result: { pass: boolean; progress: number; strokes?: number; budget?: number };
   scan: Record<string, unknown> | null;
   world_hash: number;
   app_version: string;

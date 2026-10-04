@@ -20,7 +20,7 @@ export interface ValidSubmission {
   params: Record<string, number>;
   actionLog: unknown[];
   png: string;
-  result: { pass: boolean; progress: number };
+  result: { pass: boolean; progress: number; strokes?: number; budget?: number };
   scan: Record<string, unknown> | null;
   worldHash: number;
   appVersion: string;
@@ -65,6 +65,13 @@ export function validateSubmission(body: unknown): ValidSubmission {
   if (!isRecord(result) || typeof result.pass !== 'boolean') fail('result');
   const progress = result.progress;
   if (typeof progress !== 'number' || progress < 0 || progress > 1) fail('result.progress');
+  const count = (v: unknown, name: string): number | undefined => {
+    if (v === undefined || v === null) return undefined;
+    if (typeof v !== 'number' || !Number.isInteger(v) || v < 0 || v > 1000) fail(name);
+    return v;
+  };
+  const strokes = count(result.strokes, 'result.strokes');
+  const budget = count(result.budget, 'result.budget');
   if (scan !== undefined && scan !== null && !isRecord(scan)) fail('scan');
   if (typeof worldHash !== 'number' || !Number.isInteger(worldHash)) fail('worldHash');
   if (typeof appVersion !== 'string' || !appVersion || appVersion.length > 32) fail('appVersion');
@@ -83,7 +90,7 @@ export function validateSubmission(body: unknown): ValidSubmission {
     params: cleanParams,
     actionLog,
     png,
-    result: { pass: result.pass, progress },
+    result: { pass: result.pass, progress, ...(strokes !== undefined ? { strokes } : {}), ...(budget !== undefined ? { budget } : {}) },
     scan: scan == null ? null : (scan as Record<string, unknown>),
     worldHash,
     appVersion,

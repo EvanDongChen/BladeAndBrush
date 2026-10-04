@@ -32,6 +32,8 @@ interface Row {
 
 const dir = join(process.cwd(), 'bench');
 const outName = process.env.BENCH_OUT ?? 'browser-latest.json';
+/** Extra query for every page, e.g. BENCH_QUERY=cpu to measure the CPU ink layer. */
+const extra = process.env.BENCH_QUERY ? `&${process.env.BENCH_QUERY}` : '';
 const rows: Row[] = [];
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -114,7 +116,7 @@ try {
   page.on('pageerror', (e) => console.error('page error:', e.message));
 
   // a level: unrolling, then idle, then after a few cuts
-  await page.goto(`${base}level.html?level=level-1&perf`);
+  await page.goto(`${base}level.html?level=level-1&perf${extra}`);
   await page.waitForSelector('canvas.grid');
   await measure(page, 'level unrolling', 3000);
   await measure(page, 'level idle', 5000);
@@ -122,7 +124,7 @@ try {
   await measure(page, 'level after cuts', 4000);
 
   // the sandbox: its blueprint scene, then the pond (water shading)
-  await page.goto(`${base}sandbox.html?perf`);
+  await page.goto(`${base}sandbox.html?perf${extra}`);
   await page.waitForSelector('canvas');
   await measure(page, 'sandbox blueprint', 4000);
   await page.locator('select').filter({ hasText: 'Pond and earth' }).selectOption({ label: 'Pond and earth' });

@@ -18,13 +18,6 @@ import { Fx } from './fx';
 import { arsenal } from './arsenal';
 import { button, h, handscroll, panel, seal, startLoop, toCell } from './ui';
 
-/** A panel that starts rolled up (secondary controls the player rarely needs). */
-function rolledPanel(title: string, ...children: (Node | string)[]): HTMLElement {
-  const p = panel(title, ...children);
-  p.querySelector<HTMLButtonElement>('.panel-toggle')?.click();
-  return p;
-}
-
 /** Header for players: no links to the workshops. */
 function levelHeader(sub: string): HTMLElement {
   const brand = h(
@@ -61,15 +54,20 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
   const fx = new Fx();
   const status = h('div', { class: 'status' });
   const stage = h('div', { class: 'stage' });
-  // on-canvas HUD: the selected blade, the painting-reveal bar, and the retry banner when the ink runs out
+  // on-canvas HUD: the selected blade, the scroll rollers, and the retry banner when the ink runs out
   const hudGlyph = h('span', { class: 'hud-glyph', 'aria-hidden': 'true' });
   const hudName = h('strong', {});
   const hudTool = h('div', { class: 'hud-tool' }, hudGlyph, hudName);
   const retry = button('Regenerate', () => regenerate(), { class: 'hud-retry' });
   const banner = h('div', { class: 'hud-banner', hidden: true, role: 'status' }, h('p', {}, 'Out of ink.'), retry);
-  const reveal = h('span', { class: 'reveal-fill' });
-  const revealBar = h('div', { class: 'reveal-bar', 'aria-hidden': 'true' }, reveal);
-  const frame = h('div', { class: 'frame' }, canvas, hudTool, banner, revealBar);
+  // two rollers: one fixed at the left edge, one riding the frontier so the paper unrolls as the landscape draws
+  const rollLeft = h('span', { class: 'roll', 'aria-hidden': 'true' });
+  const rollLead = h('span', { class: 'roll lead', 'aria-hidden': 'true' });
+  // the red seal pressed onto the painting when the poem is complete
+  const stamp = h('div', { class: 'stamp', 'aria-hidden': 'true' }, seal('完成', 'stamp-seal'));
+  let winTimer = 0;
+  const mount = h('span', { class: 'mount', 'aria-hidden': 'true' }); // the silk the painting is mounted on
+  const frame = h('div', { class: 'frame' }, mount, canvas, hudTool, banner, stamp, rollLeft, rollLead);
   let tip = '';
 
   function regenerate(): void {
@@ -79,6 +77,8 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
     driver = new ActionDriver();
     used = 0;
     won = false;
+    clearTimeout(winTimer);
+    stamp.classList.remove('on');
     complete?.close();
     banner.hidden = true;
     fx.attach(world);
@@ -150,17 +150,22 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
   setRadius(radius);
 
   // ---- poem, goals, ink ----
-  const poem = h('p', { class: 'poem level-poem' });
-  level.poem.forEach((line, i) => {
-    if (i) poem.append(h('br'));
-    poem.append(line);
+  // Each poem line is a verse tied to the goal at the same position. A line with no goal of its own lights
+  // up when every goal is met, and a goal with no line is listed by its description.
+  const verses = Array.from({ length: Math.max(level.poem.length, level.goals.length) }, (_, i) => {
+    const goal = level.goals[i];
+    const line = level.poem[i];
+    const row = h(
+      'li',
+      { class: line === undefined ? 'verse plain' : 'verse', title: goal ? describeGoal(goal) : undefined },
+      h('span', { class: 'verse-text' }, line ?? describeGoal(goal)),
+      line !== undefined && goal ? h('span', { class: 'verse-goal' }, describeGoal(goal)) : '',
+      goal ? h('span', { class: 'goal-bar' }, h('span', { class: 'goal-fill' })) : '',
+    );
+    return { goal, row };
   });
-  const goalRows = level.goals.map((g) => {
-    const fill = h('span', { class: 'goal-fill' });
-    const row = h('li', { class: 'goal' }, h('span', { class: 'goal-text' }, describeGoal(g)), h('span', { class: 'goal-bar' }, fill));
-    return { g, row, fill };
-  });
-  const goalList = h('ul', { class: 'goals' }, ...goalRows.map((r) => r.row));
+  // the goals are written on the painting itself, top right
+  frame.append(h('ol', { class: 'inscription', 'aria-label': 'Goals' }, ...verses.map((v) => v.row)));
   const pips = Array.from({ length: level.actionBudget }, () => h('i', { class: 'pip' }));
   const inkCount = h('span', { class: 'ink-count' });
   const ink = h('div', { class: 'ink', role: 'img' }, h('span', { class: 'ink-label' }, 'Ink'), h('span', { class: 'pips' }, ...pips), inkCount);
@@ -197,17 +202,23 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
 
   function checkGoals(): void {
     const result = scan(world);
+    const started = changed();
     let all = true;
-    for (const r of goalRows) {
-      const { pass, progress } = evaluateGoal(result, r.g);
+    for (const v of verses) {
+      if (!v.goal) continue;
+      const { pass, progress } = evaluateGoal(result, v.goal);
       all &&= pass;
-      r.row.classList.toggle('met', pass);
-      r.fill.style.width = `${Math.round(progress * 100)}%`;
+      v.row.classList.toggle('met', pass && started); // a fresh painting that already matches does not light up
+      v.row.style.setProperty('--p', `${Math.round(progress * 100)}%`);
     }
-    if (all && changed() && !won) {
+    for (const v of verses) if (!v.goal) v.row.classList.toggle('met', all && started);
+    if (all && started && !won) {
       won = true;
-      complete!.node.hidden = false;
-      requestAnimationFrame(() => complete!.open());
+      stamp.classList.add('on'); // the seal lands first, then the scroll unrolls
+      winTimer = window.setTimeout(() => {
+        complete!.node.hidden = false;
+        complete!.open();
+      }, 1100);
     }
   }
 
@@ -248,20 +259,19 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
     levelHeader(level.id),
     h(
       'main',
-      { class: 'layout' },
+      { class: 'layout level-layout' },
       stage,
       h(
         'aside',
         { class: 'controls' },
-        panel('Poem', poem, goalList, ink),
-        panel('Abilities', bar.node, h('label', { class: 'row brush-row' }, h('span', {}, 'Brush size'), radiusInput, radiusDot)),
+                panel('Abilities', bar.node, ink, h('label', { class: 'row brush-row' }, h('span', {}, 'Brush size'), radiusInput, radiusDot)),
         panel(
           'Painting',
           paramRows,
           h('p', { class: 'home-note' }, 'Shape changes apply when you regenerate.'),
           button('Regenerate', regenerate),
         ),
-        rolledPanel('Tuning', tuning),
+        panel('Tuning', tuning),
       ),
     ),
   );
@@ -282,8 +292,8 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
       const spent = frontier.done && used >= level.actionBudget && !won;
       bar.setSpent(spent);
       banner.hidden = !spent;
-      revealBar.classList.toggle('done', frontier.done);
-      reveal.style.width = `${Math.round((frontier.x / level.dims.w) * 100)}%`;
+      frame.style.setProperty('--p', String(frontier.x / level.dims.w));
+      frame.classList.toggle('ready', frontier.done);
       status.textContent = !frontier.done ? 'The landscape is painting itself…' : spent ? 'Out of ink. Regenerate to try again.' : tip;
       fx.endFrame(canvas, dt);
     },
@@ -301,6 +311,7 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
   return () => {
     stop();
     fx.detach();
+    clearTimeout(winTimer);
     removeEventListener('keydown', onKey);
   };
 }

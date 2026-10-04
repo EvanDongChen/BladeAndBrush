@@ -40,7 +40,7 @@ export function lobesOf(c: Cloud, cx: number): Lobe[] {
  * and the width of the cloud where it cuts. `top` is a bound for filling down from. An ink painter
  * closes a cumulus with one line along the bottom, not with more lobes.
  */
-function baseOf(c: Cloud, cx: number, lobes: Lobe[]): { y: number; x0: number; x1: number; top: number } {
+export function baseOf(c: Cloud, cx: number, lobes: Lobe[]): { y: number; x0: number; x1: number; top: number } {
   let high = Infinity;
   let low = -Infinity;
   for (const l of lobes) {

@@ -1,6 +1,7 @@
 import { BEHIND_LAYERS, NO_PLANE, type LevelDims } from './constants';
 import { Hasher } from './hash';
 import type { GenParams } from './params';
+import type { SetpieceSpec } from './setpieces';
 
 /**
  * The A -> B handoff contract. generate(seed, params) is a pure function that returns one of
@@ -24,6 +25,8 @@ export interface Blueprint {
   plane?: Uint8Array;
   behind?: StackLayer[];
   registry: Registry;
+  /** What the level asked the generator to put in (core/setpieces.ts). Empty for a free painting. */
+  setpieces: SetpieceSpec[];
   /** Vector draw commands for the art layer (empty in the Phase 0 stub). */
   draw: DrawCmd[];
   /** Background plane (same size as el): FAR_ROCK or EMPTY. Never simulated or scanned. */
@@ -59,14 +62,15 @@ export interface DrawCmd {
 }
 
 export interface Registry {
-  /** ownerId -> info */
+  /** id -> info, for every tracked object: painted strokes, and things the sim places (creatures). */
   strokes: Map<number, StrokeInfo>;
   waterSources: { x: number; y: number; rate: number }[];
 }
 
 export interface StrokeInfo {
   id: number;
-  kind: 'mountain' | 'tree' | 'rock';
+  /** 'mountain' | 'tree' | 'rock' from the base features; setpieces add their own ('moon', 'hut'...). */
+  kind: string;
   bbox: [x0: number, y0: number, x1: number, y1: number];
   anchor: [x: number, y: number];
   /**
@@ -75,6 +79,10 @@ export interface StrokeInfo {
    * their own owner ids (trees are still counted by owner); this is the grouping on top.
    */
   group?: number;
+  /** Labels for metrics (core/objects.ts), e.g. 'village' or 'captive'. */
+  tags?: string[];
+  /** Set for things the sim places when the frontier reaches anchor.x (a creature): its element etc. */
+  spawn?: { el: number; variant?: number; face?: number };
 }
 
 /** RGBA art at k x grid resolution, packed little-endian like rgba(). Row width is w * k. */
@@ -141,7 +149,7 @@ export function flattenPlanes(bp: Blueprint): void {
   }
 }
 
-export function createBlueprint(seed: number, params: GenParams, dims: LevelDims): Blueprint {
+export function createBlueprint(seed: number, params: GenParams, dims: LevelDims, setpieces: SetpieceSpec[] = []): Blueprint {
   return {
     seed,
     params: { ...params },
@@ -150,6 +158,7 @@ export function createBlueprint(seed: number, params: GenParams, dims: LevelDims
     el: new Uint8Array(dims.w * dims.h),
     owner: new Uint16Array(dims.w * dims.h),
     registry: { strokes: new Map(), waterSources: [] },
+    setpieces: setpieces.map((s) => ({ ...s })),
     draw: [],
   };
 }
@@ -158,7 +167,7 @@ export function createBlueprint(seed: number, params: GenParams, dims: LevelDims
 export function hashBlueprint(bp: Blueprint): number {
   const h = new Hasher().int(bp.seed).int(bp.w).int(bp.h).bytes(bp.el).u16(bp.owner);
   for (const s of bp.registry.strokes.values()) {
-    h.int(s.id).int(s.kind.length).int(s.bbox[0]).int(s.bbox[1]).int(s.bbox[2]).int(s.bbox[3]);
+    h.int(s.id).int(s.kind.length).int(s.spawn?.el ?? 0).int(s.bbox[0]).int(s.bbox[1]).int(s.bbox[2]).int(s.bbox[3]);
     h.int(s.anchor[0]).int(s.anchor[1]);
   }
   for (const w of bp.registry.waterSources) h.int(w.x).int(w.y).int(Math.round(w.rate * 1000));

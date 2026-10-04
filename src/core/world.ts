@@ -2,6 +2,7 @@ import { BEHIND_LAYERS, Flag, NO_PLANE, type LevelDims } from './constants';
 import { El, hash3, IS_STATIC } from './elements';
 import { EventBus } from './events';
 import { Hasher } from './hash';
+import type { WorldObject } from './objects';
 import { defaultParams, type GenParams } from './params';
 import { Rng } from './rng';
 
@@ -11,6 +12,8 @@ export interface SetOpts {
   vx?: number;
   vy?: number;
   owner?: number;
+  /** Object id (see core/objects.ts). Cleared unless given. */
+  obj?: number;
   /** Mark the cell CUT (slash scar) and emit 'cut' if it held something. */
   cut?: boolean;
 }
@@ -44,6 +47,7 @@ export class World {
   readonly vx: Int8Array; // velocity, cells/tick (SPLAT, push)
   readonly vy: Int8Array;
   readonly owner: Uint16Array; // stroke id (0 = none). Links cell -> Blueprint registry entry
+  readonly obj: Uint16Array; // object id (0 = none), see core/objects.ts. Moves with the cell's material
   readonly flags: Uint8Array; // see Flag in constants.ts
 
   /**
@@ -66,6 +70,9 @@ export class World {
   /** Active water sources. The frontier reveal adds them; B's emitter pass reads them. */
   sources: WaterSource[] = [];
 
+  /** Tracked objects by id (see core/objects.ts). The frontier reveal adds them. */
+  objects = new Map<number, WorldObject>();
+
   constructor(dims: LevelDims, seed: number, params: GenParams = defaultParams()) {
     this.w = dims.w;
     this.h = dims.h;
@@ -78,6 +85,7 @@ export class World {
     this.vx = new Int8Array(this.size);
     this.vy = new Int8Array(this.size);
     this.owner = new Uint16Array(this.size);
+    this.obj = new Uint16Array(this.size);
     this.flags = new Uint8Array(this.size);
     this.plane = new Uint8Array(this.size).fill(NO_PLANE);
     for (let d = 0; d < BEHIND_LAYERS; d++) {
@@ -106,7 +114,7 @@ export class World {
   }
 
   /**
-   * Write a cell. Clears life, velocity and owner unless given in opts; keeps aux (shade) unless
+   * Write a cell. Clears life, velocity, owner and obj unless given in opts; keeps aux (shade) unless
    * given; keeps flags. Out-of-bounds writes are ignored.
    */
   set(x: number, y: number, el: number, opts?: SetOpts): void {
@@ -126,6 +134,7 @@ export class World {
     this.vx[i] = opts?.vx ?? 0;
     this.vy[i] = opts?.vy ?? 0;
     this.owner[i] = opts?.owner ?? 0;
+    this.obj[i] = opts?.obj ?? 0;
     if (opts?.aux !== undefined) this.aux[i] = opts.aux;
   }
 
@@ -145,6 +154,7 @@ export class World {
     swapIn(this.plane, a, b);
     if (this.flags[a] & Flag.HAS_BEHIND) this.noteChange(a, this.el[a]);
     if (this.flags[b] & Flag.HAS_BEHIND) this.noteChange(b, this.el[b]);
+    swapIn(this.obj, a, b);
     this.flags[a] |= Flag.UPDATED;
     this.flags[b] |= Flag.UPDATED;
   }
@@ -171,6 +181,7 @@ export class World {
       const next = this.behindEl[0][i];
       el[i] = next;
       owner[i] = this.behindOwner[0][i];
+      this.obj[i] = owner[i]; // generated material: its object is its stroke
       plane[i] = next === El.EMPTY ? NO_PLANE : this.behindPlane[0][i];
       life[i] = 0;
       vx[i] = 0;
@@ -226,9 +237,14 @@ export class World {
     return out;
   }
 
-  /** Deterministic hash of all cell state, the tick and the RNG state. UPDATED bits are ignored. */
+  /** Deterministic hash of all cell state, the tick, the RNG state and object stats. UPDATED bits are ignored. */
   hash(): number {
-    const h = new Hasher()
+    const h = new Hasher();
+    for (const o of this.objects.values()) {
+      h.int(o.id);
+      for (const [k, v] of Object.entries(o.stats)) h.int(k.length).int(k.charCodeAt(0)).int(Math.round(v * 1000));
+    }
+    h
       .int(this.w)
       .int(this.h)
       .int(this.tick)
@@ -240,6 +256,7 @@ export class World {
       .bytes(this.vx)
       .bytes(this.vy)
       .u16(this.owner)
+      .u16(this.obj)
       .bytes(this.plane)
       .bytes(this.flags, 0xff & ~Flag.UPDATED & ~Flag.QUEUED);
     for (let d = 0; d < BEHIND_LAYERS; d++) h.bytes(this.behindEl[d]).u16(this.behindOwner[d]).bytes(this.behindPlane[d]);

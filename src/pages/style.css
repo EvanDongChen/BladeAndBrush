@@ -1541,46 +1541,23 @@ input[type='number'] {
   clip-path: inset(0 calc(100% - var(--edge)) 0 0);
 }
 
+/* plain wooden rollers, the same as the home page scrolls */
 .roll {
   position: absolute;
-  top: -8px;
-  bottom: -8px;
+  top: -4px;
+  bottom: -4px;
   left: 3px;
   z-index: 3;
-  width: 20px;
+  width: 22px;
   transform: translateX(-50%);
-  border-radius: 10px;
-  background:
-    linear-gradient(90deg, rgba(255, 235, 200, 0) 18%, rgba(255, 235, 200, 0.45) 30%, rgba(255, 235, 200, 0) 44%),
-    linear-gradient(90deg, #3a2312, #8a5a33 28%, #c08a57 42%, #8a5a33 62%, #3a2312);
-  box-shadow: 0 0 0 1px rgba(30, 16, 6, 0.55), 3px 3px 8px rgba(0, 0, 0, 0.35);
+  border-radius: 3px;
+  background: var(--wood-2);
+  border: 1px solid var(--wood-1);
   pointer-events: none;
 }
 
 .roll.lead {
   left: var(--edge);
-}
-
-/* gilded end knobs */
-.roll::before,
-.roll::after {
-  content: '';
-  position: absolute;
-  left: 50%;
-  width: 30px;
-  height: 9px;
-  transform: translateX(-50%);
-  border-radius: 5px;
-  background: linear-gradient(90deg, #7a5a1e, #e9c98a 40%, #b8923f 60%, #6a4c18);
-  box-shadow: 0 0 0 1px rgba(30, 16, 6, 0.5);
-}
-
-.roll::before {
-  top: -6px;
-}
-
-.roll::after {
-  bottom: -6px;
 }
 
 /* the paper curls into the leading roller: a soft shadow on its left side */

@@ -75,14 +75,26 @@ export function prepareArt(view: ArtView): PreparedArt {
  *   one in front broke): that layer's art, with the layers behind it, over paper
  * - world cell EMPTY (everything in front of the background is gone): just the background
  * - anything else (water, fire, ash... drawn by the cells layer): transparent
+ *
+ * Only the cells in [x0, x1) x [y0, y1) are written (default: all of them).
  */
-export function compose(out: Uint32Array, worldEl: Uint8Array, worldPlane: Uint8Array, prep: PreparedArt, frontierX: number): void {
+export function compose(
+  out: Uint32Array,
+  worldEl: Uint8Array,
+  worldPlane: Uint8Array,
+  prep: PreparedArt,
+  frontierX: number,
+  x0 = 0,
+  y0 = 0,
+  x1 = prep.view.w,
+  y1 = prep.view.h,
+): void {
   const { k, view, initial } = prep;
-  const { w, h } = view;
+  const { w } = view;
   const aw = w * k;
   const fx = Math.max(0, Math.min(w, frontierX));
-  for (let cy = 0; cy < h; cy++) {
-    for (let cx = 0; cx < w; cx++) {
+  for (let cy = y0; cy < y1; cy++) {
+    for (let cx = x0; cx < x1; cx++) {
       const i = cy * w + cx;
       const base = cy * k * aw + cx * k;
       const we = worldEl[i];

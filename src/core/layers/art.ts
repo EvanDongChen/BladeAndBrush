@@ -1,17 +1,17 @@
-import { compose, prepareArt } from '../artCompose';
+import { ArtFrame } from '../artFrame';
 import { registerLayer } from '../render';
-import { shadeCells } from '../shadeCells';
 
 let off: HTMLCanvasElement | null = null;
 let offG: CanvasRenderingContext2D | null = null;
 let image: ImageData | null = null;
 let px: Uint32Array | null = null;
+const frame = new ArtFrame();
 
 /**
- * The ink layer (still named `art`): everything drawn at art resolution, in one buffer and one
- * upload. First the generator's art for the cells that still match the blueprint (see compose()),
- * then the shaders for the sim cells that do not (water, fire, loose pieces...). Pages without art
- * (the sandbox) get just the shaders.
+ * The ink layer (still named `art`): everything drawn at art resolution, in one buffer. First the
+ * generator's art for the cells that still match the blueprint (see compose()), then the shaders for
+ * the sim cells that do not (water, fire, loose pieces...). Pages without art (the sandbox) get just
+ * the shaders. The buffer persists: only the tiles that changed are redrawn and uploaded (ArtFrame).
  */
 registerLayer({
   name: 'art',
@@ -33,10 +33,11 @@ registerLayer({
       px = new Uint32Array(image.data.buffer);
     }
     if (!offG || !image || !px) return;
-    if (art) compose(px, world.el, world.plane, prepareArt(art), frontierX ?? world.w);
-    else px.fill(0);
-    if (shaded && k === scale) shadeCells(px, world, k, art, frontierX ?? world.w);
-    offG.putImageData(image, 0, 0);
+    const rects = frame.update(px, world, art, frontierX ?? world.w, k, shaded && k === scale);
+    for (let r = 0; r < frame.rectCount; r++) {
+      const { x, y, w, h } = rects[r];
+      offG.putImageData(image, 0, 0, x, y, w, h);
+    }
     g.drawImage(off, 0, 0, world.w, world.h);
   },
 });

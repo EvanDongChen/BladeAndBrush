@@ -9,6 +9,7 @@ const INK_GREY = pack(96, 94, 90);
  * at rest never moves), and a darker rim where the body ends.
  */
 registerShader({
+  static: true,
   element: ['rock', 'tree', 'wood', 'earth', 'leaf', 'hay', 'bamboo', 'moon', 'far_rock', 'stain', 'splat', 'debris', 'ash', 'dust'],
   shade: (p) => {
     const wash = mix(p.base, PAPER_COLOR, 0.72);

@@ -8,6 +8,7 @@ const INK = pack(74, 70, 68);
  * blended smoothly between neighbouring cells, and a fine dark ink line where the body ends.
  */
 registerShader({
+  static: true,
   element: ['person', 'bird', 'butterfly', 'flower'],
   shade: (p) => {
     const lum = (p.base & 255) * 0.3 + ((p.base >>> 8) & 255) * 0.59 + ((p.base >>> 16) & 255) * 0.11;

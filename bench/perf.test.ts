@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import '../src/pages/bootstrap';
 import { compose, prepareArt } from '../src/core/artCompose';
+import { ArtFrame } from '../src/core/artFrame';
 import { artView, type Blueprint } from '../src/core/blueprint';
 import { El } from '../src/core/elements';
 import { features } from '../src/core/features';
@@ -158,6 +159,25 @@ describe('benchmarks', () => {
     }
     for (let i = 0; i < 20; i++) step(fire);
     bench('frame: shadeCells (forest fire)', () => shadeCells(out, fire, K, view, fire.w), 15);
+    // the ink layer as the pages run it: a persistent frame, redrawn only where tiles changed
+    const artFrame = (name: string, wd: World, everyFrame?: () => void) => {
+      const f = new ArtFrame();
+      f.update(out, wd, view, wd.w, K, true);
+      bench(`ink frame: ${name}`, () => {
+        everyFrame?.();
+        f.update(out, wd, view, wd.w, K, true);
+      }, 20);
+      value(`ink frame: ${name}: tiles redrawn`, 'tiles', f.tilesDrawn);
+    };
+    artFrame('idle painting', w);
+    artFrame('lake (10k cells, animating)', lake);
+    artFrame('big lake (35k cells, animating)', big);
+    artFrame('forest fire', fire);
+    let cutX = 60;
+    artFrame('a small cut every frame', w, () => {
+      w.clearCircle(cutX, 120, 4, { cut: true });
+      cutX = cutX > 880 ? 60 : cutX + 9;
+    });
     const field = createGlowField();
     bench('frame: glow field (forest fire)', () => buildGlowField(fire, field), 15);
     bench('frame: glow field (nothing glowing)', () => buildGlowField(w, createGlowField()), 15);

@@ -51,6 +51,11 @@ export interface Shader {
   run?: boolean;
   /** The shader ignores `base` (skips the per-pixel color blending between neighbouring cells). */
   noBase?: boolean;
+  /**
+   * The output depends only on the cells (not on the tick), so a body at rest is drawn once and
+   * then left alone. Leave it off for anything that moves on its own (water, fire, smoke).
+   */
+  static?: boolean;
   /** Packed RGBA; alpha is its own opacity (multiplied by coverage). */
   shade(p: ShadePx): number;
 }

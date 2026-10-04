@@ -5,6 +5,17 @@ import { El, ELEMENTS, type CellView } from './elements';
 import { FAMILY, RUN, resolveShaders, anyShader, sampleTexture, smoothstep, SHADER, type ShadePx } from './shaders';
 import type { World } from './world';
 
+/** A set of square tiles of cells to draw, and where to report the tiles that animate. */
+export interface ShadeRegion {
+  /** 1 per tile to draw, row-major, `cols` tiles per row. */
+  tiles: Uint8Array;
+  cols: number;
+  /** Tile side in cells. */
+  size: number;
+  /** If given, set to 1 for every tile that drew a cell whose shader is not `static`. */
+  animated?: Uint8Array;
+}
+
 /** A run shorter than this still gets a gentle gradient (a puddle does not go black at once). */
 const MIN_RUN = 24;
 
@@ -120,8 +131,17 @@ function showsArt(world: World, view: ArtView, i: number): boolean {
  * each pixel (so staircase edges become slopes, and the shape spills into the empty cells beside
  * it), and the element's own colors are blended between neighbouring cells. Then the element's
  * shader runs per pixel.
+ *
+ * With a `region`, only the cells inside its marked tiles are drawn (the caller cleared them first).
  */
-export function shadeCells(out: Uint32Array, world: World, k: number, view: ArtView | undefined, frontierX: number): void {
+export function shadeCells(
+  out: Uint32Array,
+  world: World,
+  k: number,
+  view: ArtView | undefined,
+  frontierX: number,
+  region?: ShadeRegion,
+): void {
   resolveShaders();
   if (!anyShader) return;
   const { w, h, el, aux, life } = world;
@@ -136,24 +156,39 @@ export function shadeCells(out: Uint32Array, world: World, k: number, view: ArtV
 
   // pass A: queue every shaded cell that needs drawing, and its 8 neighbours (for the spill)
   let n = 0;
-  for (let cy = 0; cy < h; cy++) {
-    for (let cx = 0; cx < fxEnd; cx++) {
-      const i = cy * w + cx;
-      if (!SHADER[el[i]]) continue;
-      if (view && showsArt(world, view, i)) continue;
-      for (let dy = -1; dy <= 1; dy++) {
-        const ny = cy + dy;
-        if (ny < 0 || ny >= h) continue;
-        for (let dx = -1; dx <= 1; dx++) {
-          const nx = cx + dx;
-          if (nx < 0 || nx >= fxEnd) continue;
-          const j = ny * w + nx;
-          if (stamp[j] !== frameId) {
-            stamp[j] = frameId;
-            list[n++] = j;
-          }
+  const queueAround = (cx: number, cy: number) => {
+    const i = cy * w + cx;
+    if (!SHADER[el[i]]) return;
+    if (view && showsArt(world, view, i)) return;
+    for (let dy = -1; dy <= 1; dy++) {
+      const ny = cy + dy;
+      if (ny < 0 || ny >= h) continue;
+      for (let dx = -1; dx <= 1; dx++) {
+        const nx = cx + dx;
+        if (nx < 0 || nx >= fxEnd) continue;
+        if (region && !region.tiles[((ny / region.size) | 0) * region.cols + ((nx / region.size) | 0)]) continue;
+        const j = ny * w + nx;
+        if (stamp[j] !== frameId) {
+          stamp[j] = frameId;
+          list[n++] = j;
         }
       }
+    }
+  };
+  if (!region) {
+    for (let cy = 0; cy < h; cy++) for (let cx = 0; cx < fxEnd; cx++) queueAround(cx, cy);
+  } else {
+    // only the region's tiles, plus a one-cell ring around each (cells there spill into the tile)
+    const { tiles, cols, size } = region;
+    for (let t = 0; t < tiles.length; t++) {
+      if (!tiles[t]) continue;
+      const tx = (t % cols) * size;
+      const ty = ((t / cols) | 0) * size;
+      const ya = Math.max(0, ty - 1);
+      const yb = Math.min(h, ty + size + 1);
+      const xa = Math.max(0, tx - 1);
+      const xb = Math.min(fxEnd, tx + size + 1);
+      for (let cy = ya; cy < yb; cy++) for (let cx = xa; cx < xb; cx++) queueAround(cx, cy);
     }
   }
 
@@ -199,6 +234,7 @@ export function shadeCells(out: Uint32Array, world: World, k: number, view: ArtV
       sh = SHADER[e];
     } else continue;
     if (!sh) continue;
+    if (region?.animated && !sh.static) region.animated[((cy / region.size) | 0) * region.cols + ((cx / region.size) | 0)] = 1;
 
     const fam = FAMILY[e];
     // 5x5 occupancy of this family (the left, right and bottom world edges are walls)

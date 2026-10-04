@@ -20,6 +20,7 @@ export async function storePng(pngDataUrl: string): Promise<string> {
   const client = new S3Client({
     region: 'auto',
     endpoint: BUCKET_ENDPOINT,
+    forcePathStyle: true,
     credentials: { accessKeyId: BUCKET_ACCESS_KEY as string, secretAccessKey: BUCKET_SECRET_KEY as string },
   });
   await client.send(

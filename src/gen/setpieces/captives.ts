@@ -4,12 +4,12 @@ import { mountainsOf, type MountainRec } from '../mountainStore';
 import { carvePocket, elementId, findPocket } from '../setpieceKit';
 
 /**
- * { type: 'captives', count: 3, animal?: 'bird' }
+ * { type: 'captives', count: 3, animal?: 'bird', invulnerable?: true }
  *
  * Animals sealed in hollows inside the mountains, one per hollow, spread over the biggest
  * mountains (only where nothing nearer covers the rock). Each is a creature object of kind
  * `animal` tagged 'captive'; it counts as freed once open air connects it to the sky
- * (gen/metrics/captives.ts).
+ * (gen/metrics/captives.ts). With `invulnerable` they cannot be killed: cut or burnt, they re-form.
  */
 registerSetpiece({
   type: 'captives',
@@ -37,7 +37,7 @@ registerSetpiece({
         kind: animal,
         bbox: [p.cx - p.rx, p.cy - p.ry, p.cx + p.rx, p.cy + p.ry],
         anchor: [p.cx, p.cy],
-        tags: ['captive'],
+        tags: spec.invulnerable ? ['captive', 'invulnerable'] : ['captive'],
         group: host.id,
         spawn: { el, face: placed % 2 === 0 ? 1 : -1 },
       });

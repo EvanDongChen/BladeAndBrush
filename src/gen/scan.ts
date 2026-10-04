@@ -7,8 +7,6 @@ import type { World } from '../core/world';
 /** Grid height (cells) the default thresholds were written for. */
 export const REFERENCE_H = 256;
 
-/** PHASE 0: correct but naive. A replaces the internals; the signatures are the contract. */
-
 /** Height of the topmost solidForScan cell in column x (0 if none). */
 export function heightAt(world: World, x: number): number {
   for (let y = 0; y < world.h; y++) if (SOLID_FOR_SCAN[world.el[y * world.w + x]]) return world.h - y;

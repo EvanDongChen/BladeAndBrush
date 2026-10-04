@@ -6,8 +6,7 @@ import { skyline, type SkyMountain, type Skyline } from '../gen/skyline';
 import { button, h } from './ui';
 
 /**
- * Mountain graph (replaces the mountain-height and spacing sliders): the planned mountains with the silhouettes
- * the painting will have, all standing on one ground line (nearest in front) because the scanner
+ * Mountain graph: the planned mountains with the silhouettes the painting will have, all standing on one ground line (nearest in front) because the scanner
  * measures every mountain from its own foot. The red line is the scanner's tall-peak bar. A dot
  * marks every peak the scanner will count: filled red above the bar (a tall peak), a ring below.
  * Mountains that do not count (summit hidden in the painting, or a plateau) merge into one faint

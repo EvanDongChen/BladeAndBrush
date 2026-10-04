@@ -18,6 +18,8 @@ export const fxSettings = {
   hitStopCuts: 150,
   /** Impact strength that triggers hit-stop. */
   hitStopImpact: 900,
+  /** Frames after a hit-stop before another can start (a wide blade cuts 150+ cells on every tick of its sweep). */
+  hitStopCooldown: 20,
   enabled: true,
 };
 
@@ -33,6 +35,7 @@ export class Fx {
   private trails: Trail[] = [];
   private trauma = 0;
   private freeze = 0;
+  private cooldown = 0;
   private cuts = 0;
   private unsubs: (() => void)[] = [];
 
@@ -49,7 +52,7 @@ export class Fx {
       world.events.on('impact', (e) => {
         if (!fxSettings.enabled) return;
         this.trauma = Math.min(1, this.trauma + Math.min(0.6, e.strength / 1500));
-        if (e.strength >= fxSettings.hitStopImpact) this.freeze = Math.max(this.freeze, 2);
+        if (e.strength >= fxSettings.hitStopImpact) this.hitStop(2);
       }),
     );
   }
@@ -57,6 +60,13 @@ export class Fx {
   detach(): void {
     for (const u of this.unsubs) u();
     this.unsubs = [];
+  }
+
+  /** Hold the sim for `frames`, once per cooldown: one beat at the start of a big cut, not a stutter all through it. */
+  private hitStop(frames: number): void {
+    if (this.cooldown > 0) return;
+    this.freeze = Math.max(this.freeze, frames);
+    this.cooldown = frames + fxSettings.hitStopCooldown;
   }
 
   /** Ask before advancing the sim each frame: false while a hit-stop holds. */
@@ -72,9 +82,10 @@ export class Fx {
   endFrame(canvas: HTMLElement, dtMs: number): void {
     if (fxSettings.enabled && this.cuts > 0) {
       this.trauma = Math.min(1, this.trauma + Math.min(0.5, this.cuts / 1200));
-      if (this.cuts >= fxSettings.hitStopCuts) this.freeze = Math.max(this.freeze, 2 + Math.min(2, Math.floor(this.cuts / 400)));
+      if (this.cuts >= fxSettings.hitStopCuts) this.hitStop(2 + Math.min(2, Math.floor(this.cuts / 400)));
     }
     this.cuts = 0;
+    if (this.cooldown > 0) this.cooldown--;
 
     this.trauma = Math.max(0, this.trauma - (fxSettings.shakeDecay * dtMs) / 1000);
     const amp = fxSettings.shakePx * this.trauma * this.trauma;

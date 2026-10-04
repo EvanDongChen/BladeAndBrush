@@ -181,21 +181,37 @@ let stack = new Int32Array(0);
 const CLING_REACH = 6;
 /** Per cell during detection: 0 = not free solid, 1 = free solid not yet visited, 2 = visited. */
 let cellState = new Uint8Array(0);
+let freeList = new Int32Array(0);
+let clingList = new Int32Array(0);
+let hangList = new Int32Array(0);
 
 function detect(world: World, s: State): void {
   const { w, h, size, el, aux, flags } = world;
   if (stack.length < size) {
     stack = new Int32Array(size);
     cellState = new Uint8Array(size);
+    freeList = new Int32Array(size);
+    clingList = new Int32Array(size);
+    hangList = new Int32Array(size);
   }
   // locals for the hot loops (imported bindings can be slow to read in some module loaders)
   const cell = cellState;
   const rigid = RIGID;
   const FIRE = El.FIRE;
   const { mark } = s;
+  // the free solid cells, and among them the clinging and hanging ones, in index order: the passes
+  // below walk these lists instead of the whole grid (same cells, same order)
+  let nFree = 0;
+  let nCling = 0;
+  let nHang = 0;
   for (let i = 0; i < size; i++) {
     const e = el[i];
-    cell[i] = mark[i] === 0 && (rigid[e] === 1 || (e === FIRE && rigid[aux[i]] === 1)) ? 1 : 0;
+    const free = mark[i] === 0 && (rigid[e] === 1 || (e === FIRE && rigid[aux[i]] === 1));
+    cell[i] = free ? 1 : 0;
+    if (!free) continue;
+    freeList[nFree++] = i;
+    if (flags[i] & Flag.CLING) clingList[nCling++] = i;
+    if (HANGING[e]) hangList[nHang++] = i;
   }
 
   /** Flood from `start` through free solid cells, collecting them into `out` if given. */
@@ -237,8 +253,9 @@ function detect(world: World, s: State): void {
   };
   for (let changed = true; changed; ) {
     changed = false;
-    for (let i = 0; i < size; i++) {
-      if (cell[i] !== 1 || !(flags[i] & Flag.CLING)) continue;
+    for (let c = 0; c < nCling; c++) {
+      const i = clingList[c];
+      if (cell[i] !== 1) continue;
       const x = i % w;
       const y = (i / w) | 0;
       const id = obj[i];
@@ -269,8 +286,9 @@ function detect(world: World, s: State): void {
   //     however small, every piece comes loose and falls. A piece held together only by thin necks
   //     (a slash that did not quite get through) counts as cut: it breaks apart at the necks.
   const hangingParts = new Map<number, number[][]>();
-  for (let i = 0; i < size; i++) {
-    if (cell[i] !== 1 || !HANGING[el[i]]) continue;
+  for (let c = 0; c < nHang; c++) {
+    const i = hangList[c];
+    if (cell[i] !== 1) continue;
     const part: number[] = [];
     flood(i, part);
     const list = hangingParts.get(obj[i]);
@@ -293,7 +311,8 @@ function detect(world: World, s: State): void {
   }
 
   // 2. every other solid component becomes a falling body
-  for (let i = 0; i < size; i++) {
+  for (let c = 0; c < nFree; c++) {
+    const i = freeList[c];
     if (cell[i] !== 1) continue;
     const cells: number[] = [];
     flood(i, cells);

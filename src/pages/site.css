@@ -447,17 +447,13 @@ canvas {
   mask-image: linear-gradient(180deg, transparent 0%, #000 22%);
 }
 
-.hero-canvas,
-.hero-placeholder {
+.hero-canvas {
   position: absolute;
   bottom: 0;
   left: 50%;
   height: 100%;
   aspect-ratio: 15 / 4;
   transform: translateX(-50%);
-}
-
-.hero-canvas {
   width: auto;
   opacity: 0;
   image-rendering: auto;
@@ -467,37 +463,6 @@ canvas {
 .hero-scene.ready .hero-canvas {
   opacity: 1;
 }
-
-.hero-scene.ready .hero-placeholder {
-  opacity: 0;
-}
-
-.hero-placeholder {
-  width: auto;
-  min-width: 100%;
-  transition: opacity 1s;
-}
-
-.ink-mountains {
-  width: 100%;
-  height: 100%;
-  color: var(--ink);
-}
-
-.ink-mountains .ridge {
-  fill: currentColor;
-}
-
-.ink-mountains .far {
-  opacity: 0.1;
-}
-.ink-mountains .mid {
-  opacity: 0.2;
-}
-.ink-mountains .near {
-  opacity: 0.38;
-}
-
 
 
 

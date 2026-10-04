@@ -13,31 +13,10 @@ import { h, revealOnScroll, seal } from './ui';
  * the real generator and sim.
  */
 
-const SVG = 'http://www.w3.org/2000/svg';
-
-function svg(tag: string, attrs: Record<string, string | number>, ...kids: SVGElement[]): SVGElement {
-  const e = document.createElementNS(SVG, tag);
-  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, String(v));
-  e.append(...kids);
-  return e;
-}
-
-/** Layered ink-wash ridges: what the hero shows while the real painting is being generated. */
-function inkMountains(): SVGElement {
-  const ridge = (d: string, cls: string) => svg('path', { d, class: cls });
-  return svg(
-    'svg',
-    { class: 'ink-mountains', viewBox: '0 0 1200 320', preserveAspectRatio: 'xMidYMax slice' },
-    ridge('M0 230 C80 180 130 100 210 130 S320 70 380 120 S500 190 560 150 S700 40 790 100 S930 180 1010 130 S1140 90 1200 140 V320 H0Z', 'ridge far'),
-    ridge('M0 270 C60 240 120 160 190 190 S300 240 360 180 S440 90 520 150 S640 260 720 210 S860 120 940 180 S1080 250 1200 200 V320 H0Z', 'ridge mid'),
-    ridge('M0 310 C90 280 150 230 240 260 S380 310 470 270 S600 220 700 280 S860 320 960 280 S1120 250 1200 280 V320 H0Z', 'ridge near'),
-  );
-}
-
 // ---------------------------------------------------------------- hero
 
 function hero(): { node: HTMLElement; destroy(): void } {
-  const scene = heroScene(inkMountains());
+  const scene = heroScene();
   const node = h(
     'section',
     { class: 'hero', 'aria-labelledby': 'hero-title' },

@@ -49,6 +49,8 @@ export interface Shader {
   family?: string;
   /** Compute `depth` as the position through each vertical run of the family. */
   run?: boolean;
+  /** The shader ignores `base` (skips the per-pixel color blending between neighbouring cells). */
+  noBase?: boolean;
   /** Packed RGBA; alpha is its own opacity (multiplied by coverage). */
   shade(p: ShadePx): number;
 }

@@ -2,7 +2,7 @@ import { dim, mix, registerShader, smoothstep, withAlpha } from '../shaders';
 
 /** Smoke and steam: soft translucent washes that drift upward and swirl. */
 registerShader({
-  element: ['smoke', 'steam'],
+  element: ['smoke', 'steam', 'cloud'],
   shade: (p) => {
     const cloud = p.tex('cloud', p.x * 0.45 + p.tick * 0.12, p.y * 0.45 + p.tick * 0.55);
     const alpha = 70 + 150 * smoothstep(0.25, 0.85, cloud);

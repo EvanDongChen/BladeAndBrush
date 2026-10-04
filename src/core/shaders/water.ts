@@ -14,6 +14,7 @@ const BOT = [24, 44, 88];
 registerShader({
   element: 'water',
   run: true,
+  noBase: true,
   shade: (p) => {
     const t = clamp01(p.depth);
     const d = Math.pow(t, 0.85);

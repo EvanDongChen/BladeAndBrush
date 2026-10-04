@@ -19,9 +19,10 @@ import { bodyCount } from '../sim/behaviors/rigid';
 import { aimEnd, aimTunables, chargeOf, drawAim, isLineAbility, lineColor } from '../sim/lineAbility';
 import { step } from '../sim/step';
 import { siteHeader } from './chrome';
+import { audio } from '../audio/engine';
 import { Fx } from './fx';
 import { arsenal } from './arsenal';
-import { button, h, handscroll, panel, seal, startLoop, toCell } from './ui';
+import { button, h, handscroll, panel, seal, soundToggle, startLoop, toCell } from './ui';
 
 /** Header for players: no links to the workshops. */
 function levelHeader(sub: string): HTMLElement {
@@ -32,7 +33,13 @@ function levelHeader(sub: string): HTMLElement {
     h('span', { class: 'brand-name' }, 'Blade & Brush'),
     h('span', { class: 'brand-sub' }, sub),
   );
-  return h('header', { class: 'top' }, h('h1', {}, brand), h('nav', {}, h('a', { href: './index.html' }, 'All levels')));
+  return h('header', { class: 'top' }, h('h1', {}, brand), h('nav', {}, soundToggle(), h('a', { href: './index.html' }, 'All levels')));
+}
+
+/** The site header with the music's mute button at the end of its links. */
+function withSoundToggle(header: HTMLElement): HTMLElement {
+  header.querySelector('.site-nav')?.append(soundToggle());
+  return header;
 }
 
 /** Ticks the painting gets to settle after the last stroke (or the seal) before it is judged. */
@@ -91,7 +98,9 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
   const stamp = h('div', { class: 'stamp', 'aria-hidden': 'true' }, seal('完成', 'stamp-seal'));
   let winTimer = 0;
   const mount = h('span', { class: 'mount', 'aria-hidden': 'true' }); // the silk the painting is mounted on
-  const frame = h('div', { class: 'frame' }, mount, canvas, hudTool, banner, stamp, rollLeft, rollLead);
+  // a small gold bead on the bottom silk that follows the painting's song across the scroll
+  const musicMark = h('span', { class: 'music-mark', 'aria-hidden': 'true' });
+  const frame = h('div', { class: 'frame' }, mount, canvas, hudTool, banner, stamp, rollLeft, rollLead, musicMark);
   let tip = '';
 
   function regenerate(): void {
@@ -108,6 +117,7 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
     complete?.close();
     banner.hidden = true;
     fx.attach(world);
+    audio.attach(world, bp); // each painting plays its own song as it unrolls
     clock.reset();
   }
 
@@ -117,6 +127,7 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
     step(world);
   });
   let complete: ReturnType<typeof handscroll> | undefined;
+  audio.armOnGesture();
   regenerate();
 
   // ---- pointer input -> action driver ----
@@ -255,6 +266,7 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
     if (bodyCount(world) > 0 && world.tick < judgeAt + SETTLE_MAX - SETTLE) return; // still falling
     if (all && started) {
       phase = 'won';
+      world.events.emit('levelWin', { levelId: level.id });
       stamp.classList.add('on'); // the seal lands first, then the scroll unrolls
       winTimer = window.setTimeout(() => {
         complete!.node.hidden = false;
@@ -262,6 +274,7 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
       }, 1100);
     } else {
       phase = 'failed';
+      world.events.emit('levelFail', { levelId: level.id });
       bannerText.textContent = used >= level.actionBudget ? 'Out of ink: the painting does not match the poem yet.' : 'The painting does not match the poem yet.';
     }
   }
@@ -320,7 +333,7 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
 
   stage.append(frame, status, complete.node);
   root.replaceChildren(
-    siteHeader('levels', level.title ?? level.id),
+    withSoundToggle(siteHeader('levels', level.title ?? level.id)),
     h(
       'main',
       { class: 'layout level-layout', id: 'main' },
@@ -359,6 +372,9 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
       banner.hidden = phase !== 'failed';
       sealButton.toggleAttribute('disabled', phase !== 'play' || used === 0);
       frame.style.setProperty('--p', String(frontier.x / level.dims.w));
+      const at = audio.playhead();
+      musicMark.classList.toggle('on', at !== null);
+      if (at !== null) frame.style.setProperty('--music', at.toFixed(4));
       frame.classList.toggle('ready', frontier.done);
       status.textContent = !frontier.done
         ? 'The landscape is painting itself…'
@@ -385,6 +401,7 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
   return () => {
     stop();
     fx.detach();
+    audio.detach();
     clearTimeout(winTimer);
     removeEventListener('keydown', onKey);
   };

@@ -1539,6 +1539,27 @@ input[type='number'] {
   left: var(--edge);
 }
 
+/* where the painting's song is: a small gold bead on the bottom silk, only while it plays */
+.music-mark {
+  position: absolute;
+  z-index: 2;
+  bottom: calc(var(--mount) / 2);
+  left: calc(3px + (100% - 6px) * var(--music, 0));
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  transform: translate(-50%, 50%);
+  background: rgba(233, 201, 138, 0.75);
+  box-shadow: 0 0 4px rgba(233, 201, 138, 0.35);
+  opacity: 0;
+  transition: opacity 0.8s ease;
+  pointer-events: none;
+}
+
+.music-mark.on {
+  opacity: 1;
+}
+
 /* the paper curls into the leading roller: a soft shadow on its left side */
 .frame::before {
   content: '';
@@ -1601,3 +1622,37 @@ input[type='number'] {
   grid-template-columns: repeat(auto-fit, minmax(70px, 1fr));
 }
 
+.sound-toggle {
+  padding: 1px 8px;
+  font: 400 18px/1.4 var(--font-brush);
+  border-color: var(--line);
+  background: transparent;
+}
+
+header.top nav .sound-toggle {
+  margin-right: 10px;
+}
+
+.site-nav .sound-toggle {
+  padding: 0 7px;
+  font-size: 16px;
+}
+
+/* sound is on but the browser is waiting for a click: breathe until it starts */
+.sound-toggle.waiting {
+  animation: sound-wait 1.6s ease-in-out infinite;
+}
+
+@keyframes sound-wait {
+  50% {
+    color: var(--seal, #b03a2e);
+    border-color: currentColor;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sound-toggle.waiting {
+    animation: none;
+    text-decoration: underline;
+  }
+}

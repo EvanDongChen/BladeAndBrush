@@ -1601,3 +1601,13 @@ input[type='number'] {
   grid-template-columns: repeat(auto-fit, minmax(70px, 1fr));
 }
 
+.sound-toggle {
+  padding: 1px 8px;
+  font: 400 18px/1.4 var(--font-brush);
+  border-color: var(--line);
+  background: transparent;
+}
+
+header.top nav .sound-toggle {
+  margin-right: 10px;
+}

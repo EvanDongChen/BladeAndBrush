@@ -10,7 +10,7 @@ registerGlow({
   r: 255,
   g: 148,
   b: 52,
-  near: 1,
-  far: 0.7,
+  near: 0.4,
+  far: 0.25,
   level: (life, aux) => 0.3 + 0.7 * Math.min(1, life / (aux === 0 ? 26 : 48)),
 });

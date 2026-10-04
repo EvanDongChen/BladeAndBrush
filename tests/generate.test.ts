@@ -59,7 +59,7 @@ describe('stub generate()', () => {
 
 describe('Frontier', () => {
   it('reveals the blueprint left to right', () => {
-    const bp = generate(5, defaultParams());
+    const bp = generate(5, defaultParams(), { features: { life: false } }); // life is placed by the sim, not in the blueprint
     const world = new World(bp, 5);
     const f = new Frontier(bp, 10);
     f.advance(world);

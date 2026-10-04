@@ -150,7 +150,7 @@ describe('levels', () => {
 
   it('4 The Trap: open each hollow beside its bird, tap the spring, cut down the trappers', () => {
     const { world, act, goals } = play('level-4');
-    const birds = objectsOf(world, 'bird');
+    const birds = objectsOf(world, null, 'captive');
     expect(birds).toHaveLength(3);
     expect(scan(world).counts.animalsTrapped).toBe(3);
     /** First open-air cell going from (x, y) along (dx, dy): where a cut from outside should start. */

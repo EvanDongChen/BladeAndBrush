@@ -54,18 +54,19 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
   const fx = new Fx();
   const status = h('div', { class: 'status' });
   const stage = h('div', { class: 'stage' });
-  // on-canvas HUD: the selected blade, the painting-reveal bar, and the retry banner when the ink runs out
+  // on-canvas HUD: the selected blade, the scroll rollers, and the retry banner when the ink runs out
   const hudGlyph = h('span', { class: 'hud-glyph', 'aria-hidden': 'true' });
   const hudName = h('strong', {});
   const hudTool = h('div', { class: 'hud-tool' }, hudGlyph, hudName);
   const retry = button('Regenerate', () => regenerate(), { class: 'hud-retry' });
   const banner = h('div', { class: 'hud-banner', hidden: true, role: 'status' }, h('p', {}, 'Out of ink.'), retry);
-  const reveal = h('span', { class: 'reveal-fill' });
-  const revealBar = h('div', { class: 'reveal-bar', 'aria-hidden': 'true' }, reveal);
+  // two rollers: one fixed at the left edge, one riding the frontier so the paper unrolls as the landscape draws
+  const rollLeft = h('span', { class: 'roll', 'aria-hidden': 'true' });
+  const rollLead = h('span', { class: 'roll lead', 'aria-hidden': 'true' });
   // the red seal pressed onto the painting when the poem is complete
   const stamp = h('div', { class: 'stamp', 'aria-hidden': 'true' }, seal('完成', 'stamp-seal'));
   let winTimer = 0;
-  const frame = h('div', { class: 'frame' }, canvas, hudTool, banner, revealBar, stamp);
+  const frame = h('div', { class: 'frame' }, canvas, hudTool, banner, stamp, rollLeft, rollLead);
   let tip = '';
 
   function regenerate(): void {
@@ -289,8 +290,8 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
       const spent = frontier.done && used >= level.actionBudget && !won;
       bar.setSpent(spent);
       banner.hidden = !spent;
-      revealBar.classList.toggle('done', frontier.done);
-      reveal.style.width = `${Math.round((frontier.x / level.dims.w) * 100)}%`;
+      frame.style.setProperty('--p', String(frontier.x / level.dims.w));
+      frame.classList.toggle('ready', frontier.done);
       status.textContent = !frontier.done ? 'The landscape is painting itself…' : spent ? 'Out of ink. Regenerate to try again.' : tip;
       fx.endFrame(canvas, dt);
     },

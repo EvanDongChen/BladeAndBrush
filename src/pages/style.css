@@ -1276,28 +1276,6 @@ input[type='number'] {
   background-color: var(--seal-dark);
 }
 
-.reveal-bar {
-  position: absolute;
-  left: 8px;
-  right: 8px;
-  bottom: 8px;
-  height: 3px;
-  background: var(--ink-faint);
-  transition: opacity 0.6s 0.3s;
-  pointer-events: none;
-}
-
-.reveal-bar.done {
-  opacity: 0;
-}
-
-.reveal-fill {
-  display: block;
-  height: 100%;
-  width: 0;
-  background: var(--seal);
-}
-
 .status {
   min-height: 1.5em;
   font: 13px var(--font-serif);
@@ -1512,4 +1490,81 @@ input[type='number'] {
 @keyframes stamp-ring {
   from { opacity: 0.8; transform: scale(1); }
   to { opacity: 0; transform: scale(1.5); }
+}
+
+/* ---------- Level page: the scroll unrolls with the landscape ---------- */
+
+.frame {
+  --p: 0; /* how much of the painting has been drawn, 0 to 1 (set from the reveal frontier) */
+  --edge: calc(8px + (100% - 16px) * var(--p)); /* x of the leading roller; 8px is the silk border */
+}
+
+/* the paper only exists up to the leading roller */
+.frame canvas.grid {
+  animation: none;
+  clip-path: inset(0 calc(100% - var(--edge)) 0 0);
+}
+
+.roll {
+  position: absolute;
+  top: -9px;
+  bottom: -9px;
+  left: 8px;
+  z-index: 2;
+  width: 18px;
+  transform: translateX(-50%);
+  border-radius: 9px;
+  background: linear-gradient(90deg, var(--wood-1), var(--wood-3) 32%, var(--wood-2) 58%, var(--wood-1));
+  box-shadow: 1px 0 0 rgba(0, 0, 0, 0.35), 3px 4px 8px rgba(0, 0, 0, 0.3);
+  pointer-events: none;
+}
+
+.roll.lead {
+  left: var(--edge);
+}
+
+/* end knobs */
+.roll::before,
+.roll::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  width: 26px;
+  height: 7px;
+  transform: translateX(-50%);
+  border-radius: 3px;
+  background: linear-gradient(180deg, var(--wood-3), var(--wood-1));
+}
+
+.roll::before {
+  top: -5px;
+}
+
+.roll::after {
+  bottom: -5px;
+}
+
+/* the paper curls into the leading roller: a soft shadow on its left side */
+.stage .frame::before {
+  content: '';
+  position: absolute;
+  top: 8px;
+  bottom: 8px;
+  left: calc(var(--edge) - 34px);
+  width: 26px;
+  z-index: 1;
+  background: linear-gradient(90deg, transparent, rgba(70, 45, 20, 0.3));
+  pointer-events: none;
+}
+
+/* goals and the blade chip appear once the landscape has finished drawing */
+.frame .hud-tool,
+.frame .inscription {
+  transition: opacity 0.7s 0.2s, transform 0.7s 0.2s;
+}
+
+.frame:not(.ready) .hud-tool,
+.frame:not(.ready) .inscription {
+  opacity: 0;
+  transform: translateY(-8px);
 }

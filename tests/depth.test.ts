@@ -68,7 +68,7 @@ describe('ground bank', () => {
     const K = 4;
     for (let s = 1; s <= 3; s++) {
       const bp = generate(s, defaultParams(), { k: K, dims: { w: 320, h: 96 }, features: { trees: false } });
-      const ground = [...bp.registry.strokes.values()].find((q) => q.kind === 'rock')!;
+      const ground = bp.registry.strokes.get(bp.planes![1].owner[(bp.h - 1) * bp.w])!;
       const own = artOf(bp).planes[1].buf.own;
       const aw = bp.w * K;
       // The wavy top edge stays within +-K of groundTop * K, so this row is always inside the bank.

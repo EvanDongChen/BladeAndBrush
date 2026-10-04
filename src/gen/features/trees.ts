@@ -103,7 +103,7 @@ registerFeature({
       }
     }
     // The ground bank (in the near plane): find its owner and walk its top edge.
-    const bank = [...bp.registry.strokes.values()].find((s) => s.kind === 'rock');
+    const bank = bp.registry.strokes.get(planes[PLANE.NEAR].grid.owner[(dims.h - 1) * dims.w]); // the ground: owns the bottom row
     if (bank) {
       line++;
       const nearBuf = planes[PLANE.NEAR].buf;

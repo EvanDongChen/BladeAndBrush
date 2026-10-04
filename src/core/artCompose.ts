@@ -14,8 +14,10 @@ export function over(top: number, under: number): number {
   const ub = (ua * (255 - ta)) / 255; // under's weight
   const oa = ta + ub;
   if (oa <= 0) return 0;
-  const ch = (s: number) => Math.round((((top >>> s) & 255) * ta + ((under >>> s) & 255) * ub) / oa);
-  return (ch(0) | (ch(8) << 8) | (ch(16) << 16) | (Math.round(oa) << 24)) >>> 0;
+  const r = Math.round(((top & 255) * ta + (under & 255) * ub) / oa);
+  const g = Math.round((((top >>> 8) & 255) * ta + ((under >>> 8) & 255) * ub) / oa);
+  const b = Math.round((((top >>> 16) & 255) * ta + ((under >>> 16) & 255) * ub) / oa);
+  return (r | (g << 8) | (b << 16) | (Math.round(oa) << 24)) >>> 0;
 }
 
 /** The art composited once as generated (nothing broken yet), so untouched cells only copy pixels. */

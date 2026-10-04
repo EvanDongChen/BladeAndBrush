@@ -47,14 +47,33 @@ function blurLine(src: Float32Array, dst: Float32Array, start: number, stride: n
 
 let scratch = new Float32Array(0);
 
-function blurBand(band: Float32Array, lw: number, lh: number, r: number): void {
+/**
+ * Blur the band, working only inside the box of blocks that can be non-zero: the lit blocks' box
+ * [x0, x1] x [y0, y1], grown by the radius at each pass (outside it everything is zero anyway).
+ */
+function blurBand(band: Float32Array, lw: number, lh: number, r: number, x0: number, y0: number, x1: number, y1: number): void {
   if (scratch.length < band.length) scratch = new Float32Array(band.length);
   const plane = lw * lh;
   for (let p = 0; p < 4; p++) {
     const off = p * plane;
+    let xa = x0;
+    let xb = x1;
+    let ya = y0;
+    let yb = y1;
     for (let pass = 0; pass < BLUR_PASSES; pass++) {
-      for (let y = 0; y < lh; y++) blurLine(band, scratch, off + y * lw, 1, lw, r);
-      for (let x = 0; x < lw; x++) blurLine(scratch, band, off + x, lw, lh, r);
+      // the box's rows spread sideways into scratch
+      xa = Math.max(0, xa - r);
+      xb = Math.min(lw - 1, xb + r);
+      const n = xb - xa + 1;
+      for (let y = ya; y <= yb; y++) blurLine(band, scratch, off + y * lw + xa, 1, n, r);
+      // then its columns spread up and down (scratch rows just outside the box are zero)
+      const yc = Math.max(0, ya - r);
+      const yd = Math.min(lh - 1, yb + r);
+      for (let y = yc; y < ya; y++) scratch.fill(0, off + y * lw + xa, off + y * lw + xb + 1);
+      for (let y = yb + 1; y <= yd; y++) scratch.fill(0, off + y * lw + xa, off + y * lw + xb + 1);
+      ya = yc;
+      yb = yd;
+      for (let x = xa; x <= xb; x++) blurLine(scratch, band, off + ya * lw + x, lw, yb - ya + 1, r);
     }
   }
 }
@@ -80,6 +99,10 @@ export function buildGlowField(world: World, f: GlowField): GlowField {
   const table = GLOW;
   const { near, far } = f;
   const plane = lw * lh;
+  let bx0 = lw;
+  let by0 = lh;
+  let bx1 = -1;
+  let by1 = -1;
   for (let i = 0; i < size; i++) {
     const spec = table[el[i]];
     if (spec === undefined) continue;
@@ -88,7 +111,13 @@ export function buildGlowField(world: World, f: GlowField): GlowField {
     let level = spec.level ? spec.level(life[i], aux[i]) : 1;
     level *= 0.8 + (hash3(x, y, tick >> 1) / 255) * 0.4; // flicker
     if (level <= 0) continue;
-    const j = (y >> SHIFT) * lw + (x >> SHIFT);
+    const bx = x >> SHIFT;
+    const by = y >> SHIFT;
+    if (bx < bx0) bx0 = bx;
+    if (bx > bx1) bx1 = bx;
+    if (by < by0) by0 = by;
+    if (by > by1) by1 = by;
+    const j = by * lw + bx;
     const en = level * spec.near;
     const ef = level * spec.far;
     near[j] += spec.r * en;
@@ -102,8 +131,8 @@ export function buildGlowField(world: World, f: GlowField): GlowField {
     f.any = true;
   }
   if (f.any) {
-    blurBand(near, lw, lh, NEAR_RADIUS);
-    blurBand(far, lw, lh, FAR_RADIUS);
+    blurBand(near, lw, lh, NEAR_RADIUS, bx0, by0, bx1, by1);
+    blurBand(far, lw, lh, FAR_RADIUS, bx0, by0, bx1, by1);
   }
   return f;
 }

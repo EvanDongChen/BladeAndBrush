@@ -108,13 +108,25 @@ export class ArtFrame {
     this.diffBytes(world.aux, p.aux, 0xff, world.w);
     this.diffBytes(world.life, p.life, 0xff, world.w);
     this.diffBytes(world.flags, p.flags, FLAG_MASK, world.w);
-    const cur = world.owner;
-    const old = p.owner;
-    for (let i = 0; i < cur.length; i++) {
-      if (cur[i] !== old[i]) {
-        old[i] = cur[i];
-        this.markCell(i % world.w, (i / world.w) | 0);
+    this.diffOwner(world.owner, p.owner, world.w);
+  }
+
+  /** The owner ids (16 bits), 2 cells per word. */
+  private diffOwner(cur: Uint16Array, old: Uint16Array, w: number): void {
+    const n = cur.length;
+    const words = cur.byteOffset % 4 === 0 && old.byteOffset % 4 === 0 ? n >> 1 : 0;
+    if (words) {
+      const c32 = new Uint32Array(cur.buffer, cur.byteOffset, words);
+      const o32 = new Uint32Array(old.buffer, old.byteOffset, words);
+      for (let q = 0; q < words; q++) {
+        if (c32[q] === o32[q]) continue;
+        for (let i = q * 2; i < q * 2 + 2; i++) if (cur[i] !== old[i]) this.markCell(i % w, (i / w) | 0);
+        o32[q] = c32[q];
       }
+    }
+    for (let i = words * 2; i < n; i++) {
+      if (cur[i] !== old[i]) this.markCell(i % w, (i / w) | 0);
+      old[i] = cur[i];
     }
   }
 

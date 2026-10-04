@@ -16,15 +16,21 @@ function scene(lesson: StrokeLesson | NatureLesson): World {
   return world;
 }
 
-/** Play the lesson's strokes through the action driver, like the page does, then let it settle. */
-function strike(lesson: StrokeLesson, world: World, settle = 900): void {
+/**
+ * Play the lesson's strokes through the action driver, like the page does, then let it settle.
+ * Returns the best progress seen: the page marks a lesson done the moment it gets there.
+ */
+function strike(lesson: StrokeLesson, world: World, settle = 900): number {
   const driver = new ActionDriver();
+  let best = 0;
   const tick = () => {
     driver.apply(world);
     step(world);
+    if (world.tick % 10 === 0) best = Math.max(best, lesson.progress(world));
   };
   for (const s of lesson.solution) {
-    driver.begin(lesson.ability, { x: s.from[0], y: s.from[1], speed: 0 }, { radius: lesson.radius });
+    for (let k = 0; k < (s.wait ?? 0); k++) tick();
+    driver.begin(s.ability ?? lesson.ability, { x: s.from[0], y: s.from[1], speed: 0 }, { radius: lesson.radius });
     tick();
     for (let k = 0; k < s.hold; k++) tick();
     driver.move({ x: s.to[0], y: s.to[1], speed: 4 });
@@ -32,6 +38,7 @@ function strike(lesson: StrokeLesson, world: World, settle = 900): void {
     for (let k = 0; k < 60; k++) tick();
   }
   for (let k = 0; k < settle; k++) tick();
+  return Math.max(best, lesson.progress(world));
 }
 
 /** Does the lesson's progress reach 1 within `ticks` (the page latches it the moment it does)? */
@@ -51,9 +58,9 @@ function painted(lesson: GraphLesson, mountainHeight: number) {
 }
 
 describe('tutorial', () => {
-  it('teaches every ability the player has, once each', () => {
-    const taught = LESSONS.flatMap((l) => (l.kind === 'stroke' ? [l.ability] : [])).sort();
-    expect(taught).toEqual(activeAbilities(false).map((a) => a.id).sort());
+  it('teaches every ability the player has, each in a lesson of its own', () => {
+    const own = LESSONS.flatMap((l) => (l.kind === 'stroke' && !l.also ? [l.ability] : [])).sort();
+    expect(own).toEqual(activeAbilities(false).map((a) => a.id).sort());
   });
 
   it('teaches both knobs of the Nature panel and the mountain graph', () => {
@@ -81,11 +88,15 @@ describe('tutorial', () => {
       it('is solved by its own "Show me"', () => {
         const world = scene(lesson);
         if (lesson.kind === 'stroke') {
-          strike(lesson, world);
-          expect(lesson.progress(world)).toBe(1);
+          expect(strike(lesson, world)).toBe(1);
         } else {
           Object.assign(world.params, lesson.solution);
           expect(reaches(lesson, world, 1800)).toBe(true);
+        }
+        if (lesson.kind === 'stroke' && lesson.also) {
+          // and not by its first stroke alone (rain needs the fire as well as the water)
+          const half = scene(lesson);
+          expect(strike({ ...lesson, solution: lesson.solution.slice(0, 1) }, half)).toBeLessThan(0.5);
         }
       }, 60000);
     });

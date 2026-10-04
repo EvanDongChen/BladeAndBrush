@@ -13,6 +13,7 @@ import type { GenParams } from '../core/params';
 import type { ScanResult } from '../core/scan';
 import type { World } from '../core/world';
 import { LEAF } from '../sim/elements/leaf';
+import { RAIN } from '../sim/elements/rain';
 
 export const TUTORIAL_DIMS: LevelDims = { w: 480, h: 180 };
 export const TUTORIAL_SEED = 7;
@@ -27,6 +28,10 @@ export interface Stroke {
   from: [number, number];
   to: [number, number];
   hold: number;
+  /** The ability, when the lesson offers more than one (default: the lesson's own). */
+  ability?: AbilityId;
+  /** Ticks to wait before pressing (default: a short pause), e.g. for poured water to settle. */
+  wait?: number;
 }
 
 interface LessonBase {
@@ -44,7 +49,11 @@ interface LessonBase {
 /** Learn a stroke of the blade on a hand-built scene. */
 export interface StrokeLesson extends LessonBase {
   kind: 'stroke';
+  /** What the lesson is remembered by when it is not just its ability (e.g. 'rain'). */
+  id?: string;
   ability: AbilityId;
+  /** More strokes on the rack for this lesson, after its own (e.g. rain: water, then fire). */
+  also?: AbilityId[];
   /** Brush size the lesson uses. */
   radius: number;
   /** Where the thing to change is: outlined on the painting until the lesson is done. */
@@ -83,7 +92,7 @@ export interface GraphLesson extends LessonBase {
   params: Partial<GenParams>;
   /** 0..1 from the scan of the redrawn painting. */
   progress(scan: ScanResult): number;
-  /** Mountain height (the red line) that solves it. */
+  /** Mountain height (the Height slider) that solves it. */
   solution: { mountainHeight: number };
 }
 
@@ -276,6 +285,35 @@ const erase: StrokeLesson = {
   solution: [{ from: [242, FLOOR - 100], to: [242, FLOOR - 2], hold: 0 }],
 };
 
+/** 雨: rain is made, not waited for. Pour water under the cloud, then sweep fire through it. */
+const RAIN_BASIN: Box = [190, FLOOR, 300, FLOOR + 7];
+const rain: StrokeLesson = {
+  kind: 'stroke',
+  id: 'rain',
+  ability: 'water',
+  also: ['fire'],
+  name: 'Rain',
+  glyph: '雨',
+  title: 'Make it rain',
+  teach: 'Rain comes from steam. Pour water into the basin, then pick Fire and sweep it along the water: fire touching water boils it into steam, the steam rises into the cloud, and the cloud rains. In a level, the wind carries the cloud along.',
+  goal: 'Make the cloud rain',
+  radius: 5,
+  target: RAIN_BASIN,
+  build(world) {
+    world.params.wind = 0; // keep the cloud over the basin
+    floor(world);
+    block(world, RAIN_BASIN[0], RAIN_BASIN[2], RAIN_BASIN[1], RAIN_BASIN[3], El.EMPTY);
+    world.clouds.push({ obj: 0, x: 245, y: 110, hw: 60, hh: 9, water: 0, puff: false, seed: 3 });
+    for (const x of [60, 110, 380, 430]) tree(world, x, FLOOR, 18 + (x % 8));
+  },
+  // the cloud swelling with steam, or the first drops falling
+  progress: (world) => Math.min(1, Math.max((world.clouds[0]?.water ?? 0) / 300, count(world, [0, 0, world.w - 1, world.h - 1], (e) => e === RAIN) / 6)),
+  solution: [
+    { from: [196, FLOOR - 30], to: [294, FLOOR - 30], hold: 45 },
+    { ability: 'fire', from: [186, FLOOR - 1], to: [304, FLOOR - 1], hold: 30, wait: 120 },
+  ],
+};
+
 // ---- the Nature panel ----
 
 /** 風: a pond behind a low bank. A gale drives the water over it and into a basin downwind. */
@@ -312,7 +350,7 @@ const gravity: NatureLesson = {
   control: 'gravity',
   name: 'Gravity',
   glyph: '重',
-  title: 'Make it rain upward',
+  title: 'Fall upward',
   teach: 'The gravity gauge sets how hard things fall. Drag the bead down for a heavier world; at the dashed line things weigh nothing and drift, and above it they fall up. Turn gravity over to pour the pond up into the cup.',
   goal: 'Fill the cup in the sky',
   target: CUP,
@@ -339,7 +377,7 @@ const graph: GraphLesson = {
   name: 'Mountain graph',
   glyph: '山',
   title: 'Raise the peaks',
-  teach: 'The mountain graph plans the painting before it is drawn. A filled red dot marks a tall peak, above the red line; a ring marks a lesser one. Drag the red line down to raise every mountain (or drag one mountain to raise just that one), then press Redraw to paint it.',
+  teach: 'The mountain graph plans the painting before it is drawn. A filled red dot is a tall peak (above the red line), a ring a lesser one. Push the Height slider up to raise every mountain, or drag one mountain up to raise just that one, then press Redraw.',
   goal: 'Paint at least three tall peaks',
   dims: DEFAULT_DIMS,
   seed: 42,
@@ -348,4 +386,4 @@ const graph: GraphLesson = {
   solution: { mountainHeight: 0.8 },
 };
 
-export const LESSONS: Lesson[] = [slash, push, fire, water, erase, wind, gravity, graph];
+export const LESSONS: Lesson[] = [slash, push, fire, water, erase, rain, wind, gravity, graph];

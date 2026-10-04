@@ -1,6 +1,7 @@
 import './bootstrap';
 import { activeAbilities, type AbilityId } from '../core/abilities';
 import { Clock } from '../core/clock';
+import { El } from '../core/elements';
 import { TICK_HZ } from '../core/constants';
 import { describeGoal, evaluateGoal } from '../core/goals';
 import { levels, type LevelDef } from '../core/levels';
@@ -12,7 +13,7 @@ import { ActionDriver } from '../core/replay';
 import { World } from '../core/world';
 import { Frontier } from '../gen/frontier';
 import { generate } from '../gen/generate';
-import { scan } from '../gen/scan';
+import { mountainUnder, scan } from '../gen/scan';
 import type { Blueprint } from '../core/blueprint';
 import type { GoalSpec } from '../core/goals';
 import type { Peak } from '../core/scan';
@@ -64,8 +65,8 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
   /** play: strokes left; settling: ink spent or sealed, waiting for things to come to rest; then judged. */
   let phase: 'play' | 'settling' | 'won' | 'failed' = 'play';
   let judgeAt = 0;
-  let peaks: Peak[] = [];
-  let heights: Int16Array | null = null;
+  /** The peaks the scanner counts, each placed on the rock summit of its mountain (not on a tree growing there). */
+  let marks: { x: number; y: number; tall: boolean }[] = [];
   const markPeaks = aboutPeaks(level.goals);
   const initial = { ...params };
 
@@ -99,8 +100,7 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
     driver = new ActionDriver();
     used = 0;
     phase = 'play';
-    peaks = [];
-    heights = null;
+    marks = [];
     clearTimeout(winTimer);
     stamp.classList.remove('on');
     complete?.close();
@@ -237,8 +237,7 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
   /** Light the verses as the painting changes; once it has settled after the last stroke, judge it. */
   function checkGoals(): void {
     const result = scan(world);
-    peaks = result.peaks;
-    heights = result.heights;
+    marks = markPeaks ? peakMarks(result.peaks, result.heights) : [];
     const started = changed();
     let all = true;
     for (const v of verses) {
@@ -263,26 +262,50 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
     }
   }
 
+  /**
+   * Where to mark each peak. The scanner measures the skyline including trees, so a peak's column can
+   * be a tree top; the mark goes on the highest rock of the mountain the peak belongs to instead.
+   * Peaks on untracked terrain (no mountain object) stay at the top of their column.
+   */
+  function peakMarks(found: Peak[], columnHeights: Int16Array): { x: number; y: number; tall: boolean }[] {
+    const tall = 0.3 * level.dims.h; // DEFAULT_THRESHOLDS.tallFrac
+    const { w, h, obj, el } = world;
+    return found.map((p) => {
+      const top = h - columnHeights[p.x];
+      const mountain = mountainUnder(world, p.x, top);
+      const box = mountain > 0 ? world.objects.get(mountain)?.bbox : undefined;
+      if (box) {
+        for (let y = Math.max(0, box[1]); y <= Math.min(h - 1, box[3]); y++) {
+          let sum = 0;
+          let n = 0;
+          for (let x = Math.max(0, box[0]); x <= Math.min(w - 1, box[2]); x++) {
+            if (obj[y * w + x] === mountain && el[y * w + x] === El.ROCK) (sum += x), n++;
+          }
+          if (n > 0) return { x: Math.round(sum / n), y: y - 4, tall: p.h >= tall };
+        }
+      }
+      return { x: p.x, y: top - 4, tall: p.h >= tall };
+    });
+  }
+
   /** The peaks the scanner counts, marked on the painting: a red mark for a tall one, a ring for a lesser one. */
   function drawPeaks(g: CanvasRenderingContext2D): void {
-    if (!markPeaks || !heights || !frontier.done) return;
-    const tall = 0.3 * level.dims.h; // DEFAULT_THRESHOLDS.tallFrac
+    if (!markPeaks || !frontier.done) return;
     g.save();
     g.lineWidth = 1 / renderer.scale;
-    for (const p of peaks) {
-      const y = level.dims.h - heights[p.x] - 4;
-      if (p.h >= tall) {
+    for (const { x, y, tall } of marks) {
+      if (tall) {
         g.fillStyle = 'rgba(178, 34, 34, 0.85)';
         g.beginPath();
-        g.moveTo(p.x, y);
-        g.lineTo(p.x - 3, y - 5);
-        g.lineTo(p.x + 3, y - 5);
+        g.moveTo(x, y);
+        g.lineTo(x - 3, y - 5);
+        g.lineTo(x + 3, y - 5);
         g.closePath();
         g.fill();
       } else {
         g.strokeStyle = 'rgba(60, 60, 60, 0.75)';
         g.beginPath();
-        g.arc(p.x, y - 2.5, 2.2, 0, Math.PI * 2);
+        g.arc(x, y - 2.5, 2.2, 0, Math.PI * 2);
         g.stroke();
       }
     }

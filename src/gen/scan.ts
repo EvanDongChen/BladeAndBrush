@@ -121,7 +121,8 @@ export function skyReach(world: World): Uint8Array {
  * one mountain, however rugged its ridge, so only its highest peak is kept. A peak's mountain is
  * the first 'mountain' object found going down its column past anything standing on it (trees,
  * boulders, flowers, bamboo). A peak on land (a plateau, tagged 'plateau') or on a hut is not a
- * mountain and is dropped. Peaks on untracked terrain (painted in the sandbox) stay as they are.
+ * mountain and is dropped, and so is a tree or boulder standing on land that is no mountain. Peaks
+ * on bare untracked terrain (painted in the sandbox) stay as they are.
  */
 export function peaksByMountain(world: World, heights: Int16Array, peaks: Peak[], minProminence = 0): Peak[] {
   if (world.objects.size === 0) return peaks;
@@ -132,6 +133,10 @@ export function peaksByMountain(world: World, heights: Int16Array, peaks: Peak[]
     const id = mountainUnder(world, raw.x, top);
     if (id < 0) continue;
     if (id === 0) {
+      // Something tracked that is not a mountain (a tree, a boulder...) standing on land that is no
+      // mountain is not a peak: a tall tree on the flat ground must not count as a tall mountain.
+      const standing = world.obj[top * world.w + raw.x];
+      if (standing !== 0 && world.objects.get(standing)?.kind !== 'mountain') continue;
       out.push(raw);
       continue;
     }
@@ -153,7 +158,7 @@ export function peaksByMountain(world: World, heights: Int16Array, peaks: Peak[]
 const ROOT_DEPTH = 48;
 
 /** The mountain object under a peak: its id, 0 for untracked terrain, -1 for something that is not a mountain. */
-function mountainUnder(world: World, x: number, top: number): number {
+export function mountainUnder(world: World, x: number, top: number): number {
   const { w, obj, el, objects } = world;
   for (let y = top; y < Math.min(world.h, top + ROOT_DEPTH); y++) {
     const i = y * w + x;

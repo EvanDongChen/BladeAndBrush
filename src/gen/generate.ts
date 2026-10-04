@@ -121,10 +121,12 @@ function anchorLoose(bp: Blueprint): void {
   const stack = new Int32Array(size);
   let top = 0;
   const solid = (i: number) => el[i] !== 0 && IS_STATIC[el[i]] === 1;
+  const added: number[] = []; // cells the last flood reached
   const visit = (i: number) => {
     if (!seen[i] && solid(i)) {
       seen[i] = 1;
       stack[top++] = i;
+      added.push(i);
     }
   };
   const flood = () => {
@@ -139,36 +141,53 @@ function anchorLoose(bp: Blueprint): void {
   };
   for (let i = 0; i < size; i++) if (foot[i] || i >= (h - 1) * w) visit(i);
   flood();
-  const reachedPlain = seen.slice();
-  // what clings to held material within 2 cells (the sim's rule, see sim/behaviors/rigid.ts) clings;
-  // anything farther off floats in the picture on its own and stays where it was painted
+  // what clings, by the sim's rule (sim/behaviors/rigid.ts): held material within 2 cells, or held
+  // material of its own object or of what it stands on within 6 (in front or stacked behind),
+  // clings; anything else floats in the picture on its own and stays where it was painted
+  const owner = bp.owner;
+  const groupOf = (id: number) => (id === 0 ? 0 : (bp.registry.strokes.get(id)?.group ?? 0));
+  const kin = (pos: number, id: number, group: number): boolean => {
+    if (!seen[pos]) return false;
+    const o = owner[pos];
+    if (o !== 0 && (o === id || o === group)) return true;
+    for (const layer of bp.behind ?? []) {
+      const b = layer.owner[pos];
+      if (b !== 0 && (b === id || b === group)) return true;
+    }
+    return false;
+  };
   for (let changed = true; changed; ) {
     changed = false;
     for (let i = 0; i < size; i++) {
       if (seen[i] || !solid(i)) continue;
       const x = i % w;
       const y = (i / w) | 0;
+      const id = owner[i];
+      const group = groupOf(id);
       let held = false;
-      for (let dy = -2; dy <= 2 && !held; dy++) {
-        for (let dx = -2; dx <= 2; dx++) {
+      for (let dy = -6; dy <= 6 && !held; dy++) {
+        const ny = y + dy;
+        if (ny < 0 || ny >= h) continue;
+        for (let dx = -6; dx <= 6; dx++) {
           const nx = x + dx;
-          const ny = y + dy;
-          if (nx >= 0 && ny >= 0 && nx < w && ny < h && seen[ny * w + nx]) {
+          if (nx < 0 || nx >= w) continue;
+          const pos = ny * w + nx;
+          const near = dx >= -2 && dx <= 2 && dy >= -2 && dy <= 2;
+          if ((near && seen[pos]) || (id !== 0 && kin(pos, id, group))) {
             held = true;
             break;
           }
         }
       }
       if (!held) continue;
-      cling[i] = 1;
+      added.length = 0;
       seen[i] = 1;
       stack[top++] = i;
+      added.push(i);
       flood();
       changed = true;
+      for (const j of added) cling[j] = 1;
     }
   }
-  for (let i = 0; i < size; i++) {
-    if (!seen[i] && solid(i)) foot[i] = 1;
-    else if (seen[i] && cling[i] === 0 && !foot[i] && solid(i) && !reachedPlain[i]) cling[i] = 1;
-  }
+  for (let i = 0; i < size; i++) if (!seen[i] && solid(i)) foot[i] = 1;
 }

@@ -33,6 +33,8 @@ export interface WorldObject {
   cells: number;
   /** Counters the sim adds to (e.g. stats.rain). Part of World.hash(), so keep them deterministic. */
   stats: Record<string, number>;
+  /** The object it stands on or belongs to (a tree's mountain), 0 if none. */
+  group: number;
 }
 
 /** Does the object carry this tag? */

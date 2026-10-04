@@ -128,6 +128,7 @@ export class Frontier {
       bbox: [...s.bbox],
       cells: this.cellCount.get(s.id) ?? 0,
       stats: {},
+      group: s.group ?? 0,
     });
     if (s.spawn) placers.get(s.spawn.el)?.place(world, s.anchor[0], s.anchor[1], { obj: s.id, variant: s.spawn.variant, face: s.spawn.face });
   }

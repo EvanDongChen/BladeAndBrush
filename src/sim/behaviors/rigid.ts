@@ -175,6 +175,8 @@ export function launchBody(
 // ---------------------------------------------------------------- detection
 
 let stack = new Int32Array(0);
+/** How far (cells) loose generated material looks for anchored material of its own object (Flag.CLING). */
+const CLING_REACH = 6;
 /** Per cell during detection: 0 = not free solid, 1 = free solid not yet visited, 2 = visited. */
 let cellState = new Uint8Array(0);
 
@@ -214,19 +216,41 @@ function detect(world: World, s: State): void {
   //    ground (Flag.FOOT: the painting has no ground strip), is anchored
   for (let i = (h - 1) * w; i < size; i++) if (cell[i] === 1) flood(i, null);
   for (let i = 0; i < size; i++) if (cell[i] === 1 && flags[i] & Flag.FOOT) flood(i, null);
-  //    and so is generated material that clings (Flag.CLING) to anchored material within 2 cells
+  //    and so is generated material that clings (Flag.CLING): to anchored material within 2 cells,
+  //    or to anchored material of its own object or of what it stands on within CLING_REACH (a canopy
+  //    or a speck of a tree painted a little apart from its trunk or mountain; in front or behind)
+  const { obj, behindOwner } = world;
+  const groupOf = (id: number) => (id === 0 ? 0 : (world.objects.get(id)?.group ?? 0));
+  const kin = (pos: number, id: number, group: number): boolean => {
+    if (cell[pos] !== 2) return false;
+    const o = obj[pos];
+    if (o !== 0 && (o === id || o === group)) return true;
+    if (flags[pos] & Flag.HAS_BEHIND) {
+      for (const layer of behindOwner) {
+        const b = layer[pos];
+        if (b !== 0 && (b === id || b === group)) return true;
+      }
+    }
+    return false;
+  };
   for (let changed = true; changed; ) {
     changed = false;
     for (let i = 0; i < size; i++) {
       if (cell[i] !== 1 || !(flags[i] & Flag.CLING)) continue;
       const x = i % w;
       const y = (i / w) | 0;
+      const id = obj[i];
+      const group = groupOf(id);
       let held = false;
-      for (let dy = -2; dy <= 2 && !held; dy++) {
-        for (let dx = -2; dx <= 2; dx++) {
+      for (let dy = -CLING_REACH; dy <= CLING_REACH && !held; dy++) {
+        const ny = y + dy;
+        if (ny < 0 || ny >= h) continue;
+        for (let dx = -CLING_REACH; dx <= CLING_REACH; dx++) {
           const nx = x + dx;
-          const ny = y + dy;
-          if (nx >= 0 && ny >= 0 && nx < w && ny < h && cell[ny * w + nx] === 2) {
+          if (nx < 0 || nx >= w) continue;
+          const pos = ny * w + nx;
+          const near = dx >= -2 && dx <= 2 && dy >= -2 && dy <= 2;
+          if ((near && cell[pos] === 2) || (id !== 0 && kin(pos, id, group))) {
             held = true;
             break;
           }

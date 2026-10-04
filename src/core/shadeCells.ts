@@ -14,7 +14,25 @@ export interface ShadeRegion {
   size: number;
   /** If given, set to 1 for every tile that drew a cell whose shader is not `static`. */
   animated?: Uint8Array;
+  /** If given, each drawn cell is written here as a record (for the GPU) instead of painted into `out`. */
+  cells?: CellRecords;
 }
+
+/**
+ * Per-cell shading records (core/gpuArt.ts draws the pixels from them). Per cell i, at 4*i:
+ * [0] the 25-bit occupancy key, [1] shader id | topEdge << 8 | useBase << 9 | run << 10 |
+ * aux << 16 | life << 24 (shader id 0 = nothing drawn), [2] the reference cell, [3] (as float, via
+ * `recF`) its depth in its body. `color` holds the element's color(cell) for every cell a drawn
+ * cell blends with.
+ */
+export interface CellRecords {
+  rec: Uint32Array;
+  recF: Float32Array;
+  color: Uint32Array;
+  shaderId(sh: Shader): number;
+}
+
+export { RUN_DEPTH };
 
 /** Cells from the open surface at which a `run` body reaches full depth (see bodyDepth). */
 const RUN_DEPTH = 32;
@@ -438,17 +456,21 @@ export function shadeCells(
     const cov = coverFor(k, key);
 
     const useBase = !sh.noBase;
+    const cells = region?.cells;
     if (useBase) {
       for (let dy = -1; dy <= 1; dy++) {
         for (let dx = -1; dx <= 1; dx++) {
           const nx = cx + dx;
           const ny = cy + dy;
           const inb = nx >= 0 && ny >= 0 && nx < w && ny < h;
-          col9[(dy + 1) * 3 + dx + 1] = inb && (key >>> ((dy + 2) * 5 + dx + 2)) & 1 ? colorAt(world, ny * w + nx) : 0;
+          const c = inb && (key >>> ((dy + 2) * 5 + dx + 2)) & 1 ? colorAt(world, ny * w + nx) : 0;
+          col9[(dy + 1) * 3 + dx + 1] = c;
+          if (cells && c !== 0) cells.color[ny * w + nx] = c;
         }
       }
     }
     const refColor = useBase ? colorAt(world, ref) : 0;
+    if (cells && useBase) cells.color[ref] = refColor;
     px.aux = aux[ref];
     px.life = life[ref];
     px.i = ref;
@@ -458,6 +480,15 @@ export function shadeCells(
     const isRun = RUN[e] === 1;
     const pos = isRun ? bodyDepth(world, ref, FAMILY[e]) : 0;
 
+    if (cells) {
+      const o = i * 4;
+      const topEdge = (key & (1 << 12)) !== 0 && (key & (1 << 7)) === 0;
+      cells.rec[o] = key;
+      cells.rec[o + 1] = cells.shaderId(sh) | (topEdge ? 256 : 0) | (useBase ? 512 : 0) | (isRun ? 1024 : 0) | (aux[ref] << 16) | (life[ref] << 24);
+      cells.rec[o + 2] = ref;
+      cells.recF[o + 3] = pos;
+      continue;
+    }
     paintCell(out, sh, cov, subFor(k), k, aw, cx, cy, pos, isRun ? RUN_DEPTH : 1, useBase, refColor);
   }
 }

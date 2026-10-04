@@ -1,7 +1,7 @@
-import { compose, prepareArt } from './artCompose';
+import { compose, composeCodes, prepareArt } from './artCompose';
 import type { ArtView } from './blueprint';
 import { Flag } from './constants';
-import { shadeCells, type ShadeRegion } from './shadeCells';
+import { shadeCells, type CellRecords, type ShadeRegion } from './shadeCells';
 import { shaders } from './shaders';
 import type { World } from './world';
 
@@ -14,6 +14,14 @@ const REACH = 2;
 /** Flag bits that never change the look. */
 const FLAG_MASK = 0xff & ~Flag.UPDATED & ~Flag.QUEUED;
 const FLAG_MASK32 = (FLAG_MASK * 0x01010101) >>> 0;
+
+/** Per-cell output for the GPU path: compose codes plus shading records (see composeCodes, CellRecords). */
+export interface CellTarget {
+  codes: Uint32Array;
+  cells: CellRecords;
+}
+
+const NO_PIXELS = new Uint32Array(0);
 
 /** A rectangle of art pixels that changed this frame. */
 export interface ArtRect {
@@ -54,8 +62,28 @@ export class ArtFrame {
    * the first `rectCount` entries (the array is reused, so read them before the next call).
    */
   update(out: Uint32Array, world: World, art: ArtView | undefined, frontierX: number, k: number, shaded: boolean): readonly ArtRect[] {
+    return this.run(out, null, world, art, frontierX, k, shaded);
+  }
+
+  /**
+   * The GPU path: the same tiles, but instead of pixels each redrawn cell gets its compose code and
+   * shading record in `target`. Returns the changed rectangles in CELLS (first `rectCount`).
+   */
+  updateCells(target: CellTarget, world: World, art: ArtView | undefined, frontierX: number, k: number, shaded: boolean): readonly ArtRect[] {
+    return this.run(NO_PIXELS, target, world, art, frontierX, k, shaded);
+  }
+
+  private run(
+    out: Uint32Array,
+    target: CellTarget | null,
+    world: World,
+    art: ArtView | undefined,
+    frontierX: number,
+    k: number,
+    shaded: boolean,
+  ): readonly ArtRect[] {
     const { w, h } = world;
-    const key = [out, world, art?.art, k, shaded, shaders.version];
+    const key = [target ?? out, world, art?.art, k, shaded, shaders.version];
     const fresh = !this.prev || key.length !== this.key.length || key.some((v, i) => v !== this.key[i]);
     const fx = Math.max(0, Math.min(w, Math.ceil(frontierX)));
     if (fresh) {
@@ -90,15 +118,20 @@ export class ArtFrame {
       const y0 = ((t / cols) | 0) * TILE;
       const x1 = Math.min(w, x0 + TILE);
       const y1 = Math.min(h, y0 + TILE);
-      if (art) compose(out, world.el, world.plane, prepareArt(art), fx, x0, y0, x1, y1);
+      if (target) {
+        if (art) composeCodes(target.codes, world.el, world.plane, prepareArt(art), fx, x0, y0, x1, y1);
+        else for (let y = y0; y < y1; y++) target.codes.fill(0, y * w + x0, y * w + x1);
+        const rec = target.cells.rec;
+        for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) rec[(y * w + x) * 4 + 1] = 0; // nothing shaded yet
+      } else if (art) compose(out, world.el, world.plane, prepareArt(art), fx, x0, y0, x1, y1);
       else for (let y = y0 * k; y < y1 * k; y++) out.fill(0, y * aw + x0 * k, y * aw + x1 * k);
     }
     this.tilesDrawn = drawn;
     if (shaded && drawn) {
-      const region: ShadeRegion = { tiles: dirty, cols, size: TILE, animated: this.animated };
+      const region: ShadeRegion = { tiles: dirty, cols, size: TILE, animated: this.animated, cells: target?.cells };
       shadeCells(out, world, k, art, fx, region);
     }
-    this.collectRects(w, h, k);
+    this.collectRects(w, h, target ? 1 : k);
     return this.rects;
   }
 

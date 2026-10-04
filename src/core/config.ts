@@ -11,6 +11,8 @@ export const flags: Record<string, boolean> = {
   glow: true,
   /** Sim cells that are not showing generator art are drawn by shaders (core/shaders/) at art resolution. Off = flat cell colors. */
   shaders: true,
+  /** Draw the ink layer on the GPU (core/gpuArt.ts) when WebGL2 works; off = the CPU path. `?cpu` on a page turns it off. */
+  gpuArt: true,
   /**
    * Layered pixels: false = the far ridges are background art only (not interactive, never scanned).
    * true = the reveal puts them in the world as real ROCK at the back of each stack, so they can be

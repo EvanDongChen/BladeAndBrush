@@ -16,3 +16,7 @@ import.meta.glob('../gen/metrics/*.ts', { eager: true });
 import.meta.glob('../levels/goals/*.ts', { eager: true });
 import.meta.glob('../levels/*.ts', { eager: true });
 import.meta.glob('../audio/*.ts', { eager: true });
+
+// ?cpu on any page: draw the ink layer on the CPU (to compare with the GPU path)
+import { flags } from '../core/config';
+if (typeof location !== 'undefined' && new URLSearchParams(location.search).has('cpu')) flags.gpuArt = false;

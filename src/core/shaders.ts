@@ -56,6 +56,12 @@ export interface Shader {
    * then left alone. Leave it off for anything that moves on its own (water, fire, smoke).
    */
   static?: boolean;
+  /**
+   * Optional GPU twin of shade(): the body of a GLSL function `ivec4 f(Px p)` returning 0..255 RGBA,
+   * with the same arithmetic (see core/gpuArt.ts for Px and the helpers). shade() stays the
+   * definition and the CPU fallback; while any shader has no twin, the art layer draws on the CPU.
+   */
+  glsl?: string;
   /** Packed RGBA; alpha is its own opacity (multiplied by coverage). */
   shade(p: ShadePx): number;
 }

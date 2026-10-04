@@ -22,6 +22,13 @@ const byte = (v: number) => (v < 0 ? 0 : v > 255 ? 255 : v | 0);
 registerShader({
   static: true,
   element: ['rock', 'tree', 'wood', 'earth', 'leaf', 'hay', 'bamboo', 'moon', 'far_rock', 'stain', 'splat', 'debris', 'ash', 'dust'],
+  glsl: `
+    ivec3 c = mixc(p.base.rgb, ivec3(240, 233, 216), 0.72);
+    float s1 = tex(1, p.x * 0.55 + p.y * 0.5, p.y * 0.8 - p.x * 0.45);
+    float s2 = tex(1, p.x * 0.9 + p.y * 0.8 + 40.0, p.y * 1.4 - p.x * 0.7 + 90.0);
+    c = mixc(c, ivec3(96, 94, 90), ss(0.55, 0.85, s1) * 0.42 + ss(0.62, 0.9, s2) * 0.16);
+    c = mixc(c, ivec3(96, 94, 90), (1.0 - ss(0.55, 0.95, p.v)) * 0.5);
+    return ivec4(c, 255);`,
   shade: (p) => {
     const base = p.base;
     const br = base & 255;

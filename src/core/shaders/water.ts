@@ -31,6 +31,18 @@ registerShader({
   element: 'water',
   run: true,
   noBase: true,
+  glsl: `
+    float t = clamp(p.depth, 0.0, 1.0);
+    float d = pow(t, 0.85);
+    ivec3 c = ivec3(byteF(206.0 - 140.0 * d), byteF(222.0 - 126.0 * d), byteF(230.0 - 96.0 * d));
+    float a = tex(0, p.x * 0.5 + p.tick * 0.8, p.y * 1.5);
+    float b = tex(0, p.x * 0.38 - p.tick * 0.5 + 91.0, p.y * 1.2 + 37.0);
+    float pale = ((ss(0.62, 0.7, b) * 0.5 + ss(0.7, 0.8, a) * 0.3) * (1.0 - 0.7 * t)) * 0.5;
+    c = mixc(c, ivec3(240, 238, 228), pale);
+    float line = ss(0.64, 0.72, a) * 0.5 + ss(0.7, 0.78, b) * 0.35;
+    c = mixc(c, ivec3(44, 66, 100), min(0.7, line) * (0.5 + 0.35 * t));
+    if (p.topEdge) c = mixc(c, ivec3(44, 66, 100), (1.0 - ss(0.1, 0.3, p.fy)) * 0.55);
+    return ivec4(c, 255);`,
   shade: (p) => {
     const t = clamp01(p.depth);
     const slot = (t * 1048573) & (SLOTS - 1);

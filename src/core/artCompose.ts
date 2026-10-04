@@ -200,3 +200,42 @@ function fill(out: Uint32Array, base: number, aw: number, k: number, v: number):
     for (let xx = 0; xx < k; xx++) out[row + xx] = v;
   }
 }
+
+/**
+ * compose()'s decision for each cell, as a code (core/gpuArt.ts draws the pixels from it): bits 0-2
+ * the case (0 transparent, 1 the prepared picture, 2 broken through: background plus the spill of the
+ * planes in the mask, 3 an interactive far ridge, 4 plane q's art over paper), bits 3-7 q, bits 8-23
+ * the spill mask. Same rules as compose(), for the cells in [x0, x1) x [y0, y1).
+ */
+export function composeCodes(
+  codes: Uint32Array,
+  worldEl: Uint8Array,
+  worldPlane: Uint8Array,
+  prep: PreparedArt,
+  frontierX: number,
+  x0: number,
+  y0: number,
+  x1: number,
+  y1: number,
+): void {
+  const { view, spill } = prep;
+  const { w } = view;
+  const fx = Math.max(0, Math.min(w, frontierX));
+  for (let cy = y0; cy < y1; cy++) {
+    for (let cx = x0; cx < x1; cx++) {
+      const i = cy * w + cx;
+      const we = worldEl[i];
+      let code = 0;
+      if (cx >= fx) code = 0;
+      else if (we === view.el[i] && worldPlane[i] === view.plane[i] && (we !== El.EMPTY || spill[i] === 0)) code = 1;
+      else if (we === El.EMPTY) code = 2 | ((spill[i] === 0 ? 0 : standingMask(view, spill[i], cx, cy, worldEl, worldPlane)) << 8);
+      else {
+        const q = worldPlane[i];
+        if (q === FAR_PLANE && we === El.ROCK) code = 3;
+        else if (q === NO_PLANE || view.planes[q]?.el[i] !== we) code = 0;
+        else code = 4 | (q << 3);
+      }
+      codes[i] = code;
+    }
+  }
+}

@@ -41,6 +41,8 @@ export interface PerfSnapshot {
   ticksPerFrame: number;
   callbackMs: { mean: number; max: number };
   layers: Record<string, { mean: number; max: number }>;
+  /** Canvas calls per frame: time (CPU side) and count. */
+  canvas: Record<string, { mean: number; max: number; calls: number }>;
   otherMs: { mean: number; max: number };
 }
 
@@ -57,7 +59,27 @@ let wrapped = false;
 let box: HTMLElement | null = null;
 let lastPaint = 0;
 
-if (perfEnabled) Object.defineProperty(globalThis, '__perf', { configurable: true, get: perfSnapshot });
+const canvasCalls = ['putImageData', 'drawImage', 'getImageData'] as const;
+const canvasMs = new Map<string, Series>(canvasCalls.map((n) => [n, new Series()]));
+const canvasCount = new Map<string, Series>(canvasCalls.map((n) => [n, new Series()]));
+const frameMs = new Map<string, number>();
+const frameCount = new Map<string, number>();
+
+if (perfEnabled) {
+  Object.defineProperty(globalThis, '__perf', { configurable: true, get: perfSnapshot });
+  // time the expensive canvas calls (they can hide inside a layer's draw)
+  const proto = CanvasRenderingContext2D.prototype as unknown as Record<string, (...a: unknown[]) => unknown>;
+  for (const name of canvasCalls) {
+    const orig = proto[name];
+    proto[name] = function (this: unknown, ...a: unknown[]) {
+      const t = performance.now();
+      const r = orig.apply(this, a);
+      frameMs.set(name, (frameMs.get(name) ?? 0) + performance.now() - t);
+      frameCount.set(name, (frameCount.get(name) ?? 0) + 1);
+      return r;
+    };
+  }
+}
 
 /** Wrap every registered layer's draw so its time is recorded (once). */
 function wrapLayers(): void {
@@ -87,6 +109,7 @@ export function perfSnapshot(): PerfSnapshot {
     ticksPerFrame: ticks.mean(),
     callbackMs: ms(callback),
     layers: Object.fromEntries([...layerSeries].map(([k, s]) => [k, ms(s)])),
+    canvas: Object.fromEntries(canvasCalls.map((n) => [n, { ...ms(canvasMs.get(n)!), calls: canvasCount.get(n)!.mean() }])),
     otherMs: ms(other),
   };
 }
@@ -104,6 +127,12 @@ export const perf = {
   },
   frameEnd(callbackMs: number): void {
     callback.add(callbackMs);
+    for (const n of canvasCalls) {
+      canvasMs.get(n)!.add(frameMs.get(n) ?? 0);
+      canvasCount.get(n)!.add(frameCount.get(n) ?? 0);
+      frameMs.set(n, 0);
+      frameCount.set(n, 0);
+    }
     other.add(Math.max(0, callbackMs - layerSum));
     const now = performance.now();
     if (now - lastPaint > 500) {
@@ -132,6 +161,9 @@ function paint(): void {
       .filter(([, v]) => v.max > 0)
       .map(([k, v]) => `  layer ${k.padEnd(9)} ${f(v)}`),
     `  other         ${f(p.otherMs)}`,
+    ...Object.entries(p.canvas)
+      .filter(([, v]) => v.max > 0)
+      .map(([k, v]) => `${k.padEnd(13)} ${f(v)}  x${v.calls.toFixed(1)}`),
   ];
   box.textContent = rows.join('\n');
 }

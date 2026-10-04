@@ -9,7 +9,6 @@
 import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { chromium, type Page } from 'playwright-core';
-import { createServer } from 'vite';
 
 interface Stat {
   mean: number;
@@ -22,6 +21,7 @@ interface Snapshot {
   ticksPerFrame: number;
   callbackMs: Stat;
   layers: Record<string, Stat>;
+  canvas: Record<string, Stat & { calls: number }>;
   otherMs: Stat;
 }
 interface Row {
@@ -31,11 +31,27 @@ interface Row {
 }
 
 const dir = join(process.cwd(), 'bench');
+const outName = process.env.BENCH_OUT ?? 'browser-latest.json';
 const rows: Row[] = [];
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 async function measure(page: Page, name: string, ms = 4000): Promise<void> {
+  // BENCH_PROFILE=<part of a scenario name>: save a Chrome CPU profile of that scenario
+  const prof = process.env.BENCH_PROFILE && name.includes(process.env.BENCH_PROFILE);
+  const cdp = prof ? await page.context().newCDPSession(page) : null;
+  if (cdp) {
+    await cdp.send('Profiler.enable');
+    await cdp.send('Profiler.setSamplingInterval', { interval: 200 });
+    await cdp.send('Profiler.start');
+  }
   await wait(ms);
+  if (cdp) {
+    const { profile } = await cdp.send('Profiler.stop');
+    mkdirSync(join(dir, 'results'), { recursive: true });
+    const file = join(dir, 'results', `${name.replace(/\W+/g, '-')}.cpuprofile`);
+    writeFileSync(file, JSON.stringify(profile));
+    console.log('profile:', file);
+  }
   const p = (await page.evaluate(() => (globalThis as unknown as { __perf: unknown }).__perf)) as Snapshot | undefined;
   if (!p) throw new Error(`${name}: no window.__perf (did the page start its loop?)`);
   rows.push({ name: `${name}: fps`, value: p.fps, unit: 'fps' });
@@ -45,6 +61,11 @@ async function measure(page: Page, name: string, ms = 4000): Promise<void> {
   rows.push({ name: `${name}: frame callback`, value: p.callbackMs.mean, unit: 'ms' });
   for (const [k, v] of Object.entries(p.layers)) if (v.max > 0) rows.push({ name: `${name}: layer ${k}`, value: v.mean, unit: 'ms' });
   rows.push({ name: `${name}: other (overlays, UI, scan)`, value: p.otherMs.mean, unit: 'ms' });
+  for (const [k, v] of Object.entries(p.canvas ?? {})) {
+    if (v.max <= 0) continue;
+    rows.push({ name: `${name}: ${k} (in layers)`, value: v.mean, unit: 'ms' });
+    rows.push({ name: `${name}: ${k} calls`, value: v.calls, unit: 'n' });
+  }
 }
 
 /** Drag across the canvas from (x0, y0) to (x1, y1), as fractions of its box. */
@@ -61,11 +82,24 @@ async function drag(page: Page, sel: string, x0: number, y0: number, x1: number,
   await page.mouse.up();
 }
 
-const server = await createServer({ logLevel: 'error', server: { port: 5199, strictPort: false } });
-await server.listen();
-const base = server.resolvedUrls?.local[0] ?? 'http://localhost:5199/';
+// BENCH_URL: use a server that is already running (e.g. Vite in WSL, this script run by Windows
+// node so it drives Windows Chrome with its real GPU). Otherwise start Vite here.
+let server: { close(): Promise<void> } = { close: async () => {} };
+let base = process.env.BENCH_URL ?? '';
+if (!base) {
+  const { createServer } = await import('vite');
+  const vite = await createServer({ logLevel: 'error', server: { port: 5199, strictPort: false } });
+  await vite.listen();
+  server = vite;
+  base = vite.resolvedUrls?.local[0] ?? 'http://localhost:5199/';
+}
+if (!base.endsWith('/')) base += '/';
 const browser = await chromium
-  .launch({ executablePath: process.env.CHROME_PATH, args: ['--enable-gpu-rasterization', '--ignore-gpu-blocklist'] })
+  .launch({
+    executablePath: process.env.CHROME_PATH,
+    headless: !process.env.HEADED,
+    args: ['--enable-gpu-rasterization', '--ignore-gpu-blocklist'],
+  })
   .catch(async (e: Error) => {
     await server.close();
     console.error(
@@ -109,6 +143,6 @@ for (const r of rows) {
 }
 console.log(out.join('\n'));
 mkdirSync(join(dir, 'results'), { recursive: true });
-const latest = join(dir, 'results', 'browser-latest.json');
+const latest = join(dir, 'results', outName);
 writeFileSync(latest, JSON.stringify({ date: new Date().toISOString(), rows }, null, 2));
 if (process.argv.includes('--baseline')) copyFileSync(latest, basePath);

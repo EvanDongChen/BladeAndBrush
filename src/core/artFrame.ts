@@ -154,7 +154,10 @@ export class ArtFrame {
     for (let r = 0; r < this.rows; r++) for (let t = ta; t <= tb; t++) this.dirty[r * this.cols + t] = 1;
   }
 
-  /** Merge each row's runs of redrawn tiles into rectangles of art pixels. */
+  /**
+   * Merge each row's runs of redrawn tiles into rectangles of art pixels, and a run into the
+   * rectangle above it when they span the same columns (fewer, larger uploads).
+   */
   private collectRects(w: number, h: number, k: number): void {
     const { dirty, cols, rows, rects } = this;
     let n = 0;
@@ -169,11 +172,23 @@ export class ArtFrame {
         while (t < cols && dirty[r * cols + t]) t++;
         const x = t0 * TILE * k;
         const y = r * TILE * k;
+        const rw = Math.min(w * k, t * TILE * k) - x;
+        const rh = Math.min(h * k, (r + 1) * TILE * k) - y;
+        let merged = false;
+        for (let q = 0; q < n; q++) {
+          const above = rects[q];
+          if (above.x === x && above.w === rw && above.y + above.h === y) {
+            above.h += rh;
+            merged = true;
+            break;
+          }
+        }
+        if (merged) continue;
         const rect = rects[n] ?? (rects[n] = { x: 0, y: 0, w: 0, h: 0 });
         rect.x = x;
         rect.y = y;
-        rect.w = Math.min(w * k, t * TILE * k) - x;
-        rect.h = Math.min(h * k, (r + 1) * TILE * k) - y;
+        rect.w = rw;
+        rect.h = rh;
         n++;
       }
     }

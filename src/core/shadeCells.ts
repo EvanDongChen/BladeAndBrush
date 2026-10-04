@@ -31,11 +31,14 @@ let stamp = new Uint32Array(0); // cell was queued this frame
 let list = new Int32Array(0); // queued cells
 let cStamp = new Uint32Array(0); // cached color is from this frame
 let cCache = new Uint32Array(0);
+let sStamp = new Uint32Array(0); // isSource() answer is from this frame
+let sVal = new Uint8Array(0);
 let frameId = 0;
 let runPos = new Int16Array(0);
 let runLen = new Int16Array(0);
 const occ5 = new Float32Array(25);
 const col9 = new Uint32Array(9);
+const nb9 = new Int16Array(9);
 
 function ensure(size: number): void {
   if (stamp.length >= size) return;
@@ -43,6 +46,17 @@ function ensure(size: number): void {
   list = new Int32Array(size);
   cStamp = new Uint32Array(size);
   cCache = new Uint32Array(size);
+  sStamp = new Uint32Array(size);
+  sVal = new Uint8Array(size);
+}
+
+/** A shaded cell that is not showing generator art (it gets drawn, and spills), memoized per frame. */
+function isSource(world: World, view: ArtView | undefined, i: number): boolean {
+  if (sStamp[i] === frameId) return sVal[i] === 1;
+  const v = SHADER[world.el[i]] !== undefined && !(view && showsArt(world, view, i));
+  sStamp[i] = frameId;
+  sVal[i] = v ? 1 : 0;
+  return v;
 }
 
 /** The element's own color(cell), computed once per cell per frame. */
@@ -89,7 +103,16 @@ function tapsFor(k: number): { b: Int8Array; w: Float32Array } {
  * (stretched so an interior reads ~1), s*2+1 = cover, for sub-pixel s = sy*k + sx.
  */
 const coverCache = new Map<number, Map<number, Float64Array>>();
+let lastK = 0;
+let lastKey = -1;
+let lastTab: Float64Array | null = null;
 function coverFor(k: number, key: number): Float64Array {
+  if (key === lastKey && k === lastK && lastTab) return lastTab;
+  lastKey = key;
+  lastK = k;
+  return (lastTab = coverLookup(k, key));
+}
+function coverLookup(k: number, key: number): Float64Array {
   let byKey = coverCache.get(k);
   if (!byKey) coverCache.set(k, (byKey = new Map()));
   let tab = byKey.get(key);
@@ -220,9 +243,7 @@ export function shadeCells(
   // pass A: queue every shaded cell that needs drawing, and its 8 neighbours (for the spill)
   let n = 0;
   const queueAround = (cx: number, cy: number) => {
-    const i = cy * w + cx;
-    if (!SHADER[el[i]]) return;
-    if (view && showsArt(world, view, i)) return;
+    if (!isSource(world, view, cy * w + cx)) return;
     for (let dy = -1; dy <= 1; dy++) {
       const ny = cy + dy;
       if (ny < 0 || ny >= h) continue;
@@ -264,31 +285,29 @@ export function shadeCells(
     let ref = i; // the cell that supplies element, aux, life and run position
     let sh = SHADER[e];
     if (sh) {
-      if (view && showsArt(world, view, i)) continue;
+      if (!isSource(world, view, i)) continue;
     } else if (e === El.EMPTY) {
-      // a spill cell: take the most common shaded, non-art neighbour as the donor
-      let best = -1;
-      let bestCount = 0;
+      // a spill cell: take the most common shaded, non-art neighbour as the donor (ties: the first
+      // in reading order); "common" = how many of the 3x3 around this cell hold its element
       for (let dy = -1; dy <= 1; dy++) {
         for (let dx = -1; dx <= 1; dx++) {
           const nx = cx + dx;
           const ny = cy + dy;
-          if ((dx === 0 && dy === 0) || nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
-          const j = ny * w + nx;
-          if (!SHADER[el[j]] || (view && showsArt(world, view, j))) continue;
-          let count = 0;
-          for (let ddy = -1; ddy <= 1; ddy++) {
-            for (let ddx = -1; ddx <= 1; ddx++) {
-              const mx = cx + ddx;
-              const my = cy + ddy;
-              if (mx < 0 || my < 0 || mx >= w || my >= h) continue;
-              if (el[my * w + mx] === el[j]) count++;
-            }
-          }
-          if (count > bestCount) {
-            bestCount = count;
-            best = j;
-          }
+          nb9[(dy + 1) * 3 + dx + 1] = nx < 0 || ny < 0 || nx >= w || ny >= h ? -1 : el[ny * w + nx];
+        }
+      }
+      let best = -1;
+      let bestCount = 0;
+      for (let t = 0; t < 9; t++) {
+        const ne = nb9[t];
+        if (t === 4 || ne < 0 || !SHADER[ne]) continue;
+        const j = (cy + ((t / 3) | 0) - 1) * w + cx + (t % 3) - 1;
+        if (!isSource(world, view, j)) continue;
+        let count = 0;
+        for (let u = 0; u < 9; u++) if (nb9[u] === ne) count++;
+        if (count > bestCount) {
+          bestCount = count;
+          best = j;
         }
       }
       if (best < 0) continue;

@@ -14,6 +14,7 @@ import { Frontier } from '../src/gen/frontier';
 import { generate } from '../src/gen/generate';
 import { scan } from '../src/gen/scan';
 import { step } from '../src/sim/step';
+import { stroke } from '../tests/sim-helpers';
 import { bench, finish, record, value } from './harness';
 
 const K = 4;
@@ -178,6 +179,28 @@ describe('benchmarks', () => {
       w.clearCircle(cutX, 120, 4, { cut: true });
       cutX = cutX > 880 ? 60 : cutX + 9;
     });
+    // after four slashes through the painting (like the browser bench): pieces fall for a while
+    {
+      const cut = revealed(bp, 5);
+      for (let n = 0; n < 4; n++) {
+        const x0 = 120 + n * 190;
+        stroke(cut, 'slash', [[x0, 60], [x0 + 50, 120, 6], [x0 + 100, 190, 6]], { radius: 4 });
+      }
+      const f = new ArtFrame();
+      f.update(out, cut, view, cut.w, K, true);
+      const times: number[] = [];
+      const tiles: number[] = [];
+      for (let i = 0; i < 90; i++) {
+        step(cut);
+        step(cut);
+        const t = performance.now();
+        f.update(out, cut, view, cut.w, K, true);
+        times.push(performance.now() - t);
+        tiles.push(f.tilesDrawn);
+      }
+      record('ink frame: after 4 slashes (pieces falling)', 'ms', times);
+      record('ink frame: after 4 slashes: tiles redrawn', 'tiles', tiles);
+    }
     const field = createGlowField();
     bench('frame: glow field (forest fire)', () => buildGlowField(fire, field), 15);
     bench('frame: glow field (nothing glowing)', () => buildGlowField(w, createGlowField()), 15);

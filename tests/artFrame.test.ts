@@ -36,10 +36,18 @@ describe('ArtFrame (redraws only changed tiles)', () => {
     const frontier = new Frontier(bp);
     const frame = new ArtFrame();
     const out = new Uint32Array(world.w * K * world.h * K);
+    // what the canvas shows: only the rectangles update() reports get copied (uploaded)
+    const shown = new Uint32Array(out.length);
+    const aw = world.w * K;
     const check = (fx: number, label: string) => {
-      frame.update(out, world, view, fx, K, true);
-      const at = firstDiff(out, reference(world, view, fx, true));
-      expect(at, `${label}: first differing pixel`).toBe(-1);
+      const rects = frame.update(out, world, view, fx, K, true);
+      for (let r = 0; r < frame.rectCount; r++) {
+        const { x, y, w, h } = rects[r];
+        for (let yy = y; yy < y + h; yy++) shown.set(out.subarray(yy * aw + x, yy * aw + x + w), yy * aw + x);
+      }
+      const ref = reference(world, view, fx, true);
+      expect(firstDiff(out, ref), `${label}: first differing pixel`).toBe(-1);
+      expect(firstDiff(shown, ref), `${label}: first differing uploaded pixel`).toBe(-1);
     };
 
     // unrolling

@@ -5,6 +5,7 @@ import { createNoise } from '../../core/noise';
 import type { World } from '../../core/world';
 import { markUnsupported } from '../behaviors/rigid';
 import { forCapsule } from '../brush';
+import { DEBRIS } from '../elements/debris';
 import { registerLineAbility } from '../lineAbility';
 import { CUTTABLE } from '../physics';
 import { isProtected } from '../protect';
@@ -35,6 +36,17 @@ export const slashTunables = defineTunables(
 
 const edgeNoise = createNoise(0x5a5);
 const clamp = (v: number) => Math.max(-12, Math.min(12, v));
+const MOON_ID = 33; // Gen-owned element id; sim cannot import from gen/.
+const BURST_DIRECTIONS: readonly [number, number][] = [
+  [-1, -1],
+  [0, -1],
+  [1, -1],
+  [-1, 0],
+  [1, 0],
+  [-1, 1],
+  [0, 1],
+  [1, 1],
+];
 
 /**
  * Clear a jagged groove along a stretch of the line: every cell inside a noisy radius becomes
@@ -49,6 +61,7 @@ function carve(world: World, ax: number, ay: number, bx: number, by: number, r: 
   const v = Math.max(1.5, Math.min(12, speed * slashTunables.splatSpeed * power));
   const { el, rng, w } = world;
   let splats = 0;
+  let moonFragments = 0;
 
   forCapsule(world, ax, ay, bx, by, r * (1 + roughness), (x, y, ox, oy, d) => {
     const n = edgeNoise.fbm2(x * grain, y * grain, 3); // 0..1
@@ -58,6 +71,20 @@ function carve(world: World, ax: number, ay: number, bx: number, by: number, r: 
     world.clearBehind(y * w + x);
     if (CUTTABLE[prev]) {
       world.set(x, y, El.EMPTY, { cut: true }); // emits 'cut'
+      if (prev === MOON_ID) {
+        // Moon fragments use the existing projectile path, preserving the moon's color on impact.
+        // Cycle directions instead of relying on chance so even a short slice sprays everywhere.
+        const [dx, dy] = BURST_DIRECTIONS[moonFragments++ % BURST_DIRECTIONS.length];
+        const speed = 4 + rng.int(5);
+        world.set(x, y, DEBRIS, {
+          aux: MOON_ID,
+          life: rng.int(256),
+          vx: dx * speed,
+          vy: dy * speed,
+        });
+        world.flags[y * w + x] |= Flag.CUT;
+        return;
+      }
     } else {
       // droplets, water, gas, empty air: cleared and flagged, but not a 'cut' scar
       world.set(x, y, El.EMPTY);

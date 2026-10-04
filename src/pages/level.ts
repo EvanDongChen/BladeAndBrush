@@ -18,6 +18,7 @@ import type { Peak } from '../core/scan';
 import { bodyCount } from '../sim/behaviors/rigid';
 import { aimEnd, aimTunables, chargeOf, drawAim, isLineAbility, lineColor } from '../sim/lineAbility';
 import { step } from '../sim/step';
+import { siteHeader } from './chrome';
 import { Fx } from './fx';
 import { arsenal } from './arsenal';
 import { button, h, handscroll, panel, seal, startLoop, toCell } from './ui';
@@ -319,10 +320,10 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
 
   stage.append(frame, status, complete.node);
   root.replaceChildren(
-    levelHeader(level.title ?? level.id),
+    siteHeader('levels', level.title ?? level.id),
     h(
       'main',
-      { class: 'layout level-layout' },
+      { class: 'layout level-layout', id: 'main' },
       stage,
       h(
         'aside',

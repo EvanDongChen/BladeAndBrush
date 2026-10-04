@@ -18,9 +18,11 @@ import type { Peak } from '../core/scan';
 import { bodyCount } from '../sim/behaviors/rigid';
 import { aimEnd, aimTunables, chargeOf, drawAim, isLineAbility, lineColor } from '../sim/lineAbility';
 import { step } from '../sim/step';
+import { units } from '../gen/units';
 import { Fx } from './fx';
 import { arsenal } from './arsenal';
 import { button, h, handscroll, panel, seal, startLoop, toCell } from './ui';
+import { noiseGraph } from './noiseGraph';
 
 /** Header for players: no links to the workshops. */
 function levelHeader(sub: string): HTMLElement {
@@ -69,6 +71,29 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
   let heights: Int16Array | null = null;
   const markPeaks = aboutPeaks(level.goals);
   const initial = { ...params };
+  /** Session shaping through the noise graph: free, but marks the painting changed. */
+  let shaped = false;
+  const scrollW = units(level.dims, DEFAULT_ART_K).widthUnits;
+
+  // The noise graph replaces the height/spacing rows below (when the level
+  // offers them): edits feed back into generate() as a gate override, score
+  // offsets, and pinned mountain setpieces.
+  const mhRule = level.params.mountainHeight;
+  const spRule = level.params.spacing;
+  const showGraph =
+    (mhRule !== undefined && mhRule.visible !== false) || (spRule !== undefined && spRule.visible !== false);
+  const graph = noiseGraph({
+    seed: () => level.seed,
+    params,
+    dims: level.dims,
+    levelForced: () =>
+      (level.setpieces ?? []).flatMap((s) => (s.type === 'mountain' && typeof s.x === 'number' ? [s.x * scrollW] : [])),
+    locks: { height: mhRule?.locked ?? true, spacing: spRule?.locked ?? true },
+    onChange: () => {
+      shaped = true;
+      regenerate();
+    },
+  });
 
   const canvas = h('canvas', { class: 'grid paintable' });
   const renderer = new Renderer(canvas, level.dims, DEFAULT_ART_K);
@@ -94,7 +119,13 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
   let tip = '';
 
   function regenerate(): void {
-    bp = generate(level.seed, params, { features: level.featuresEnabled, setpieces: level.setpieces });
+    const ed = graph.edits();
+    bp = generate(level.seed, params, {
+      features: level.featuresEnabled,
+      setpieces: [...(level.setpieces ?? []), ...ed.pins.map((x) => ({ type: 'mountain', x: x / scrollW }))],
+      ...(ed.gate === undefined ? {} : { planBar: ed.gate }),
+      ...(Object.keys(ed.offsets).length === 0 ? {} : { planScore: ed.offsets }),
+    });
     world = new World(level.dims, level.seed, { ...params });
     frontier = new Frontier(bp);
     driver = new ActionDriver();
@@ -233,7 +264,7 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
   complete.node.hidden = true;
 
   /** Has the player changed anything yet? Goals the fresh painting already meets do not count. */
-  const changed = () => used > 0 || Object.keys(initial).some((k) => params[k] !== initial[k]);
+  const changed = () => used > 0 || shaped || Object.keys(initial).some((k) => params[k] !== initial[k]);
 
   /** Light the verses as the painting changes; once it has settled after the last stroke, judge it. */
   function checkGoals(): void {
@@ -297,6 +328,7 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
   for (const def of paramDefs.all()) {
     const rule = level.params[def.key];
     if (!rule || rule.visible === false) continue;
+    if (showGraph && (def.key === 'mountainHeight' || def.key === 'spacing')) continue; // the graph covers these
     const out = h('output', {}, String(params[def.key]));
     const input = h('input', {
       type: 'range',
@@ -330,6 +362,7 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
                 panel(
           'Shape the painting',
           h('p', { class: 'home-note' }, level.tip ?? 'Tune the painting before you cut: it repaints when you let go of a slider.'),
+          ...(showGraph ? [graph.node] : []),
           paramRows,
           button('Start over', regenerate),
         ),
@@ -339,6 +372,7 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
   );
 
   bar.selectIndex(0); // start with the first ability selected
+  if (showGraph) graph.sync(); // canvas has layout now; draw the wave at full width
   let frames = 0;
   const stop = startLoop(
     clock,

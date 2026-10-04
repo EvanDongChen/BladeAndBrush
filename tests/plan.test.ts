@@ -96,4 +96,15 @@ describe('noise graph', () => {
     expect(a).toEqual(b);
     expect(a).not.toEqual(c);
   });
+
+  it('painted score offsets reshape the picks deterministically', () => {
+    const base = scoreCurve(7, 0.5, u.widthUnits);
+    const over = scoreCurve(7, 0.5, u.widthUnits, undefined, { 10: 0.5, 11: 0.5 });
+    expect(over.score[10]).toBeGreaterThan(base.score[10]);
+    expect(over.score[200]).toBe(base.score[200]);
+    const a = makePlan(7, p(), u, undefined, undefined, { 10: 0.5 });
+    const b = makePlan(7, p(), u, undefined, undefined, { 10: 0.5 });
+    expect(a).toEqual(b);
+    expect(a).not.toEqual(makePlan(7, p(), u));
+  });
 });

@@ -18,13 +18,6 @@ import { Fx } from './fx';
 import { arsenal } from './arsenal';
 import { button, h, handscroll, panel, seal, startLoop, toCell } from './ui';
 
-/** A panel that starts rolled up (secondary controls the player rarely needs). */
-function rolledPanel(title: string, ...children: (Node | string)[]): HTMLElement {
-  const p = panel(title, ...children);
-  p.querySelector<HTMLButtonElement>('.panel-toggle')?.click();
-  return p;
-}
-
 /** Header for players: no links to the workshops. */
 function levelHeader(sub: string): HTMLElement {
   const brand = h(
@@ -275,7 +268,7 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
           h('p', { class: 'home-note' }, 'Shape changes apply when you regenerate.'),
           button('Regenerate', regenerate),
         ),
-        rolledPanel('Tuning', tuning),
+        panel('Tuning', tuning),
       ),
     ),
   );

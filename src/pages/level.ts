@@ -235,9 +235,33 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
   /** Has the player changed anything yet? Goals the fresh painting already meets do not count. */
   const changed = () => used > 0 || Object.keys(initial).some((k) => params[k] !== initial[k]);
 
+  let lastScan: ReturnType<typeof scan> | null = null;
+  let lastScanWorld: World | null = null;
+  let lastScanKey = -1;
+  let checkQueued = false;
+  let stopped = false;
+  /** Run checkGoals when the browser is idle, so a scan never lands inside a frame. */
+  function queueCheck(): void {
+    if (checkQueued) return;
+    checkQueued = true;
+    const run = () => {
+      checkQueued = false;
+      if (!stopped) checkGoals();
+    };
+    if ('requestIdleCallback' in window) requestIdleCallback(run, { timeout: 300 });
+    else setTimeout(run, 0);
+  }
+
   /** Light the verses as the painting changes; once it has settled after the last stroke, judge it. */
   function checkGoals(): void {
-    const result = scan(world);
+    // the scan reads cells, owners, objects and object stats: rescan only when those changed
+    const key = scanKey(world);
+    if (!lastScan || world !== lastScanWorld || key !== lastScanKey) {
+      lastScan = scan(world);
+      lastScanWorld = world;
+      lastScanKey = key;
+    }
+    const result = lastScan;
     peaks = result.peaks;
     heights = result.heights;
     const started = changed();
@@ -340,6 +364,7 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
 
   bar.selectIndex(0); // start with the first ability selected
   let frames = 0;
+  let shownX = -1;
   const stop = startLoop(
     clock,
     (dt) => {
@@ -353,11 +378,14 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
         renderer.inCells((g) => drawAim(g, ability, aim, radius, chargeOf(world.tick - pressedTick)));
       }
       showInk();
-      if (frames++ % 10 === 0 && frontier.done) checkGoals();
+      if (frames++ % 10 === 0 && frontier.done) queueCheck();
       bar.setSpent(phase !== 'play');
       banner.hidden = phase !== 'failed';
       sealButton.toggleAttribute('disabled', phase !== 'play' || used === 0);
-      frame.style.setProperty('--p', String(frontier.x / level.dims.w));
+      if (frontier.x !== shownX) {
+        shownX = frontier.x;
+        frame.style.setProperty('--p', String(frontier.x / level.dims.w));
+      }
       frame.classList.toggle('ready', frontier.done);
       status.textContent = !frontier.done
         ? 'The landscape is painting itself…'
@@ -382,11 +410,30 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
   };
   addEventListener('keydown', onKey);
   return () => {
+    stopped = true;
     stop();
     fx.detach();
     clearTimeout(winTimer);
     removeEventListener('keydown', onKey);
   };
+}
+
+/** A cheap fingerprint of everything the scan reads: cells, owners, object ids and object stats. */
+function scanKey(world: World): number {
+  let h = 0x811c9dc5;
+  const fold = (a: Uint8Array | Uint16Array) => {
+    const words = new Uint32Array(a.buffer, a.byteOffset, a.byteLength >> 2);
+    for (let i = 0; i < words.length; i++) h = Math.imul(h ^ words[i], 0x01000193);
+    for (let i = (words.length * 4) / a.BYTES_PER_ELEMENT; i < a.length; i++) h = Math.imul(h ^ a[i], 0x01000193);
+  };
+  fold(world.el);
+  fold(world.owner);
+  fold(world.obj);
+  for (const o of world.objects.values()) {
+    h = Math.imul(h ^ o.id ^ o.cells, 0x01000193);
+    for (const v of Object.values(o.stats)) h = Math.imul(h ^ Math.round(v * 1000), 0x01000193);
+  }
+  return h >>> 0;
 }
 
 function levelMissing(root: HTMLElement, id: string | null): void {

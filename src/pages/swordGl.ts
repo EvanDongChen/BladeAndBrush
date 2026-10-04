@@ -2,10 +2,11 @@
  * The 3D sword for aiming and slashing, drawn with three.js into a transparent canvas over the
  * painting. Seen from the player's seat in front of the screen:
  *
- *   aim      the sword hangs at the midpoint of the aimed line, tip pointing into the painting and
- *            leaning along the line, with the hilt toward the camera (real perspective);
- *   stab     on release it plunges into the painting at the start of the line;
- *   drag     then it is dragged along the line to the end, and fades out.
+ *   aim      the sword is held a little way off the line, beside it and toward the camera, with its
+ *            tip aimed at the start of the line: poised to cut (real perspective);
+ *   swing    on release the hand stays put and the blade whips through one quick arc, so the point
+ *            where it pierces the painting runs from the start of the line to the end;
+ *   exit     it follows through a little past the end and fades out.
  *
  * Presentation only: it never touches the World. It is loaded lazily by `slashFx.ts`.
  */
@@ -34,21 +35,18 @@ import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment
 import { aimTunables } from '../sim/lineAbility';
 
 const FOV = 34;
-const RAD = Math.PI / 180;
 
-/** Tip of the model in its own units (blade length 1, centred on the whole sword). */
-const TIP_X = 0.05;
+/** Where the hand holds the model, and where its tip is, in model units (blade length 1). */
+const HAND_Y = -0.5;
 const TIP_Y = 0.68;
 
-const STAB_MS = 150;
 const EXIT_MS = 150;
 const HOLD_MS = 120; // how long a released sword waits for the shot to fire before giving up
 const FADE_IN_MS = 110;
 
-/** Angle between the blade and the screen's z axis: 0 points straight into the painting. */
-const PHI_AIM = 62 * RAD;
-const PHI_STAB = 26 * RAD;
-const PHI_DRAG = 46 * RAD;
+/** How far the held sword sits from the line: sideways, and toward the camera (css pixels). */
+const OFFSET_SIDE = 90;
+const OFFSET_NEAR = 170;
 
 /** The same sword for every ability; only the blade takes the element's colour. */
 interface Blade {
@@ -132,13 +130,12 @@ function buildSword(blade: Blade, materials: MeshStandardMaterial[]): Group {
   return sword;
 }
 
-const easeOut = (t: number) => 1 - Math.pow(1 - Math.min(1, Math.max(0, t)), 3);
 const easeInOut = (t: number) => {
   const x = Math.min(1, Math.max(0, t));
   return x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
 };
 
-type State = 'idle' | 'aim' | 'held' | 'stab' | 'drag' | 'exit';
+type State = 'idle' | 'aim' | 'held' | 'swing' | 'exit';
 
 interface Pt {
   x: number;
@@ -164,8 +161,7 @@ export class SwordStage {
   // line in world pixels (y up), and the sword's size in pixels per model unit
   private s: Pt = { x: 0, y: 0 };
   private e: Pt = { x: 0, y: 0 };
-  private length = 200;
-  private dragMs = 300;
+  private swingMs = 200;
 
   private readonly basis = new Matrix4();
   private readonly dir = new Vector3();
@@ -209,7 +205,7 @@ export class SwordStage {
   /** Aiming: the pointer is held and the line runs (x0, y0) to (x1, y1), in grid cells. */
   aim(id: string, x0: number, y0: number, x1: number, y1: number): void {
     if (!this.renderer) return;
-    if (this.state === 'stab' || this.state === 'drag' || this.state === 'exit') return; // let the last swing finish
+    if (this.state === 'swing' || this.state === 'exit') return; // let the last swing finish
     if (Math.hypot(x1 - x0, y1 - y0) < aimTunables.minLength) {
       if (this.state === 'aim') this.begin('held'); // dragged back to nothing: let it fade
       return;
@@ -229,14 +225,14 @@ export class SwordStage {
     if (this.state === 'aim') this.begin('held');
   }
 
-  /** The shot fired along (x0, y0) to (x1, y1) (clamped aim, in grid cells): stab, then drag. */
+  /** The shot fired along (x0, y0) to (x1, y1) (clamped aim, in grid cells): swing through it. */
   fire(id: string, x0: number, y0: number, x1: number, y1: number): void {
     if (!this.renderer) return;
     this.fit();
     this.setLook(id);
     this.setLine(x0, y0, x1, y1);
     if (this.state === 'idle') this.opacity = 1;
-    this.begin('stab');
+    this.begin('swing');
     this.run();
   }
 
@@ -293,9 +289,7 @@ export class SwordStage {
     this.s = { x: toX(x0), y: toY(y0) };
     this.e = { x: toX(x1), y: toY(y1) };
     const len = Math.hypot(this.e.x - this.s.x, this.e.y - this.s.y);
-    // as long as the line it hangs over, within reason
-    this.length = Math.min(520, Math.max(150, len * 0.9));
-    this.dragMs = Math.min(420, Math.max(220, len / 2.2));
+    this.swingMs = Math.min(260, Math.max(130, len / 2.6));
   }
 
   private run(): void {
@@ -318,13 +312,21 @@ export class SwordStage {
 
   private step(now: number): void {
     const { s, e } = this;
-    const mid = { x: (s.x + e.x) / 2, y: (s.y + e.y) / 2 };
-    const t = now - this.since;
-    let pos = mid;
-    let z = 0;
-    let phi = PHI_AIM;
-    let tip = 0; // 0 = hang by the centre, 1 = hold by the tip
+    const dx = e.x - s.x;
+    const dy = e.y - s.y;
+    const len = Math.hypot(dx, dy) || 1;
+    const ang = Math.atan2(dy, dx);
+    // the side of the line nearer the player: below it on screen (right of it for a vertical line)
+    const sign = Math.cos(ang) >= 0 ? -1 : 1;
+    const nx = -Math.sin(ang) * sign;
+    const ny = Math.cos(ang) * sign;
+
+    // the hand: beside the middle of the line and toward the camera
+    const hand = new Vector3((s.x + e.x) / 2 + nx * OFFSET_SIDE, (s.y + e.y) / 2 + ny * OFFSET_SIDE, OFFSET_NEAR);
+    // where the blade pierces the painting: poised at the start, then runs along the line
+    let k = 0;
     let alpha = 1;
+    const t = now - this.since;
 
     switch (this.state) {
       case 'aim':
@@ -336,29 +338,14 @@ export class SwordStage {
         alpha = this.opacity * (1 - Math.min(1, t / HOLD_MS));
         if (t >= HOLD_MS) this.state = 'idle';
         break;
-      case 'stab': {
-        const k = easeOut(t / STAB_MS);
-        pos = { x: mid.x + (s.x - mid.x) * k, y: mid.y + (s.y - mid.y) * k };
-        z = (1 - k) * this.length * 0.55; // thrust forward, away from the camera
-        phi = PHI_AIM + (PHI_STAB - PHI_AIM) * k;
-        tip = k;
-        if (t >= STAB_MS) this.begin('drag');
+      case 'swing':
+        k = easeInOut(t / this.swingMs);
+        if (t >= this.swingMs) this.begin('exit');
         break;
-      }
-      case 'drag': {
-        const k = easeInOut(t / this.dragMs);
-        pos = { x: s.x + (e.x - s.x) * k, y: s.y + (e.y - s.y) * k };
-        phi = PHI_STAB + (PHI_DRAG - PHI_STAB) * k;
-        tip = 1;
-        if (t >= this.dragMs) this.begin('exit');
-        break;
-      }
       case 'exit': {
-        const k = Math.min(1, t / EXIT_MS);
-        pos = { x: e.x + (e.x - s.x) * 0.1 * k, y: e.y + (e.y - s.y) * 0.1 * k };
-        phi = PHI_DRAG;
-        tip = 1;
-        alpha = 1 - k;
+        const x = Math.min(1, t / EXIT_MS);
+        k = 1 + 0.12 * x;
+        alpha = 1 - x;
         if (t >= EXIT_MS) this.state = 'idle';
         break;
       }
@@ -366,20 +353,29 @@ export class SwordStage {
         return;
     }
 
-    // blade axis: along the aim and into the screen; the broad face turned toward the camera
-    const a = Math.atan2(e.y - s.y, e.x - s.x);
-    const sp = Math.sin(phi);
-    this.dir.set(Math.cos(a) * sp, Math.sin(a) * sp, -Math.cos(phi));
-    this.side.set(-Math.sin(a), Math.cos(a), 0);
+    // the hand drifts a little with the swing and pushes forward, like a real cut
+    const follow = Math.min(1, k);
+    hand.x += dx * 0.18 * follow;
+    hand.y += dy * 0.18 * follow;
+    hand.z -= OFFSET_NEAR * 0.2 * follow;
+
+    const tip = new Vector3(s.x + dx * k, s.y + dy * k, 0);
+    this.dir.subVectors(tip, hand).normalize();
+    // broad face toward the camera
+    this.up.set(0, 0, 1);
+    this.up.addScaledVector(this.dir, -this.dir.z).normalize();
+    this.side.crossVectors(this.dir, this.up).normalize();
     this.up.crossVectors(this.side, this.dir);
     this.basis.makeBasis(this.side, this.dir, this.up);
 
+    // long enough that the tip still reaches the painting from the hand to either end of the line
+    const reach = Math.max(hand.distanceTo(new Vector3(s.x, s.y, 0)), hand.distanceTo(new Vector3(e.x, e.y, 0))) * 1.2 + len * 0.05;
     const g = this.anchor;
     g.visible = true;
     g.quaternion.setFromRotationMatrix(this.basis);
-    g.scale.setScalar(this.length / 1.4);
-    g.position.set(pos.x, pos.y, z);
-    this.sword?.position.set(-TIP_X * tip, -TIP_Y * tip, 0);
+    g.scale.setScalar(Math.max(260, reach) / (TIP_Y - HAND_Y));
+    g.position.copy(hand);
+    this.sword?.position.set(0, -HAND_Y, 0); // the hand, not the middle, sits at the anchor
     for (const m of this.materials) m.opacity = Math.max(0, Math.min(1, alpha));
   }
 }

@@ -13,7 +13,9 @@
     "test:watch": "vitest",
     "db:migrate": "node db/migrate.mjs",
     "server": "tsx watch server/index.ts",
-    "start": "tsx server/index.ts"
+    "start": "tsx server/index.ts",
+    "bench": "vitest run --config bench/vitest.config.ts",
+    "bench:baseline": "node -e \"require('fs').copyFileSync('bench/results/latest.json','bench/baseline.json')\""
   },
   "engines": {
     "node": ">=22"

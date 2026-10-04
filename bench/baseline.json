@@ -1,0 +1,339 @@
+{
+  "meta": {
+    "date": "2026-10-04T05:38:42.000Z",
+    "node": "v26.8.1",
+    "cpu": "13th Gen Intel(R) Core(TM) i7-1360P",
+    "cores": 16,
+    "platform": "linux"
+  },
+  "results": [
+    {
+      "name": "generate() k=1",
+      "unit": "ms",
+      "median": 272.0135819999996,
+      "min": 237.2652879999987,
+      "p95": 322.03777699999955,
+      "runs": 10
+    },
+    {
+      "name": "generate() k=2",
+      "unit": "ms",
+      "median": 435.62970199999836,
+      "min": 395.427334,
+      "p95": 455.08419100000174,
+      "runs": 10
+    },
+    {
+      "name": "generate() k=4",
+      "unit": "ms",
+      "median": 954.3844699999972,
+      "min": 935.7075680000016,
+      "p95": 1012.2693519999993,
+      "runs": 8
+    },
+    {
+      "name": "generate() k=4, 4 other seeds (mean of calls)",
+      "unit": "ms",
+      "median": 3519.1571330000006,
+      "min": 3431.9764649999997,
+      "p95": 3576.0631189999986,
+      "runs": 4
+    },
+    {
+      "name": "generate() feature farRidges",
+      "unit": "ms",
+      "median": 74.04139199999918,
+      "min": 56.850109999999404,
+      "p95": 78.08706899999379,
+      "runs": 6
+    },
+    {
+      "name": "generate() feature mountains",
+      "unit": "ms",
+      "median": 487.8829939999996,
+      "min": 324.75274499999796,
+      "p95": 543.4792219999945,
+      "runs": 6
+    },
+    {
+      "name": "generate() feature plateaus",
+      "unit": "ms",
+      "median": 65.82986600000004,
+      "min": 39.82959900000424,
+      "p95": 87.93655000000581,
+      "runs": 6
+    },
+    {
+      "name": "generate() feature trees",
+      "unit": "ms",
+      "median": 220.0854779999936,
+      "min": 162.12384700000257,
+      "p95": 336.51253700000234,
+      "runs": 6
+    },
+    {
+      "name": "generate() feature clouds",
+      "unit": "ms",
+      "median": 0.04559300000255462,
+      "min": 0.033835000002000015,
+      "p95": 0.14460500000132015,
+      "runs": 6
+    },
+    {
+      "name": "generate() feature life",
+      "unit": "ms",
+      "median": 1.6610689999943133,
+      "min": 1.5508740000004764,
+      "p95": 2.6912499999962165,
+      "runs": 6
+    },
+    {
+      "name": "World alloc (960x256)",
+      "unit": "ms",
+      "median": 1.7418630000029225,
+      "min": 0.5237639999977546,
+      "p95": 3.433895999995002,
+      "runs": 20
+    },
+    {
+      "name": "Frontier.revealAll",
+      "unit": "ms",
+      "median": 11.882762999994156,
+      "min": 9.513150999999198,
+      "p95": 19.67027799999778,
+      "runs": 20
+    },
+    {
+      "name": "World.hash()",
+      "unit": "ms",
+      "median": 17.554408000003605,
+      "min": 10.279819999996107,
+      "p95": 19.191124999997555,
+      "runs": 20
+    },
+    {
+      "name": "scan(world)",
+      "unit": "ms",
+      "median": 14.0689560000028,
+      "min": 13.167203999997582,
+      "p95": 14.988267000000633,
+      "runs": 20
+    },
+    {
+      "name": "sim quiet painting: ms per tick (first 60)",
+      "unit": "ms",
+      "median": 0.8898619999963557,
+      "min": 0.7683929999984684,
+      "p95": 1.7005369999969844,
+      "runs": 60
+    },
+    {
+      "name": "sim quiet painting: ms per tick (after 60)",
+      "unit": "ms",
+      "median": 0.8071219999983441,
+      "min": 0.7479040000034729,
+      "p95": 0.9112919999970472,
+      "runs": 60
+    },
+    {
+      "name": "sim lake: water cells poured",
+      "unit": "cells",
+      "median": 10109,
+      "min": 10109,
+      "p95": 10109,
+      "runs": 1
+    },
+    {
+      "name": "sim lake settling: ms per tick (first 60)",
+      "unit": "ms",
+      "median": 1.9698459999999614,
+      "min": 1.6944400000065798,
+      "p95": 3.2379589999982272,
+      "runs": 60
+    },
+    {
+      "name": "sim lake settling: ms per tick (after 60)",
+      "unit": "ms",
+      "median": 1.90244900000107,
+      "min": 1.7194149999995716,
+      "p95": 2.3667830000049435,
+      "runs": 60
+    },
+    {
+      "name": "sim forest fire: ms per tick (first 60)",
+      "unit": "ms",
+      "median": 1.0929660000037984,
+      "min": 0.8648769999999786,
+      "p95": 6.9917029999996885,
+      "runs": 60
+    },
+    {
+      "name": "sim forest fire: ms per tick (after 60)",
+      "unit": "ms",
+      "median": 1.052958000000217,
+      "min": 0.7313629999989644,
+      "p95": 4.733829999997397,
+      "runs": 60
+    },
+    {
+      "name": "sim busy (water + ash + fire): ms per tick (first 60)",
+      "unit": "ms",
+      "median": 2.695466999997734,
+      "min": 2.4772910000028787,
+      "p95": 5.858895999997912,
+      "runs": 60
+    },
+    {
+      "name": "sim busy (water + ash + fire): ms per tick (after 60)",
+      "unit": "ms",
+      "median": 2.721811000003072,
+      "min": 2.100301999998919,
+      "p95": 5.934798000002047,
+      "runs": 60
+    },
+    {
+      "name": "prepareArt (one time per painting)",
+      "unit": "ms",
+      "median": 152.2302819999968,
+      "min": 141.9777929999982,
+      "p95": 156.55510299999878,
+      "runs": 5
+    },
+    {
+      "name": "frame: compose art (untouched painting)",
+      "unit": "ms",
+      "median": 7.457601000001887,
+      "min": 6.64986399999907,
+      "p95": 8.248621000006096,
+      "runs": 20
+    },
+    {
+      "name": "frame: shadeCells (nothing to shade)",
+      "unit": "ms",
+      "median": 9.28107799999998,
+      "min": 8.51231099999859,
+      "p95": 11.108817000000272,
+      "runs": 20
+    },
+    {
+      "name": "frame: compose art (a 40-cell hole)",
+      "unit": "ms",
+      "median": 8.23859700000321,
+      "min": 7.769584000001487,
+      "p95": 11.878963999995904,
+      "runs": 20
+    },
+    {
+      "name": "frame: lake size",
+      "unit": "cells",
+      "median": 10109,
+      "min": 10109,
+      "p95": 10109,
+      "runs": 1
+    },
+    {
+      "name": "frame: shadeCells (lake)",
+      "unit": "ms",
+      "median": 55.95983400000114,
+      "min": 52.38883399999759,
+      "p95": 73.56999599999835,
+      "runs": 15
+    },
+    {
+      "name": "frame: big lake size",
+      "unit": "cells",
+      "median": 34626,
+      "min": 34626,
+      "p95": 34626,
+      "runs": 1
+    },
+    {
+      "name": "frame: shadeCells (big lake)",
+      "unit": "ms",
+      "median": 165.67117200000212,
+      "min": 159.7233269999997,
+      "p95": 172.14869599999656,
+      "runs": 10
+    },
+    {
+      "name": "frame: shadeCells (forest fire)",
+      "unit": "ms",
+      "median": 13.038635000004433,
+      "min": 12.102768999997352,
+      "p95": 18.77044400000159,
+      "runs": 15
+    },
+    {
+      "name": "frame: glow field (forest fire)",
+      "unit": "ms",
+      "median": 2.106626000000688,
+      "min": 1.9693760000009206,
+      "p95": 2.211238999996567,
+      "runs": 15
+    },
+    {
+      "name": "frame: glow field (nothing glowing)",
+      "unit": "ms",
+      "median": 0.5931469999995898,
+      "min": 0.5645369999983814,
+      "p95": 0.6950219999998808,
+      "runs": 15
+    },
+    {
+      "name": "frame: cells layer (lake, shaded)",
+      "unit": "ms",
+      "median": 2.8460500000001048,
+      "min": 2.684360999999626,
+      "p95": 3.094212999996671,
+      "runs": 20
+    },
+    {
+      "name": "frame: cells layer (lake, flat colors)",
+      "unit": "ms",
+      "median": 6.4875170000013895,
+      "min": 6.080980000006093,
+      "p95": 7.532682999997633,
+      "runs": 20
+    },
+    {
+      "name": "frame: paper layer",
+      "unit": "ms",
+      "median": 0.0488340000010794,
+      "min": 0.0469329999978072,
+      "p95": 0.13641500000085216,
+      "runs": 20
+    },
+    {
+      "name": "memory: blueprint art planes + bg",
+      "unit": "MB",
+      "median": 75,
+      "min": 75,
+      "p95": 75,
+      "runs": 1
+    },
+    {
+      "name": "memory: prepared initial image",
+      "unit": "MB",
+      "median": 15,
+      "min": 15,
+      "p95": 15,
+      "runs": 1
+    },
+    {
+      "name": "memory: art output buffer (per page)",
+      "unit": "MB",
+      "median": 15,
+      "min": 15,
+      "p95": 15,
+      "runs": 1
+    },
+    {
+      "name": "memory: World arrays",
+      "unit": "MB",
+      "median": 5.859375,
+      "min": 5.859375,
+      "p95": 5.859375,
+      "runs": 1
+    }
+  ]
+}

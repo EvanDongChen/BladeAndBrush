@@ -3,7 +3,13 @@
  * the peaks and dips are, and how much water, fire, trees and life there is. Pure, no Web Audio.
  */
 import { El, SOLID_FOR_SCAN, elements } from '../core/elements';
-import type { World } from '../core/world';
+
+/** Anything with a grid of elements: a live World, or a Blueprint before it is revealed. */
+export interface Grid {
+  w: number;
+  h: number;
+  el: Uint8Array;
+}
 
 /** The scroll is read in this many slices from left to right. */
 export const STEPS = 32;
@@ -44,7 +50,7 @@ function idOf(name: string): number {
 const sat = (count: number, full: number) => Math.min(1, count / full);
 
 /** Average surface height per slice. A column's surface is its topmost solid cell. */
-export function sliceHeights(world: World, steps = STEPS): Float32Array {
+export function sliceHeights(world: Grid, steps = STEPS): Float32Array {
   const out = new Float32Array(steps);
   for (let s = 0; s < steps; s++) {
     const x0 = Math.floor((s * world.w) / steps);
@@ -82,8 +88,10 @@ export function findExtrema(heights: Float32Array): { peaks: number[]; dips: num
   return { peaks, dips };
 }
 
-/** Read the whole world. Costs about one pass over the grid, so call it every few beats. */
-export function readLandscape(world: World, steps = STEPS): Landscape {
+const counts = new Uint32Array(256);
+
+/** Read the whole grid. Costs about one pass over it, so call it every few beats. */
+export function readLandscape(world: Grid, steps = STEPS): Landscape {
   const heights = sliceHeights(world, steps);
   const { peaks, dips } = findExtrema(heights);
   let mean = 0;
@@ -92,8 +100,9 @@ export function readLandscape(world: World, steps = STEPS): Landscape {
     mean += heights[i];
     if (i) slope += Math.abs(heights[i] - heights[i - 1]);
   }
-  const counts = world.countByElement();
-  const size = world.size;
+  counts.fill(0);
+  const size = world.w * world.h;
+  for (let i = 0; i < size; i++) counts[world.el[i]]++;
   const c = (name: string) => {
     const id = idOf(name);
     return id < 0 ? 0 : counts[id];

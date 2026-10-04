@@ -39,7 +39,7 @@ export function inMode(root: number, mode: ModeName, midi: number): boolean {
 export function chooseMode(land: Landscape): ModeName {
   if (land.water > 0.35) return 'yu';
   if (land.fire > 0.25) return 'zhi';
-  if (land.rugged > 0.3) return 'shang';
+  if (land.rugged > 0.55) return 'shang';
   if (land.mean > 0.5) return 'jue';
   return 'gong';
 }

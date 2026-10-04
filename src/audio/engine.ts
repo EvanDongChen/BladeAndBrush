@@ -2,15 +2,21 @@
  * The audio engine: owns the AudioContext, mixes music, ambience and effects, and keeps the music
  * following the painting. It reads the World but never changes it, so replays stay exact.
  *
+ * When a painting is generated (attach), its own song (song.ts) plays once from the start while the
+ * scroll unrolls. After the song's last note has rung, the endless composer takes over and follows
+ * the live World, so the music keeps answering what the player does to the painting.
+ *
  * Browsers only allow sound after a click or key press, so nothing is created until `enable()` or
  * the first gesture armed with `armOnGesture()`. Mute is remembered in localStorage.
  */
+import type { Blueprint } from '../core/blueprint';
 import type { GameEvents } from '../core/events';
 import { Rng } from '../core/rng';
 import type { World } from '../core/world';
-import { Composer } from './composer';
+import { Composer, type Voice } from './composer';
 import { readLandscape, STEPS, type Landscape } from './profile';
-import { bass, chime, crackle, flute, gong, playNote, pluck, thud, tick, whoosh, noiseBuffer } from './synth';
+import { songFor, type Song } from './song';
+import { chime, crackle, dizi, erhu, gong, noiseBuffer, playNote, pluckString, prepareStrings, thud, tick, whoosh } from './synth';
 import { degreeToMidi, midiToHz, tempoBpm } from './theory';
 
 const PREF_KEY = 'bb-sound';
@@ -19,6 +25,22 @@ const LOOKAHEAD = 0.6;
 const PUMP_MS = 100;
 /** Read the painting again every this many steps, so the music follows what the player does. */
 const REREAD_STEPS = 2;
+/** Beats of quiet between the end of the painting's song and the endless music. */
+const SONG_GAP = 2;
+
+/** Where each instrument sits, left (-1) to right (1), as if the ensemble sat in a half circle. */
+const PAN: Record<Voice, number> = {
+  guzheng: -0.3,
+  guqin: -0.05,
+  harmonic: 0.05,
+  pipa: 0.3,
+  dizi: 0.2,
+  erhu: 0.1,
+  chime: 0.4,
+  muyu: 0.35,
+  drum: -0.15,
+  gong: 0,
+};
 
 function readPref(): boolean {
   try {
@@ -42,6 +64,17 @@ interface Nodes {
   sfx: GainNode;
   brook: GainNode;
   wind: GainNode;
+  /** One input per instrument, panned into its seat, feeding the music bus. */
+  seats: Map<Voice, AudioNode>;
+}
+
+/** The painting's song while it plays: when it started and the next note to schedule. */
+interface SongPlay {
+  song: Song;
+  beatSec: number;
+  /** Audio-clock time of beat 0, or -1 until sound is allowed. */
+  t0: number;
+  next: number;
 }
 
 export class AudioEngine {
@@ -52,6 +85,7 @@ export class AudioEngine {
   private world: World | null = null;
   private composer: Composer | null = null;
   private land: Landscape | null = null;
+  private song: SongPlay | null = null;
   private rng = new Rng(1);
   private timer = 0;
   private stepIndex = 0;
@@ -114,11 +148,18 @@ export class AudioEngine {
     this.setMuted(!this.muted);
   }
 
-  /** Follow a world: its peaks, dips and elements make the music, its events make the effects. */
-  attach(world: World, seed: number): void {
+  /**
+   * A new painting: compose its song from the blueprint and play it from the start, then follow
+   * the world (its peaks, dips and elements make the music, its events make the effects).
+   */
+  attach(world: World, bp: Blueprint): void {
     this.detach();
+    const seed = bp.seed;
+    const song = songFor(bp);
     this.world = world;
     this.composer = new Composer(seed);
+    this.composer.mode = song.mode;
+    this.song = { song, beatSec: 60 / song.bpm, t0: -1, next: 0 };
     this.rng = new Rng(seed ^ 0x61756469);
     this.land = readLandscape(world);
     this.stepIndex = 0;
@@ -131,6 +172,7 @@ export class AudioEngine {
       on('ignite', () => this.sfx('ignite', 0.15, (t, o) => crackle(this.ctx!, o, t, this.rng))),
       on('splash', () => this.sfx('splash', 0.1, (t, o) => this.droplet(t, o))),
       on('levelWin', () => this.sfx('win', 0, (t, o) => this.winSting(t, o))),
+      on('levelFail', () => this.sfx('fail', 0, (t, o) => this.failSigh(t, o))),
     );
     if (this.running && !this.muted) this.startScheduler();
   }
@@ -141,6 +183,12 @@ export class AudioEngine {
     this.unsubs = [];
     this.world = null;
     this.composer = null;
+    this.song = null;
+  }
+
+  /** The song the current painting plays when it is generated (null once it has finished). */
+  get currentSong(): Song | null {
+    return this.song?.song ?? null;
   }
 
   /** Where the music is on the scroll, 0..1 across the picture (null when silent). */
@@ -148,6 +196,12 @@ export class AudioEngine {
     const ctx = this.ctx;
     if (!ctx || !this.running || this.muted || this.timer === 0) return null;
     const now = ctx.currentTime;
+    const sp = this.song;
+    if (sp && sp.t0 >= 0) {
+      const beat = (now - sp.t0) / sp.beatSec;
+      const [a, b] = sp.song.scroll;
+      return beat >= a && beat < b ? (beat - a) / (b - a) : null;
+    }
     let cur = this.started[0];
     for (const s of this.started) if (s.t <= now) cur = s;
     if (!cur || cur.t > now) return null;
@@ -166,6 +220,13 @@ export class AudioEngine {
     music.gain.value = 0.85;
     const sfx = ctx.createGain();
     sfx.gain.value = 0.9;
+    const seats = new Map<Voice, AudioNode>();
+    for (const [voice, pan] of Object.entries(PAN) as [Voice, number][]) {
+      const p = ctx.createStereoPanner();
+      p.pan.value = pan;
+      p.connect(music);
+      seats.set(voice, p);
+    }
     const reverb = ctx.createConvolver();
     reverb.buffer = this.impulse(ctx);
     const wet = ctx.createGain();
@@ -176,7 +237,7 @@ export class AudioEngine {
     }
     reverb.connect(wet).connect(master);
 
-    return { master, music, sfx, brook: this.loopNoise(ctx, 'bandpass', 900, 0.7, master), wind: this.loopNoise(ctx, 'lowpass', 420, 0.5, master) };
+    return { master, music, sfx, seats, brook: this.loopNoise(ctx, 'bandpass', 900, 0.7, master), wind: this.loopNoise(ctx, 'lowpass', 420, 0.5, master) };
   }
 
   /** A hall: two seconds of noise that fades out, a different one in each ear. */
@@ -215,12 +276,18 @@ export class AudioEngine {
   private startScheduler(): void {
     if (!this.ctx || !this.world || !this.composer || this.muted || this.timer) return;
     this.nextTime = this.ctx.currentTime + 0.2;
+    const sp = this.song;
+    if (sp && sp.t0 < 0) {
+      prepareStrings(this.ctx, sp.song.notes); // render every plucked note before the first one sounds
+      sp.t0 = this.ctx.currentTime + 0.15;
+    }
     this.timer = window.setInterval(() => this.pump(), PUMP_MS);
   }
 
   private stopScheduler(): void {
     if (this.timer) window.clearInterval(this.timer);
     this.timer = 0;
+    if (this.song && this.song.t0 >= 0) this.song = null; // muted mid-song: come back to the endless music
   }
 
   private pump(): void {
@@ -231,20 +298,41 @@ export class AudioEngine {
     if (!ctx || !world || !composer || !nodes) return;
     const now = ctx.currentTime;
 
+    const sp = this.song;
+    if (sp) {
+      const notes = sp.song.notes;
+      while (sp.next < notes.length && sp.t0 + notes[sp.next].beat * sp.beatSec < now + LOOKAHEAD) {
+        const n = notes[sp.next++];
+        playNote(ctx, nodes.seats.get(n.voice) ?? nodes.music, n, sp.t0 + n.beat * sp.beatSec, sp.beatSec);
+      }
+      const after = sp.t0 + (sp.song.length + SONG_GAP) * sp.beatSec;
+      if (sp.next < notes.length || now + LOOKAHEAD < after) {
+        this.ambience(now);
+        return;
+      }
+      this.song = null; // the song has rung out: the endless music starts where it left off
+      this.nextTime = after;
+    }
+
     while (this.nextTime < now + LOOKAHEAD) {
       if (!this.land || this.stepIndex % REREAD_STEPS === 0) this.land = readLandscape(world);
       const land = this.land;
       this.beatSec = 60 / tempoBpm(land);
       for (const note of composer.step(land, this.stepIndex)) {
-        playNote(ctx, nodes.music, note, this.nextTime + note.beat * this.beatSec, this.beatSec);
+        playNote(ctx, nodes.seats.get(note.voice) ?? nodes.music, note, this.nextTime + note.beat * this.beatSec, this.beatSec);
       }
       this.started.push({ t: this.nextTime, idx: this.stepIndex });
       if (this.started.length > 12) this.started.shift();
       this.nextTime += this.beatSec;
       this.stepIndex++;
     }
+    this.ambience(now);
+  }
 
-    // Ambience follows what is on the scroll: a brook for water, wind for height, crackle for fire.
+  /** Ambience follows what is on the scroll: a brook for water, wind for height, crackle for fire. */
+  private ambience(now: number): void {
+    const ctx = this.ctx!;
+    const nodes = this.nodes!;
     const land = this.land;
     if (land) {
       nodes.brook.gain.setTargetAtTime(Math.sqrt(land.water) * 0.2, now, 0.6);
@@ -272,7 +360,7 @@ export class AudioEngine {
       const h = this.world?.h ?? 1;
       if (c) {
         const degree = Math.round((1 - e.y0 / h) * 9) + 2;
-        pluck(ctx, out, t + 0.02, midiToHz(c.melodyMidi(degree)), 0.8, 1.2, -2);
+        pluckString(ctx, out, t + 0.02, 'pipa', c.melodyMidi(degree), 0.8, 1.2, -2);
       }
     });
   }
@@ -283,15 +371,24 @@ export class AudioEngine {
     chime(this.ctx!, out, t, midiToHz(c.melodyMidi(9 + this.rng.int(5)) + 12), 0.5, 0.9);
   }
 
-  /** A gong, a rising run up the scale, and a long flute note. */
+  /** A gong, a guzheng run up the scale, a long dizi note and the guqin's low tonic. */
   private winSting(t: number, out: AudioNode): void {
     const c = this.composer;
     const ctx = this.ctx!;
     gong(ctx, out, t, 1, midiToHz(c ? c.root - 12 : 38));
     if (!c) return;
-    for (let k = 0; k < 6; k++) pluck(ctx, out, t + 0.25 + k * 0.14, midiToHz(degreeToMidi(c.root + 12, c.mode, k * 1)), 0.7, 1.6);
-    flute(ctx, out, t + 1.1, midiToHz(degreeToMidi(c.root + 12, c.mode, 9)), 0.8, 3.5);
-    bass(ctx, out, t + 0.25, midiToHz(c.root), 0.8, 4);
+    for (let k = 0; k < 6; k++) pluckString(ctx, out, t + 0.25 + k * 0.14, 'guzheng', degreeToMidi(c.root + 12, c.mode, k), 0.7, 1.6);
+    dizi(ctx, out, t + 1.1, midiToHz(degreeToMidi(c.root + 24, c.mode, 4)), 0.8, 3.5, 2);
+    pluckString(ctx, out, t + 0.25, 'guqin', c.root - 12, 0.8, 4);
+  }
+
+  /** The painting does not match the poem: the erhu sighs down a step. */
+  private failSigh(t: number, out: AudioNode): void {
+    const c = this.composer;
+    if (!c) return;
+    const ctx = this.ctx!;
+    erhu(ctx, out, t, midiToHz(degreeToMidi(c.root + 12, c.mode, 6)), 0.6, 0.7);
+    erhu(ctx, out, t + 0.7, midiToHz(degreeToMidi(c.root + 12, c.mode, 5)), 0.55, 1.6, 2);
   }
 
   private emitChange(): void {

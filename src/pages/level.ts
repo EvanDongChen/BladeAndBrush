@@ -109,7 +109,7 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
     complete?.close();
     banner.hidden = true;
     fx.attach(world);
-    audio.attach(world, level.seed); // the music reads this painting
+    audio.attach(world, bp); // each painting plays its own song as it unrolls
     clock.reset();
   }
 

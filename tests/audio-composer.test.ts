@@ -46,8 +46,8 @@ describe('composer', () => {
     expect(land.dips).toContain(20);
     const c = new Composer(1);
     const all = Array.from({ length: STEPS }, (_, i) => c.step(land, i));
-    expect(all[10].some((n) => n.voice === 'flute')).toBe(true);
-    expect(all[20].some((n) => n.voice === 'bass')).toBe(true);
+    expect(all[10].some((n) => n.voice === 'dizi')).toBe(true);
+    expect(all[20].some((n) => n.voice === 'guqin')).toBe(true);
   });
 
   it('the melody moves stepwise except on peaks and dips', () => {
@@ -74,7 +74,7 @@ describe('composer', () => {
   it('water adds a guzheng run', () => {
     const wet = play(2, { ...skyline, water: 0.6 }, STEPS);
     const dry = play(2, skyline, STEPS);
-    const count = (s: ReturnType<typeof play>) => s.flat().filter((n) => n.voice === 'pluck').length;
+    const count = (s: ReturnType<typeof play>) => s.flat().filter((n) => n.voice === 'guzheng').length;
     expect(count(wet)).toBeGreaterThan(count(dry));
   });
 

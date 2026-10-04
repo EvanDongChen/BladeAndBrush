@@ -1,6 +1,8 @@
 import './bootstrap';
 import { activeAbilities, type AbilityId } from '../core/abilities';
 import { Clock } from '../core/clock';
+import { El } from '../core/elements';
+import { TICK_HZ } from '../core/constants';
 import { describeGoal, evaluateGoal } from '../core/goals';
 import { levels, type LevelDef } from '../core/levels';
 import { defaultParams, params as paramDefs, type GenParams } from '../core/params';
@@ -11,17 +13,21 @@ import { ActionDriver } from '../core/replay';
 import { World } from '../core/world';
 import { Frontier } from '../gen/frontier';
 import { generate } from '../gen/generate';
-import { scan } from '../gen/scan';
+import { mountainUnder, scan } from '../gen/scan';
 import type { Blueprint } from '../core/blueprint';
 import type { GoalSpec } from '../core/goals';
 import type { Peak } from '../core/scan';
-import { bodyCount } from '../sim/behaviors/rigid';
 import { aimEnd, aimTunables, chargeOf, drawAim, isLineAbility, lineColor } from '../sim/lineAbility';
 import { step } from '../sim/step';
+import { siteHeader } from './chrome';
+import { audio } from '../audio/engine';
+import { submitWin, type WinData } from '../gallery/submit';
+import { APP_VERSION } from '../gallery/version';
 import { Fx } from './fx';
 import { arsenal } from './arsenal';
-import { button, h, handscroll, panel, seal, startLoop, toCell } from './ui';
+import { nameMenu } from './nameMenu';
 import { noiseGraph } from './noiseGraph';
+import { button, h, handscroll, panel, seal, soundToggle, startLoop, toCell } from './ui';
 
 /** Header for players: no links to the workshops. */
 function levelHeader(sub: string): HTMLElement {
@@ -32,13 +38,17 @@ function levelHeader(sub: string): HTMLElement {
     h('span', { class: 'brand-name' }, 'Blade & Brush'),
     h('span', { class: 'brand-sub' }, sub),
   );
-  return h('header', { class: 'top' }, h('h1', {}, brand), h('nav', {}, h('a', { href: './index.html' }, 'All levels')));
+  return h('header', { class: 'top' }, h('h1', {}, brand), h('nav', {}, soundToggle(), h('a', { href: './index.html' }, 'All levels')));
 }
 
-/** Ticks the painting gets to settle after the last stroke (or the seal) before it is judged. */
-const SETTLE = 240;
-/** ...and at most this many more while pieces are still falling. */
-const SETTLE_MAX = 600;
+/** The site header with the music's mute button at the end of its links. */
+function withSoundToggle(header: HTMLElement): HTMLElement {
+  header.querySelector('.site-nav')?.append(soundToggle());
+  return header;
+}
+
+/** A flat two seconds the painting gets after the last stroke (or the seal) before it is judged, whatever is still moving. */
+const SETTLE = 2 * TICK_HZ;
 
 /** Does the level ask about mountains (so the page marks the peaks it counts)? */
 function aboutPeaks(goals: GoalSpec[]): boolean {
@@ -66,8 +76,8 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
   /** play: strokes left; settling: ink spent or sealed, waiting for things to come to rest; then judged. */
   let phase: 'play' | 'settling' | 'won' | 'failed' = 'play';
   let judgeAt = 0;
-  let peaks: Peak[] = [];
-  let heights: Int16Array | null = null;
+  /** The peaks the scanner counts, each placed on the rock summit of its mountain (not on a tree growing there). */
+  let marks: { x: number; y: number; tall: boolean }[] = [];
   const markPeaks = aboutPeaks(level.goals);
   const initial = { ...params };
   /** Session shaping through the mountain graph: free, but marks the painting changed. */
@@ -110,8 +120,13 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
   // the red seal pressed onto the painting when the poem is complete
   const stamp = h('div', { class: 'stamp', 'aria-hidden': 'true' }, seal('完成', 'stamp-seal'));
   let winTimer = 0;
+  const submitNote = h('p', { class: 'submit-note' }); // in the completion scroll: where the painting was sent
+  const names = nameMenu((alias) => void sendToGallery(alias)); // in the completion scroll: sign the painting
+  let winData: WinData | null = null;
   const mount = h('span', { class: 'mount', 'aria-hidden': 'true' }); // the silk the painting is mounted on
-  const frame = h('div', { class: 'frame' }, mount, canvas, hudTool, banner, stamp, rollLeft, rollLead);
+  // a small gold bead on the bottom silk that follows the painting's song across the scroll
+  const musicMark = h('span', { class: 'music-mark', 'aria-hidden': 'true' });
+  const frame = h('div', { class: 'frame' }, mount, canvas, hudTool, banner, stamp, rollLeft, rollLead, musicMark);
   let tip = '';
 
   function regenerate(): void {
@@ -126,13 +141,17 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
     driver = new ActionDriver();
     used = 0;
     phase = 'play';
-    peaks = [];
-    heights = null;
+    marks = [];
     clearTimeout(winTimer);
+    winData = null;
+    submitNote.replaceChildren();
+    names.hide();
+    names.busy(false);
     stamp.classList.remove('on');
     complete?.close();
     banner.hidden = true;
     fx.attach(world);
+    audio.attach(world, bp); // each painting plays its own song as it unrolls
     clock.reset();
   }
 
@@ -142,6 +161,7 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
     step(world);
   });
   let complete: ReturnType<typeof handscroll> | undefined;
+  audio.armOnGesture();
   regenerate();
 
   // ---- pointer input -> action driver ----
@@ -240,6 +260,38 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
     ink.setAttribute('aria-label', `Ink left: ${left} of ${level.actionBudget}`);
   };
 
+  // ---- victory: the player signs the painting with a name and it goes to the gallery ----
+
+  /** The finished painting as a picture, without the cursor, peak marks or ink trails drawn over it. */
+  function snapshot(): string {
+    renderer.draw(world, { art: artView(bp) });
+    const out = document.createElement('canvas');
+    out.width = Math.min(1440, canvas.width);
+    out.height = Math.round((out.width * canvas.height) / canvas.width);
+    out.getContext('2d')?.drawImage(canvas, 0, 0, out.width, out.height);
+    return out.toDataURL('image/jpeg', 0.85);
+  }
+
+  async function sendToGallery(alias: string): Promise<void> {
+    if (!winData) return;
+    const strokes = winData.result.strokes ?? 0;
+    names.busy(true);
+    submitNote.replaceChildren(`Sending your painting to the gallery as ${alias}…`);
+    try {
+      await submitWin(winData, alias);
+      names.hide();
+      submitNote.replaceChildren(
+        'Sent to the gallery as ',
+        h('b', { class: 'alias' }, alias),
+        ` in ${strokes} ${strokes === 1 ? 'stroke' : 'strokes'}. `,
+        h('a', { href: './gallery.html' }, 'See it'),
+      );
+    } catch {
+      names.busy(false);
+      submitNote.replaceChildren('The gallery could not be reached. Press Send to try again.');
+    }
+  }
+
   const next = levels.all()[levels.all().findIndex((l) => l.id === level.id) + 1];
   complete = handscroll(
     'level complete',
@@ -248,6 +300,8 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
       { class: 'complete' },
       h('h3', {}, '完成'),
       h('p', {}, 'The landscape matches the poem.'),
+      names.node,
+      submitNote,
       h(
         'p',
         { class: 'cta-row' },
@@ -264,8 +318,7 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
   /** Light the verses as the painting changes; once it has settled after the last stroke, judge it. */
   function checkGoals(): void {
     const result = scan(world);
-    peaks = result.peaks;
-    heights = result.heights;
+    marks = markPeaks ? peakMarks(result.peaks, result.heights) : [];
     const started = changed();
     let all = true;
     for (const v of verses) {
@@ -277,9 +330,22 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
     }
     for (const v of verses) if (!v.goal) v.row.classList.toggle('met', all && started);
     if (phase !== 'settling' || world.tick < judgeAt) return;
-    if (bodyCount(world) > 0 && world.tick < judgeAt + SETTLE_MAX - SETTLE) return; // still falling
     if (all && started) {
       phase = 'won';
+      world.events.emit('levelWin', { levelId: level.id });
+      winData = {
+        levelId: level.id,
+        seed: level.seed,
+        params: { ...params },
+        actionLog: driver.log,
+        png: snapshot(),
+        result: { pass: true, progress: 1, strokes: used, budget: level.actionBudget },
+        scan: { ...result.counts },
+        worldHash: world.hash(),
+        appVersion: APP_VERSION,
+      };
+      submitNote.replaceChildren('Choose a name to sign your painting and send it to the gallery.');
+      names.show();
       stamp.classList.add('on'); // the seal lands first, then the scroll unrolls
       winTimer = window.setTimeout(() => {
         complete!.node.hidden = false;
@@ -287,30 +353,55 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
       }, 1100);
     } else {
       phase = 'failed';
+      world.events.emit('levelFail', { levelId: level.id });
       bannerText.textContent = used >= level.actionBudget ? 'Out of ink: the painting does not match the poem yet.' : 'The painting does not match the poem yet.';
     }
   }
 
+  /**
+   * Where to mark each peak. The scanner measures the skyline including trees, so a peak's column can
+   * be a tree top; the mark goes on the highest rock of the mountain the peak belongs to instead.
+   * Peaks on untracked terrain (no mountain object) stay at the top of their column.
+   */
+  function peakMarks(found: Peak[], columnHeights: Int16Array): { x: number; y: number; tall: boolean }[] {
+    const tall = 0.3 * level.dims.h; // DEFAULT_THRESHOLDS.tallFrac
+    const { w, h, obj, el } = world;
+    return found.map((p) => {
+      const top = h - columnHeights[p.x];
+      const mountain = mountainUnder(world, p.x, top);
+      const box = mountain > 0 ? world.objects.get(mountain)?.bbox : undefined;
+      if (box) {
+        for (let y = Math.max(0, box[1]); y <= Math.min(h - 1, box[3]); y++) {
+          let sum = 0;
+          let n = 0;
+          for (let x = Math.max(0, box[0]); x <= Math.min(w - 1, box[2]); x++) {
+            if (obj[y * w + x] === mountain && el[y * w + x] === El.ROCK) (sum += x), n++;
+          }
+          if (n > 0) return { x: Math.round(sum / n), y: y - 4, tall: p.h >= tall };
+        }
+      }
+      return { x: p.x, y: top - 4, tall: p.h >= tall };
+    });
+  }
+
   /** The peaks the scanner counts, marked on the painting: a red mark for a tall one, a ring for a lesser one. */
   function drawPeaks(g: CanvasRenderingContext2D): void {
-    if (!markPeaks || !heights || !frontier.done) return;
-    const tall = 0.3 * level.dims.h; // DEFAULT_THRESHOLDS.tallFrac
+    if (!markPeaks || !frontier.done) return;
     g.save();
     g.lineWidth = 1 / renderer.scale;
-    for (const p of peaks) {
-      const y = level.dims.h - heights[p.x] - 4;
-      if (p.h >= tall) {
+    for (const { x, y, tall } of marks) {
+      if (tall) {
         g.fillStyle = 'rgba(178, 34, 34, 0.85)';
         g.beginPath();
-        g.moveTo(p.x, y);
-        g.lineTo(p.x - 3, y - 5);
-        g.lineTo(p.x + 3, y - 5);
+        g.moveTo(x, y);
+        g.lineTo(x - 3, y - 5);
+        g.lineTo(x + 3, y - 5);
         g.closePath();
         g.fill();
       } else {
         g.strokeStyle = 'rgba(60, 60, 60, 0.75)';
         g.beginPath();
-        g.arc(p.x, y - 2.5, 2.2, 0, Math.PI * 2);
+        g.arc(x, y - 2.5, 2.2, 0, Math.PI * 2);
         g.stroke();
       }
     }
@@ -341,15 +432,15 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
     paramRows.append(h('label', { class: 'row' }, h('span', {}, rule.label ?? def.label), input, out));
   }
   const sealButton = button('Seal the painting', () => {
-    if (phase === 'play' && frontier.done && used > 0) finish(60);
+    if (phase === 'play' && frontier.done && used > 0) finish();
   });
 
   stage.append(frame, status, complete.node);
   root.replaceChildren(
-    levelHeader(level.title ?? level.id),
+    withSoundToggle(siteHeader('levels', level.title ?? level.id)),
     h(
       'main',
-      { class: 'layout level-layout' },
+      { class: 'layout level-layout', id: 'main' },
       stage,
       h(
         'aside',
@@ -387,6 +478,9 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
       banner.hidden = phase !== 'failed';
       sealButton.toggleAttribute('disabled', phase !== 'play' || used === 0);
       frame.style.setProperty('--p', String(frontier.x / level.dims.w));
+      const at = audio.playhead();
+      musicMark.classList.toggle('on', at !== null);
+      if (at !== null) frame.style.setProperty('--music', at.toFixed(4));
       frame.classList.toggle('ready', frontier.done);
       status.textContent = !frontier.done
         ? 'The landscape is painting itself…'
@@ -413,6 +507,7 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
   return () => {
     stop();
     fx.detach();
+    audio.detach();
     clearTimeout(winTimer);
     removeEventListener('keydown', onKey);
   };

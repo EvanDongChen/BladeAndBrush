@@ -3,6 +3,7 @@
  * dropped-in element/ability/param/layer/metric shows up without touching page code.
  */
 import { activeAbilities, type AbilityId } from '../core/abilities';
+import { audio } from '../audio/engine';
 import type { Clock } from '../core/clock';
 import { flagOn } from '../core/config';
 import { elements } from '../core/elements';
@@ -89,6 +90,24 @@ export function pageHeader(title: string): HTMLElement {
 /** Site navbar for the player-facing pages (Home, Gallery). */
 export function siteNav(active: NavLabel): HTMLElement {
   return navBar(active, 'Blade & Brush');
+}
+
+/** A header button that mutes and unmutes the music: 音 (sound) when on, 靜 (still) when off. */
+export function soundToggle(): HTMLButtonElement {
+  const b = h('button', { type: 'button', class: 'sound-toggle' });
+  const sync = () => {
+    const on = !audio.muted;
+    const waiting = on && !audio.running; // the browser holds sound until the page is clicked
+    b.textContent = on ? '音' : '靜';
+    b.classList.toggle('waiting', waiting);
+    b.setAttribute('aria-pressed', String(on));
+    b.setAttribute('aria-label', waiting ? 'Click anywhere to start the music.' : on ? 'Sound on. Click to mute.' : 'Sound off. Click to turn on.');
+    b.title = waiting ? 'Click anywhere to start the music' : on ? 'Mute' : 'Sound on';
+  };
+  b.addEventListener('click', () => audio.toggle());
+  audio.onChange(sync);
+  sync();
+  return b;
 }
 
 /** Wooden roller with end caps, shared by both scroll kinds. */

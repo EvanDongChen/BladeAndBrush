@@ -85,6 +85,38 @@ describe('compose() with layered planes', () => {
   });
 });
 
+describe('compose() outlines that spill past an object', () => {
+  // 6 cells, one plane. A tree stands in cell 0 and its ink outline spills onto cells 1 and 2 (empty sky in the blueprint).
+  const w = 6;
+  const tree = rgba(10, 80, 10);
+  const ink = rgba(20, 20, 20, 200);
+  const bgc = rgba(150, 150, 170, 120);
+  const view: ArtView = {
+    art: { k: 1, planes: [Uint32Array.from([tree, ink, ink, 0, 0, 0])], bg: new Uint32Array(w).fill(bgc) },
+    w,
+    h: 1,
+    el: Uint8Array.from([El.TREE, 0, 0, 0, 0, 0]),
+    plane: Uint8Array.from([0, NO_PLANE, NO_PLANE, NO_PLANE, NO_PLANE, NO_PLANE]),
+    planes: [{ el: Uint8Array.from([El.TREE, 0, 0, 0, 0, 0]), owner: new Uint16Array(w) }],
+  };
+  const run = (el: number[], plane: number[]) => {
+    const out = new Uint32Array(w);
+    compose(out, Uint8Array.from(el), Uint8Array.from(plane), prepareArt(view), w);
+    return Array.from(out);
+  };
+
+  it('the outline shows beside a standing object', () => {
+    const out = run([El.TREE, El.EMPTY, El.EMPTY, El.EMPTY, El.EMPTY, El.EMPTY], [0, NO_PLANE, NO_PLANE, NO_PLANE, NO_PLANE, NO_PLANE]);
+    expect(out[1]).toBe(over(ink, over(bgc, 0)));
+  });
+
+  it('the outline goes when its object is gone, leaving only the background', () => {
+    const out = run([El.EMPTY, El.EMPTY, El.EMPTY, El.EMPTY, El.EMPTY, El.EMPTY], new Array(w).fill(NO_PLANE));
+    expect(out[1]).toBe(over(bgc, 0));
+    expect(out[2]).toBe(over(bgc, 0));
+  });
+});
+
 describe('hashBlueprint with planes', () => {
   it('changes when one art pixel changes', () => {
     const bp = createBlueprint(1, defaultParams(), { w: 4, h: 2 });

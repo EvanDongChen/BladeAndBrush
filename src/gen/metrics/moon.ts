@@ -5,7 +5,8 @@ import { countComponents } from '../scan';
 
 /**
  * The moon (setpiece 'moon'): 1 when it is broken (cut into two or more pieces, or half of it
- * gone), 0.5 when it is only chipped, 0 while whole (or if there is no moon).
+ * gone), 0.5 when it is only chipped, 0 while whole (or if there is no moon). The pieces are
+ * counted wherever they are, so it stays broken after they have fallen out of the moon's old box.
  */
 registerMetric(
   'moonBroken',
@@ -15,7 +16,7 @@ registerMetric(
       if (m.cells === 0) continue;
       const lost = m.cells - objects.count(m.id);
       if (lost <= 0) continue;
-      best = Math.max(best, lost * 2 >= m.cells || pieces(world, m.id, m.bbox) >= 2 ? 1 : 0.5);
+      best = Math.max(best, lost * 2 >= m.cells || pieces(world, m.id, m.bbox[1]) >= 2 ? 1 : 0.5);
     }
     return best;
   },
@@ -32,12 +33,11 @@ function tallBeside(world: World, peaks: Peak[], tallFrac: number, side: number)
   return peaks.filter((p) => p.h >= tallFrac * world.h && Math.sign(p.x - moon.x) === side).length;
 }
 
-/** Connected pieces of the object's cells inside its original bbox. */
-function pieces(world: World, id: number, bbox: readonly [number, number, number, number]): number {
-  const [x0, y0, x1, y1] = bbox;
-  const bw = x1 - x0 + 1;
-  const bh = y1 - y0 + 1;
+/** Connected pieces of the object's cells, from the top of its original box down to the bottom of the canvas. */
+function pieces(world: World, id: number, top: number): number {
+  const bw = world.w;
+  const bh = world.h - top;
   const mask = new Uint8Array(bw * bh);
-  for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) if (world.obj[y * world.w + x] === id) mask[(y - y0) * bw + (x - x0)] = 1;
+  for (let y = top; y < world.h; y++) for (let x = 0; x < bw; x++) if (world.obj[y * world.w + x] === id) mask[(y - top) * bw + x] = 1;
   return countComponents(bw, bh, mask);
 }

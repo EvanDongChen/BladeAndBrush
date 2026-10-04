@@ -74,6 +74,34 @@ registerSetpiece({
       }
     }
 
+    // Where the villagers stand: in the open ground between the huts and at the ends of the village,
+    // 8 cells apart, shared out over the gaps (widest first). Reserved before the trees, which only
+    // take what is left, so the people always have room.
+    const person = elementId('person');
+    const standAt: number[] = [];
+    if (person !== 0 && people > 0) {
+      const gapsOpen: { a: number; b: number; n: number }[] = [];
+      let from = cx0;
+      for (const [a, b] of [...spans].sort((p, q) => p[0] - q[0])) {
+        gapsOpen.push({ a: from + 3, b: a - 4, n: 0 });
+        from = b + 1;
+      }
+      gapsOpen.push({ a: from + 3, b: cx1 - 3, n: 0 });
+      const room = gapsOpen.filter((g) => g.b >= g.a).sort((p, q) => q.b - q.a - (p.b - p.a));
+      const capacity = (g: { a: number; b: number }) => Math.floor((g.b - g.a) / 8) + 1;
+      for (let placed = 0, again = true; placed < people && again; ) {
+        again = false;
+        for (const g of room) {
+          if (placed >= people) break;
+          if (g.n < capacity(g)) (g.n++, placed++, (again = true));
+        }
+      }
+      for (const g of room) {
+        for (let j = 0; j < g.n; j++) standAt.push(g.n === 1 ? (g.a + g.b) >> 1 : Math.round(g.a + ((g.b - g.a) * j) / (g.n - 1)));
+      }
+      for (const x of standAt) spans.push([x - 4, x + 4]);
+    }
+
     // Village trees in the gaps between the huts (and at the ends), clear of the walls.
     const gaps: number[] = [];
     const sorted = [...spans].sort((a, b) => a[0] - b[0]);
@@ -96,14 +124,8 @@ registerSetpiece({
       }
     }
 
-    // Villagers on the open ground between the huts and trees.
-    const person = elementId('person');
-    if (person === 0 || people === 0) return;
-    const free: number[] = [];
-    for (let x = cx0 + 3; x <= cx1 - 3; x++) if (!spans.some(([a, b]) => x >= a - 4 && x <= b + 4)) free.push(x);
-    if (free.length === 0) return;
-    for (let k = 0; k < people; k++) {
-      const x = free[Math.min(free.length - 1, Math.floor(((k + 0.5) * free.length) / people))];
+    // Villagers on the open ground reserved for them above.
+    for (const x of standAt) {
       const y = topAt(bp, x) - 2;
       newStroke({
         kind: 'villager',

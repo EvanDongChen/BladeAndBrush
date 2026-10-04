@@ -77,4 +77,17 @@ describe('gallery API with what the level page sends', () => {
     });
     expect(res.status).toBe(400);
   });
+
+  it('saves a world hash above 2^31 (the INTEGER column) and lists it back unchanged', async () => {
+    const { pool, inserts } = fakePool();
+    const app = createApp({ pool });
+    const big = { ...win, worldHash: 2181879061 }; // from a failed save in the Tiger logs
+    const res = await app.request('/api/gallery', { method: 'POST', body: JSON.stringify(big), headers: { 'content-type': 'application/json' } });
+    expect(res.status).toBe(201);
+    const stored = inserts[0][8] as number;
+    expect(stored).toBeGreaterThanOrEqual(-2147483648);
+    expect(stored).toBeLessThanOrEqual(2147483647);
+    const list = (await (await app.request('/api/gallery')).json()) as { worldHash: number }[];
+    expect(list[0].worldHash).toBe(2181879061);
+  });
 });

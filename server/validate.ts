@@ -73,7 +73,7 @@ export function validateSubmission(body: unknown): ValidSubmission {
   const strokes = count(result.strokes, 'result.strokes');
   const budget = count(result.budget, 'result.budget');
   if (scan !== undefined && scan !== null && !isRecord(scan)) fail('scan');
-  if (typeof worldHash !== 'number' || !Number.isInteger(worldHash)) fail('worldHash');
+  if (typeof worldHash !== 'number' || !Number.isInteger(worldHash) || worldHash < 0 || worldHash > 0xffffffff) fail('worldHash');
   if (typeof appVersion !== 'string' || !appVersion || appVersion.length > 32) fail('appVersion');
 
   let name: string | null = null;

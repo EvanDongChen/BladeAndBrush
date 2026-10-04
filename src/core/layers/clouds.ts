@@ -65,8 +65,9 @@ export function baseOf(c: Cloud, cx: number, lobes: Lobe[]): { y: number; x0: nu
  * One cloud as an ink painter draws it (like a brush drawing of billowing cumulus): big rounded
  * lobes joined into one scalloped silhouette that is cut off flat along a base line, an ink outline
  * of varying weight along the OUTSIDE of the lobes only (where they overlap there is no line, just a
- * cusp), the base itself drawn as a line rather than left as lobes, soft grey wash layered under it,
- * and a few thin lines trailing out past the ends. Greys as it fills with water.
+ * cusp), the base itself drawn as a line rather than left as lobes, and a few thin lines trailing out
+ * past the ends. The body is flat paper: no grey fill, since any wash darkens into blobs and circles.
+ * The paper tone itself greys as the cloud fills with water.
  */
 function drawCloud(g: CanvasRenderingContext2D, c: Cloud, ox: number): void {
   const wet = Math.min(1, c.water / Math.max(1, cloudCapacity(c) * 0.5));
@@ -82,21 +83,10 @@ function drawCloud(g: CanvasRenderingContext2D, c: Cloud, ox: number): void {
     g.moveTo(l.x + l.rx, l.y);
     g.ellipse(l.x, l.y, l.rx, l.ry, 0, 0, Math.PI * 2);
   }
-  g.clip(); // both the paper and the wash stop at the lobes, and at the base line
+  g.clip(); // the paper stops at the lobes, and at the base line
   g.fillStyle = `rgba(${paper[0]}, ${paper[1]}, ${paper[2]}, 0.97)`;
   g.fillRect(base.x0 - c.hw, base.top, base.x1 - base.x0 + 2 * c.hw, base.y - base.top);
-  // soft grey wash, layered (alpha stacks where lobes overlap), kept inside the silhouette
-  for (const l of lobes) {
-    g.beginPath();
-    g.ellipse(l.x + l.rx * 0.12, l.y + l.ry * 0.42, l.rx * 0.95, l.ry * 0.6, 0, 0, Math.PI * 2);
-    g.fillStyle = `rgba(112, 116, 126, ${0.08 + 0.07 * wet})`;
-    g.fill();
-  }
-  g.beginPath();
-  g.ellipse(cx, base.y - c.hh * 0.15, (base.x1 - base.x0) * 0.5, c.hh * 0.6, 0, 0, Math.PI * 2);
-  g.fillStyle = `rgba(112, 116, 126, ${0.1 + 0.08 * wet})`;
-  g.fill();
-  g.restore();
+  g.restore(); // no grey fill at all: the mass is flat paper, drawn only with ink lines
 
   // the outline: only the arcs of each lobe that are not inside another, and none under the base line
   g.lineCap = 'round';

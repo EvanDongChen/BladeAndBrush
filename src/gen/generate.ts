@@ -19,6 +19,8 @@ export interface GenerateOptions {
   k?: number;
   /** What the level puts in on top of the free painting (core/setpieces.ts). */
   setpieces?: SetpieceSpec[];
+  /** Per-mountain height edits: planned placement index -> multiple of its planned height. */
+  planHeights?: Record<number, number>;
 }
 
 /** Registered features that are switched on, in pipeline order. */
@@ -55,7 +57,7 @@ function pipeline(specs: SetpieceSpec[], overrides?: Record<string, boolean>): S
  */
 export function generate(seed: number, params: GenParams, opts: GenerateOptions = {}): Blueprint {
   const dims = opts.dims ?? DEFAULT_DIMS;
-  const bp = createBlueprint(seed, params, dims, opts.setpieces);
+  const bp = createBlueprint(seed, params, dims, opts.setpieces, opts.planHeights);
   attachArt(bp, opts.k ?? DEFAULT_ART_K);
   let nextOwner = 1;
   const newStroke: FeatureCtx['newStroke'] = (info) => {

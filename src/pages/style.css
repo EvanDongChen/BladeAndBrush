@@ -250,6 +250,17 @@ canvas.paintable {
   color: var(--ink-soft);
 }
 
+/* fixedPanel(): a heading, not a toggle (no hover, no roll mark) */
+.panel-fixed,
+.panel-fixed:hover {
+  cursor: default;
+  background: var(--paper-2);
+}
+
+.panel-fixed::after {
+  content: none;
+}
+
 .panel.rolled .panel-toggle {
   border-bottom-color: transparent;
 }
@@ -1620,6 +1631,28 @@ input[type='number'] {
 /* five abilities fit on one row */
 .arsenal {
   grid-template-columns: repeat(auto-fit, minmax(70px, 1fr));
+}
+
+/* Mountain graph (generator Mountains panel, level 'Shape the painting'): planned silhouettes. */
+.noise-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.noise-canvas {
+  display: block;
+  width: 100%;
+  height: auto; /* aspect-ratio (the scroll's) is set inline */
+  min-height: 90px;
+  border: 1px solid var(--line);
+  background: var(--paper);
+  touch-action: none;
+}
+
+.noise-readout {
+  margin: 0;
+  font: 12px ui-monospace, Consolas, monospace;
 }
 
 .sound-toggle {

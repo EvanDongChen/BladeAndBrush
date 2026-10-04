@@ -1,3 +1,4 @@
+import { BEHIND_LAYERS, Flag } from '../core/constants';
 import { El, ELEMENTS, SOLID_FOR_SCAN } from '../core/elements';
 import { indexObjects } from '../core/objects';
 import { DEFAULT_THRESHOLDS, metrics, type Peak, type ScanResult, type ScanThresholds } from '../core/scan';
@@ -17,6 +18,34 @@ export function heightAt(world: World, x: number): number {
 export function columnHeights(world: World): Int16Array {
   const out = new Int16Array(world.w);
   for (let x = 0; x < world.w; x++) out[x] = heightAt(world, x);
+  return out;
+}
+
+/**
+ * The rock skyline peaks are found on: per column, the height of the topmost cell that is land,
+ * i.e. solidForScan, not flammable, and either untracked terrain or part of a mountain object.
+ * Trees, boulders, flowers, huts and anything else standing on the land are looked through, and so
+ * is a tree painted over a mountain's face: the rock stacked behind it still counts. So a tree is
+ * never a peak and never adds to (or notches) a mountain's height. The mountain graph shows rock only.
+ */
+export function rockHeights(world: World): Int16Array {
+  const { w, h, el, obj, flags, behindEl, behindOwner } = world;
+  const out = new Int16Array(w);
+  const land = (e: number, id: number) =>
+    SOLID_FOR_SCAN[e] === 1 && !ELEMENTS[e]?.flammability && (id === 0 || world.objects.get(id)?.kind === 'mountain');
+  for (let x = 0; x < w; x++) {
+    for (let y = 0; y < h; y++) {
+      const i = y * w + x;
+      let hit = land(el[i], obj[i]);
+      if (!hit && flags[i] & Flag.HAS_BEHIND) {
+        for (let d = 0; d < BEHIND_LAYERS && !hit; d++) hit = behindEl[d][i] !== El.EMPTY && land(behindEl[d][i], behindOwner[d][i]);
+      }
+      if (hit) {
+        out[x] = h - y;
+        break;
+      }
+    }
+  }
   return out;
 }
 
@@ -122,7 +151,8 @@ export function skyReach(world: World): Uint8Array {
  * the first 'mountain' object found going down its column past anything standing on it (trees,
  * boulders, flowers, bamboo). A peak on land (a plateau, tagged 'plateau') or on a hut is not a
  * mountain and is dropped, and so is a tree or boulder standing on land that is no mountain. Peaks
- * on bare untracked terrain (painted in the sandbox) stay as they are.
+ * on bare untracked terrain (painted in the sandbox) stay as they are. scan() passes the rock
+ * skyline (rockHeights), so its peaks never stand on a tree in the first place.
  */
 export function peaksByMountain(world: World, heights: Int16Array, peaks: Peak[], minProminence = 0): Peak[] {
   if (world.objects.size === 0) return peaks;
@@ -184,7 +214,9 @@ export function scan(world: World, thresholds: ScanThresholds = DEFAULT_THRESHOL
     minProminence: thresholds.minProminence * k,
     waterfallMin: thresholds.waterfallMin * k,
   };
-  const peaks = peaksByMountain(world, heights, findPeaks(heights, scaled.minProminence), scaled.minProminence);
+  // Peaks are rock only: found on the rock skyline, so trees and other things on the land never count.
+  const rock = rockHeights(world);
+  const peaks = peaksByMountain(world, rock, findPeaks(rock, scaled.minProminence), scaled.minProminence);
   const ctx = { heights, peaks, thresholds: scaled, objects: indexObjects(world) };
   const counts: Record<string, number> = {};
   for (const m of metrics.all()) counts[m.name] = m.measure(world, ctx);

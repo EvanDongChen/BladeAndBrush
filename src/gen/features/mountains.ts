@@ -3,6 +3,7 @@ import { registerFeature } from '../../core/features';
 import type { Noise } from '../../core/noise';
 import type { Rng } from '../../core/rng';
 import { artOf, PLANE } from '../artState';
+import { FOOT_SKIRT } from '../layout';
 import { recordMountain } from '../mountainStore';
 import type { Painter, Shader } from '../paint/painter';
 import { ink, inkStroke } from '../paint/strokes';
@@ -60,7 +61,7 @@ registerFeature({
       // occluder: down to the foot, plus a shallow wedge below its middle so it hides what is behind
       const n = pr.tops.length;
       const bottoms = new Float32Array(n);
-      for (let j = 0; j < n; j++) bottoms[j] = base + u.toArt(22) * (1 - Math.abs((2 * j) / Math.max(1, n - 1) - 1));
+      for (let j = 0; j < n; j++) bottoms[j] = base + u.toArt(FOOT_SKIRT) * (1 - Math.abs((2 * j) / Math.max(1, n - 1) - 1));
       const cx = pr.x0 + n / 2;
       plane.paint.fillColumns(pr.x0, pr.tops, bottoms, washShader(tone, cx, n / 2, K), id);
 

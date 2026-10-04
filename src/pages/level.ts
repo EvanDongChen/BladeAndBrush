@@ -12,7 +12,7 @@ import { Renderer } from '../core/render';
 import { ActionDriver } from '../core/replay';
 import { World } from '../core/world';
 import { Frontier } from '../gen/frontier';
-import { mountainUnder, scan } from '../gen/scan';
+import { mountainUnder, rockHeights, scan } from '../gen/scan';
 import type { Blueprint } from '../core/blueprint';
 import type { GoalSpec } from '../core/goals';
 import type { Peak } from '../core/scan';
@@ -26,7 +26,8 @@ import { Fx } from './fx';
 import { generateAsync } from './genClient';
 import { arsenal } from './arsenal';
 import { nameMenu } from './nameMenu';
-import { brushCursor, button, displayScale, h, handscroll, panel, seal, soundToggle, startLoop, toCell } from './ui';
+import { noiseGraph } from './noiseGraph';
+import { brushCursor, button, displayScale, fixedPanel, h, handscroll, panel, seal, soundToggle, startLoop, toCell } from './ui';
 
 /** Header for players: no links to the workshops. */
 function levelHeader(sub: string): HTMLElement {
@@ -79,6 +80,26 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
   let marks: { x: number; y: number; tall: boolean }[] = [];
   const markPeaks = aboutPeaks(level.goals);
   const initial = { ...params };
+  /** Session shaping through the mountain graph: free, but marks the painting changed. */
+  let shaped = false;
+
+  // The mountain graph replaces the height and spacing rows below (when the level offers either).
+  // Its edits are staged in the graph and only repaint when its Redraw button is pressed.
+  const mhRule = level.params.mountainHeight;
+  const spRule = level.params.spacing;
+  const offered = (r: typeof mhRule) => r !== undefined && r.visible !== false;
+  const showGraph = offered(mhRule) || offered(spRule);
+  const graph = noiseGraph({
+    seed: () => level.seed,
+    params,
+    dims: level.dims,
+    setpieces: () => level.setpieces ?? [],
+    locks: { height: !offered(mhRule) || mhRule?.locked === true, spacing: !offered(spRule) || spRule?.locked === true },
+    onRedraw: () => {
+      shaped = true;
+      regenerate();
+    },
+  });
 
   const canvas = h('canvas', { class: 'grid paintable' });
   const renderer = new Renderer(canvas, level.dims, displayScale(level.dims.w, DEFAULT_ART_K));
@@ -111,18 +132,24 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
   /** Generation runs on a worker: until it answers, the old painting (or an empty scroll) stays. */
   let pending = 0;
   let painted: GenParams | null = null;
+  /** The mountain graph's height edits the painting was generated with (JSON). */
+  let paintedHeights = '';
   function regenerate(): void {
-    // "Try again" with the same sliders reuses the painting: no need to generate it again
-    if (painted && paramDefs.all().every((d) => painted![d.key] === params[d.key])) {
+    if (showGraph) graph.sync(); // other sliders reshape the planned mountains too
+    const planHeights = graph.edits().heights;
+    const heightsKey = JSON.stringify(planHeights);
+    // "Try again" with the same sliders (and the same mountain graph edits) reuses the painting
+    if (painted && paintedHeights === heightsKey && paramDefs.all().every((d) => painted![d.key] === params[d.key])) {
       restart(bp);
       return;
     }
     const want = { ...params };
     const id = ++pending;
-    generateAsync(level.seed, want, { features: level.featuresEnabled, setpieces: level.setpieces }, renderer.scale).then((next) => {
+    generateAsync(level.seed, want, { features: level.featuresEnabled, setpieces: level.setpieces, planHeights }, renderer.scale).then((next) => {
       if (id !== pending || stopped) return; // a newer repaint was asked for meanwhile
       pending = 0;
       painted = want;
+      paintedHeights = heightsKey;
       restart(next);
     });
   }
@@ -309,7 +336,7 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
   complete.node.hidden = true;
 
   /** Has the player changed anything yet? Goals the fresh painting already meets do not count. */
-  const changed = () => used > 0 || Object.keys(initial).some((k) => params[k] !== initial[k]);
+  const changed = () => used > 0 || shaped || Object.keys(initial).some((k) => params[k] !== initial[k]);
 
   let lastScan: ReturnType<typeof scan> | null = null;
   let lastScanWorld: World | null = null;
@@ -336,9 +363,10 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
       lastScan = scan(world);
       lastScanWorld = world;
       lastScanKey = key;
+      // peaks are found on the rock skyline, so the marks are placed on it too
+      marks = markPeaks ? peakMarks(lastScan.peaks, rockHeights(world)) : [];
     }
     const result = lastScan;
-    marks = markPeaks ? peakMarks(result.peaks, result.heights) : [];
     const started = changed();
     let all = true;
     for (const v of verses) {
@@ -379,8 +407,8 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
   }
 
   /**
-   * Where to mark each peak. The scanner measures the skyline including trees, so a peak's column can
-   * be a tree top; the mark goes on the highest rock of the mountain the peak belongs to instead.
+   * Where to mark each peak: on the highest rock of the mountain the peak belongs to (peaks are found
+   * on the rock skyline, so trees never move a mark).
    * Peaks on untracked terrain (no mountain object) stay at the top of their column.
    */
   function peakMarks(found: Peak[], columnHeights: Int16Array): { x: number; y: number; tall: boolean }[] {
@@ -434,6 +462,7 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
   for (const def of paramDefs.all()) {
     const rule = level.params[def.key];
     if (!rule || rule.visible === false) continue;
+    if (showGraph && (def.key === 'mountainHeight' || def.key === 'spacing')) continue; // the graph covers these
     const out = h('output', {}, String(params[def.key]));
     const input = h('input', {
       type: 'range',
@@ -464,18 +493,21 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
       h(
         'aside',
         { class: 'controls' },
-                panel(
-          'Shape the painting',
-          h('p', { class: 'home-note' }, level.tip ?? 'Tune the painting before you cut: it repaints when you let go of a slider.'),
-          paramRows,
-          button('Start over', regenerate),
+        fixedPanel('Shape the painting', ...(showGraph ? [graph.node] : []), paramRows),
+        fixedPanel(
+          'Abilities',
+          bar.node,
+          ink,
+          h('label', { class: 'row brush-row' }, h('span', {}, 'Brush size'), radiusInput, radiusDot),
+          // Start over wipes every cut and stroke and gives the ink back (the graph's edits stay).
+          h('div', { class: 'row' }, sealButton, button('Start over', regenerate)),
         ),
-        panel('Abilities', bar.node, ink, h('label', { class: 'row brush-row' }, h('span', {}, 'Brush size'), radiusInput, radiusDot), sealButton),
       ),
     ),
   );
 
   bar.selectIndex(0); // start with the first ability selected
+  if (showGraph) graph.sync(); // canvas has layout now; draw at full width
   let frames = 0;
   let shownX = -1;
   const stop = startLoop(

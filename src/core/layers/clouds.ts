@@ -11,24 +11,32 @@ function rand(seed: number, k: number): number {
 interface Lobe {
   x: number;
   y: number;
-  r: number;
+  /** Half width and half height: wide, low lobes on a long cloud, so they always overlap into one mass. */
+  rx: number;
+  ry: number;
 }
 
-/** The cloud's billows: a few big lobes along the top, smaller ones along a flat base. */
-function lobesOf(c: Cloud, cx: number): Lobe[] {
+/**
+ * The cloud's billows: big lobes along the top and smaller ones along a flat base. Each lobe is
+ * as wide as the gap between lobe centres needs (so neighbours overlap however long the cloud is)
+ * and as tall as the cloud's height gives.
+ */
+export function lobesOf(c: Cloud, cx: number): Lobe[] {
   const out: Lobe[] = [];
-  // enough lobes to overlap along the width, so a wide cloud is one billowing mass, not separate blobs
-  const n = Math.max(3, Math.min(8, Math.round((c.hw * 1.55) / (c.hh * 1.25)) + Math.floor(rand(c.seed, 0) * 2)));
+  const n = Math.max(3, Math.min(14, Math.round((c.hw * 1.55) / (c.hh * 1.1)) + Math.floor(rand(c.seed, 0) * 2)));
+  const gap = (c.hw * 1.55) / n;
   for (let k = 0; k < n; k++) {
     const t = (k + 0.5) / n;
-    const r = c.hh * (0.85 + 0.6 * Math.sin(Math.PI * t)) * (0.9 + 0.25 * rand(c.seed, k + 1));
-    out.push({ x: cx + (t - 0.5) * c.hw * 1.55, y: c.y + c.hh * 0.35 - r * 0.85, r });
+    const ry = c.hh * (0.85 + 0.6 * Math.sin(Math.PI * t)) * (0.9 + 0.25 * rand(c.seed, k + 1));
+    const rx = Math.max(ry * 0.9, gap * 0.78 * (0.9 + 0.25 * rand(c.seed, 40 + k)));
+    out.push({ x: cx + (t - 0.5) * c.hw * 1.55, y: c.y + c.hh * 0.35 - ry * 0.85, rx, ry });
   }
   const m = n + 2;
+  const gap2 = (c.hw * 1.95) / m;
   for (let k = 0; k < m; k++) {
     const t = (k + 0.5) / m;
-    const r = c.hh * (0.38 + 0.22 * rand(c.seed, 30 + k));
-    out.push({ x: cx + (t - 0.5) * c.hw * 1.95, y: c.y + c.hh * 0.45 - r * 0.75, r });
+    const ry = c.hh * (0.38 + 0.22 * rand(c.seed, 30 + k));
+    out.push({ x: cx + (t - 0.5) * c.hw * 1.95, y: c.y + c.hh * 0.45 - ry * 0.75, rx: Math.max(ry * 1.1, gap2 * 0.85), ry });
   }
   return out;
 }
@@ -50,8 +58,8 @@ function drawCloud(g: CanvasRenderingContext2D, c: Cloud, ox: number): void {
   g.save();
   g.beginPath();
   for (const l of lobes) {
-    g.moveTo(l.x + l.r, l.y);
-    g.arc(l.x, l.y, l.r, 0, Math.PI * 2);
+    g.moveTo(l.x + l.rx, l.y);
+    g.ellipse(l.x, l.y, l.rx, l.ry, 0, 0, Math.PI * 2);
   }
   g.fillStyle = `rgba(${paper[0]}, ${paper[1]}, ${paper[2]}, 0.97)`;
   g.fill();
@@ -59,7 +67,7 @@ function drawCloud(g: CanvasRenderingContext2D, c: Cloud, ox: number): void {
   g.clip();
   for (const l of lobes) {
     g.beginPath();
-    g.ellipse(l.x + l.r * 0.18, l.y + l.r * 0.42, l.r * 0.95, l.r * 0.6, 0, 0, Math.PI * 2);
+    g.ellipse(l.x + l.rx * 0.12, l.y + l.ry * 0.42, l.rx * 0.95, l.ry * 0.6, 0, 0, Math.PI * 2);
     g.fillStyle = `rgba(112, 116, 126, ${0.08 + 0.07 * wet})`;
     g.fill();
   }
@@ -77,9 +85,9 @@ function drawCloud(g: CanvasRenderingContext2D, c: Cloud, ox: number): void {
     const l = lobes[li];
     let prev: [number, number] | null = null;
     for (let a = 0; a <= Math.PI * 2 + 0.001; a += 0.14) {
-      const x = l.x + Math.cos(a) * l.r;
-      const y = l.y + Math.sin(a) * l.r;
-      const inside = lobes.some((o, oi) => oi !== li && (x - o.x) ** 2 + (y - o.y) ** 2 < (o.r * 0.97) ** 2);
+      const x = l.x + Math.cos(a) * l.rx;
+      const y = l.y + Math.sin(a) * l.ry;
+      const inside = lobes.some((o, oi) => oi !== li && ((x - o.x) / o.rx) ** 2 + ((y - o.y) / o.ry) ** 2 < 0.94);
       if (inside || y > baseY - c.hh * 0.05) {
         prev = null;
         continue;

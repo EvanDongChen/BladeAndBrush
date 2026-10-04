@@ -16,18 +16,20 @@ export interface ShadeRegion {
   animated?: Uint8Array;
 }
 
-/**
- * Cells below the surface at which a `run` body reaches full depth. The same for every column, so
- * neighbouring columns of one body at the same depth get the same shade (a column's own length
- * would band the body wherever its bottom is uneven).
- */
+/** Cells from the open surface at which a `run` body reaches full depth (see bodyDepth). */
 const RUN_DEPTH = 32;
-/**
- * Depth is measured from the body's surface averaged over this many columns each side: the sim
- * leaves a water surface stepped by a cell or two, and a gradient restarting at every step would
- * draw a vertical band down the whole body.
- */
-const SURF_REACH = 6;
+/** Cells of air above water that make it open surface (fewer is an air pocket in the body). */
+const OPEN_AIR = 4;
+/** Cost of a sideways step in the depth distance (a step down costs 1). */
+const SIDE_STEP = 2;
+/** Sideways softening of the depth, cells each side. */
+const BLUR = 4;
+/** Depths are exact up to here; deeper is all full depth. */
+const DEPTH_CAP = RUN_DEPTH + 8;
+const FAR = 0x7fff;
+let bodyCounter = 0;
+let bodyId = new Int32Array(0);
+let bodyDepthF = new Float32Array(0);
 
 const px: ShadePx = {
   x: 0, y: 0, cx: 0, cy: 0, fx: 0, fy: 0, cover: 1, v: 1, depth: 0, topEdge: false,
@@ -44,10 +46,12 @@ let cCache = new Uint32Array(0);
 let sStamp = new Uint32Array(0); // isSource() answer is from this frame
 let sVal = new Uint8Array(0);
 let frameId = 0;
-let runPos = new Int16Array(0);
+let bodyStamp = new Uint32Array(0); // bodyLvl is from this frame
+let bodyLvl = new Int16Array(0); // per run cell: its depth in its body (bodyDepth)
+let bodyStack = new Int32Array(0);
+let bodyCells = new Int32Array(0);
 const col9 = new Uint32Array(9);
 const FAM_CODE = new Uint16Array(256);
-let colMask = new Uint8Array(0);
 const nb9 = new Int16Array(9);
 
 function ensure(size: number): void {
@@ -55,6 +59,10 @@ function ensure(size: number): void {
   stamp = new Uint32Array(size);
   list = new Int32Array(size);
   cStamp = new Uint32Array(size);
+  bodyStamp = new Uint32Array(size);
+  bodyLvl = new Int16Array(size);
+  bodyId = new Int32Array(size);
+  bodyDepthF = new Float32Array(size);
   cCache = new Uint32Array(size);
   sStamp = new Uint32Array(size);
   sVal = new Uint8Array(size);
@@ -180,56 +188,114 @@ function subFor(k: number): { f: Float64Array; cell: Uint8Array; w: Float64Array
   return t;
 }
 
-/** For `run` shaders: where each cell sits in its vertical run of the same family. */
-function computeRuns(world: World, cols?: Uint8Array): boolean {
+/**
+ * For `run` shaders: how deep cell i sits in its body (4-connected cells of one family), as the
+ * distance through the body to its nearest open surface (open air above it, see openAbove). Found
+ * once per body per frame. A lake darkens straight down from its surface, a stream or a river
+ * running downhill stays shallow, water under a shelf takes its depth from the open water next to
+ * it, and neighbouring cells differ by at most one, so a body never bands.
+ */
+function bodyDepth(world: World, i: number, fam: number): number {
+  if (bodyStamp[i] === frameId) return bodyDepthF[i];
   const { w, h, el } = world;
-  let any = false;
-  for (let x = 0; x < w; x++) {
-    if (cols && !cols[x]) continue;
-    let y = 0;
-    while (y < h) {
-      const e = el[y * w + x];
-      if (!RUN[e]) {
-        y++;
-        continue;
-      }
-      if (!any) {
-        any = true;
-        if (runPos.length < world.size) {
-          runPos = new Int16Array(world.size);
-        }
-      }
-      const fam = FAMILY[e];
-      let y1 = y;
-      while (y1 + 1 < h && FAMILY[el[(y1 + 1) * w + x]] === fam && RUN[el[(y1 + 1) * w + x]]) y1++;
-      for (let yy = y; yy <= y1; yy++) {
-        runPos[yy * w + x] = yy - y;
-      }
-      y = y1 + 1;
+  if (bodyStack.length < world.size) {
+    bodyStack = new Int32Array(world.size);
+    bodyCells = new Int32Array(world.size);
+  }
+  // 1. the body's cells, and its open surface (the seeds)
+  let top = 0;
+  let n = 0;
+  let seeds = 0;
+  bodyStamp[i] = frameId;
+  bodyStack[top++] = i;
+  while (top > 0) {
+    const c = bodyStack[--top];
+    bodyCells[n++] = c;
+    bodyLvl[c] = FAR;
+    const x = c % w;
+    const y = (c / w) | 0;
+    if (openAbove(el, c, w)) seeds++;
+    if (x > 0) top = pushBody(el, c - 1, fam, top);
+    if (x < w - 1) top = pushBody(el, c + 1, fam, top);
+    if (y > 0) top = pushBody(el, c - w, fam, top);
+    if (y < h - 1) top = pushBody(el, c + w, fam, top);
+  }
+  // 2. distance from the open surface (a body covered all over: from its top cells), a step down
+  //    or up costing 1 and a sideways step SIDE_STEP, so depth is mostly straight down and open
+  //    water at the top of a narrow gap does not spread a pale cone across the body. A chamfer
+  //    transform: sweeps over the body's box until nothing changes (a few), deterministic.
+  const id = ++bodyCounter;
+  let x0 = w;
+  let x1 = 0;
+  let y0 = h;
+  let y1 = 0;
+  for (let m = 0; m < n; m++) {
+    const c = bodyCells[m];
+    const x = c % w;
+    const y = (c / w) | 0;
+    bodyId[c] = id;
+    if (x < x0) x0 = x;
+    if (x > x1) x1 = x;
+    if (y < y0) y0 = y;
+    if (y > y1) y1 = y;
+    const up = y > 0 ? el[c - w] : El.EMPTY;
+    const seed = seeds > 0 ? openAbove(el, c, w) : y === 0 || !(RUN[up] && FAMILY[up] === fam);
+    if (seed) bodyLvl[c] = 0;
+  }
+  const lower = (c: number, from: number, cost: number): boolean => {
+    if (bodyId[from] !== id) return false;
+    const d = bodyLvl[from] + cost;
+    if (d >= bodyLvl[c]) return false;
+    bodyLvl[c] = d;
+    return true;
+  };
+  for (let changed = true, pass = 0; changed && pass < 8; pass++) {
+    changed = false;
+    for (let y = y0 + 1; y <= y1; y++) for (let x = x0; x <= x1; x++) { const c = y * w + x; if (bodyId[c] === id && lower(c, c - w, 1)) changed = true; }
+    for (let y = y1 - 1; y >= y0; y--) for (let x = x0; x <= x1; x++) { const c = y * w + x; if (bodyId[c] === id && lower(c, c + w, 1)) changed = true; }
+    for (let y = y0; y <= y1; y++) {
+      for (let x = x0 + 1; x <= x1; x++) { const c = y * w + x; if (bodyId[c] === id && lower(c, c - 1, SIDE_STEP)) changed = true; }
+      for (let x = x1 - 1; x >= x0; x--) { const c = y * w + x; if (bodyId[c] === id && lower(c, c + 1, SIDE_STEP)) changed = true; }
     }
   }
-  return any;
+  for (let m = 0; m < n; m++) if (bodyLvl[bodyCells[m]] > DEPTH_CAP) bodyLvl[bodyCells[m]] = DEPTH_CAP;
+  // 3. soften it sideways (a sloped surface steps from column to column): the mean over the body's
+  //    cells within BLUR cells along the row
+  for (let m = 0; m < n; m++) {
+    const c = bodyCells[m];
+    const x = c % w;
+    const row = c - x;
+    let sum = 0;
+    let cnt = 0;
+    for (let xx = Math.max(0, x - BLUR); xx <= Math.min(w - 1, x + BLUR); xx++) {
+      const j = row + xx;
+      if (bodyId[j] !== id) continue;
+      sum += bodyLvl[j];
+      cnt++;
+    }
+    bodyDepthF[c] = sum / cnt;
+  }
+  return bodyDepthF[i];
 }
 
-/**
- * Cells below the surface for the run cell `ref`, the surface being the mean surface row of the
- * runs of this family in the columns around it (same row), so a stepped surface does not band.
- */
-function smoothedDepth(world: World, ref: number, fam: number): number {
-  const { w, el } = world;
-  const rx = ref % w;
-  const ry = (ref / w) | 0;
-  const row = ry * w;
-  let sum = 0;
-  let n = 0;
-  for (let x = Math.max(0, rx - SURF_REACH); x <= Math.min(w - 1, rx + SURF_REACH); x++) {
-    const ne = el[row + x];
-    if (!RUN[ne] || FAMILY[ne] !== fam) continue;
-    sum += ry - runPos[row + x]; // that column's surface row
-    n++;
+/** Open surface: air for OPEN_AIR cells straight above (an air pocket trapped in the body does not count). */
+function openAbove(el: Uint8Array, c: number, w: number): boolean {
+  for (let k = 1, j = c - w; k <= OPEN_AIR; k++, j -= w) {
+    if (j < 0) return true;
+    if (el[j] !== El.EMPTY) return false;
   }
-  return n > 0 ? Math.max(0, ry - sum / n) : runPos[ref];
+  return true;
 }
+
+function pushBody(el: Uint8Array, j: number, fam: number, top: number): number {
+  if (bodyStamp[j] === frameId) return top;
+  const e = el[j];
+  if (!RUN[e] || FAMILY[e] !== fam) return top;
+  bodyStamp[j] = frameId;
+  bodyStack[top] = j;
+  return top + 1;
+}
+
 
 /** True if compose() already drew this cell from the generator's art (so it needs no shading). */
 function showsArt(world: World, view: ArtView, i: number): boolean {
@@ -266,19 +332,6 @@ export function shadeCells(
   const fxEnd = Math.min(w, Math.ceil(frontierX));
   ensure(world.size);
   frameId++;
-  let runCols: Uint8Array | undefined;
-  if (region) {
-    // runs only where something is drawn: the region's columns, plus spill donors and the surface average each side
-    if (colMask.length < w) colMask = new Uint8Array(w);
-    runCols = colMask;
-    runCols.fill(0, 0, w);
-    for (let t = 0; t < region.tiles.length; t++) {
-      if (!region.tiles[t]) continue;
-      const x0 = (t % region.cols) * region.size;
-      runCols.fill(1, Math.max(0, x0 - 1 - SURF_REACH), Math.min(w, x0 + region.size + 1 + SURF_REACH));
-    }
-  }
-  const haveRuns = computeRuns(world, runCols);
   px.tick = world.tick;
   cellView.tick = world.tick;
 
@@ -402,8 +455,8 @@ export function shadeCells(
     px.cx = cx;
     px.cy = cy;
     px.topEdge = (key & (1 << 12)) !== 0 && (key & (1 << 7)) === 0;
-    const isRun = haveRuns && RUN[e] === 1;
-    const pos = isRun ? smoothedDepth(world, ref, FAMILY[e]) : 0;
+    const isRun = RUN[e] === 1;
+    const pos = isRun ? bodyDepth(world, ref, FAMILY[e]) : 0;
 
     paintCell(out, sh, cov, subFor(k), k, aw, cx, cy, pos, isRun ? RUN_DEPTH : 1, useBase, refColor);
   }
@@ -433,7 +486,7 @@ function paintCell(
     // the same for the whole pixel row
     px.y = cy * k + sy;
     px.fy = fy;
-    px.depth = len > 1 ? Math.min(1, (pos + fy) / len) : 0;
+    px.depth = len > 1 ? Math.max(0, Math.min(1, (pos + fy) / len)) : 0;
     for (let sx = 0; sx < k; sx++) {
       const s2 = (sy * k + sx) * 2;
       const cover = cov[s2 + 1];

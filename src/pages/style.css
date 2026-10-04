@@ -1656,3 +1656,50 @@ header.top nav .sound-toggle {
     text-decoration: underline;
   }
 }
+
+/* ---------- Gallery submissions: the painter's name, strokes taken, and the note on the win scroll ---------- */
+
+.submit-note {
+  margin: 10px 0 0;
+  font-size: 14px;
+  color: var(--ink-soft);
+}
+
+.submit-note .alias,
+.gallery-alias {
+  font-family: var(--font-brush);
+  font-size: 1.15em;
+  letter-spacing: 0.06em;
+  color: var(--ink);
+  font-weight: 400;
+}
+
+.submit-note a {
+  color: var(--seal);
+}
+
+.gallery-strokes {
+  margin: 0;
+  font-size: 14px;
+}
+
+.gallery-strokes b {
+  font-size: 18px;
+  margin-right: 4px;
+}
+
+/* a small red seal on the entry that needed the fewest strokes */
+.gallery-best {
+  display: inline-block;
+  margin-left: 10px;
+  padding: 1px 6px;
+  font: 400 14px var(--font-brush);
+  color: #fff7ee;
+  background: var(--seal);
+  border-radius: 3px 5px 2px 4px;
+  vertical-align: 1px;
+}
+
+.gallery-caption .gallery-alias {
+  font-size: 18px;
+}

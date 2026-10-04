@@ -18,11 +18,6 @@ export const Flag = {
   CUT: 2,
   /** Cell was written by the frontier reveal from the blueprint. */
   GENERATED: 4,
-  /**
-   * Fuel growing on rock (e.g. a tree painted over a mountain face): when it burns out it turns
-   * back into ROCK instead of leaving a hole. Stays with the position, like CUT.
-   */
-  ON_ROCK: 8,
   /** The position has more material stacked behind its front cell (see World.behindEl). */
   HAS_BEHIND: 16,
   /** The position is already in World's pending-promotion list this tick. */

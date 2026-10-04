@@ -54,7 +54,7 @@ describe('mid row at low height', () => {
       let worst = 0;
       for (let x = 0; x < aw; x++) {
         let y = 0;
-        while (y < ah && bp.art!.fg[y * aw + x] >>> 24 < 128) y++;
+        while (y < ah && Math.max(bp.art!.planes[1][y * aw + x] >>> 24, bp.art!.planes[3][y * aw + x] >>> 24) < 128) y++;
         if (prev >= 0) worst = Math.max(worst, Math.abs(y - prev));
         prev = y;
       }
@@ -69,7 +69,7 @@ describe('ground bank', () => {
     for (let s = 1; s <= 3; s++) {
       const bp = generate(s, defaultParams(), { k: K, dims: { w: 320, h: 96 }, features: { trees: false } });
       const ground = [...bp.registry.strokes.values()].find((q) => q.kind === 'rock')!;
-      const own = artOf(bp).fg.own;
+      const own = artOf(bp).planes[1].buf.own;
       const aw = bp.w * K;
       // The wavy top edge stays within +-K of groundTop * K, so this row is always inside the bank.
       const y = groundTop(bp.h) * K + K - 1;

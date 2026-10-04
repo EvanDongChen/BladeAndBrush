@@ -1,4 +1,5 @@
-import type { ArtBuffers } from './blueprint';
+import type { ArtView } from './blueprint';
+import { NO_PLANE } from './constants';
 import { El, rgba } from './elements';
 
 /** Same base color as the paper layer (without its grain). */
@@ -17,86 +18,105 @@ export function over(top: number, under: number): number {
   return (ch(0) | (ch(8) << 8) | (ch(16) << 16) | (Math.round(oa) << 24)) >>> 0;
 }
 
-/** The art with its per-mode blends computed once, so each frame only copies pixels. */
+/** The art composited once as generated (nothing broken yet), so untouched cells only copy pixels. */
 export interface PreparedArt {
   k: number;
-  /** Background only (cell removed). */
-  bg: Uint32Array;
-  /** fg over bg (untouched empty cell: soft edges, far ridges). */
-  sky: Uint32Array;
-  /** fg over bg over paper (untouched solid cell; opaque). */
-  solid: Uint32Array;
-  /** The pre-overpaint rock art over bg over paper, if the art has `under`. */
-  under: Uint32Array | null;
+  view: ArtView;
+  initial: Uint32Array;
 }
 
-const prepared = new WeakMap<ArtBuffers, PreparedArt>();
+const prepared = new WeakMap<ArtView['art'], PreparedArt>();
 
-/** Precompute (once per art, cached) the blends compose() needs. */
-export function prepareArt(art: ArtBuffers): PreparedArt {
-  let p = prepared.get(art);
-  if (p) return p;
-  const n = art.fg.length;
-  const sky = new Uint32Array(n);
-  const solid = new Uint32Array(n);
-  for (let i = 0; i < n; i++) {
-    sky[i] = over(art.fg[i], art.bg[i]);
-    solid[i] = over(sky[i], PAPER_RGBA);
+/**
+ * Composite one art pixel back to front: paper (under solid cells), the background plane, then the
+ * planes. A plane counts as real if it is `from` or behind it (unless `spillOnly`); a plane nearer
+ * than that only contributes its soft edges, where it never had a cell of its own.
+ */
+function pixel(view: ArtView, p: number, paper: boolean, from: number, spillOnly: boolean, cell: number): number {
+  const { art, planes } = view;
+  let acc = over(art.bg[p], paper ? PAPER_RGBA : 0);
+  for (let q = art.planes.length - 1; q >= 0; q--) {
+    const real = !spillOnly && q >= from;
+    if (!real && planes[q].el[cell] !== El.EMPTY) continue;
+    acc = over(art.planes[q][p], acc);
   }
-  let under: Uint32Array | null = null;
-  if (art.under) {
-    under = new Uint32Array(n);
-    for (let i = 0; i < n; i++) under[i] = over(over(art.under[i], art.bg[i]), PAPER_RGBA);
+  return acc;
+}
+
+/** Precompute (once per art, cached) the as-generated picture. */
+export function prepareArt(view: ArtView): PreparedArt {
+  let prep = prepared.get(view.art);
+  if (prep) return prep;
+  const { art, w, h } = view;
+  const k = art.k;
+  const aw = w * k;
+  const initial = new Uint32Array(aw * h * k);
+  for (let cy = 0; cy < h; cy++) {
+    for (let cx = 0; cx < w; cx++) {
+      const cell = cy * w + cx;
+      const solid = view.el[cell] !== El.EMPTY;
+      const from = solid ? (view.plane[cell] === NO_PLANE ? 0 : view.plane[cell]) : 0;
+      for (let yy = 0; yy < k; yy++) {
+        let p = (cy * k + yy) * aw + cx * k;
+        for (let xx = 0; xx < k; xx++, p++) initial[p] = pixel(view, p, solid, from, false, cell);
+      }
+    }
   }
-  p = { k: art.k, bg: art.bg, sky, solid, under };
-  prepared.set(art, p);
-  return p;
+  prep = { k, view, initial };
+  prepared.set(art, prep);
+  return prep;
 }
 
 /**
- * Build the art image (w*k x h*k) for this frame. Every art pixel belongs to a cell. Per cell,
- * left of frontierX:
- * - world cell non-empty and equal to the blueprint cell: solid (fg over bg over paper)
- * - world cell EMPTY and blueprint EMPTY (untouched sky): sky (fg over bg)
- * - world cell ROCK where the blueprint has something else on rock (a burnt face tree): under
- * - world cell EMPTY but blueprint not (slashed, burnt, nulled): bg only
- * - anything else (water, fire, ... drawn by the cells layer): transparent
+ * Build the art image (w*k x h*k) for this frame. Every art pixel belongs to a cell. Per cell, left
+ * of frontierX:
+ * - untouched (the world cell is what the generator put there): the precomputed picture
+ * - world cell is some other static material of the blueprint (a layer that moved forward after the
+ *   one in front broke): that layer's art, with the layers behind it, over paper
+ * - world cell EMPTY (everything in front of the background is gone): just the background
+ * - anything else (water, fire, ash... drawn by the cells layer): transparent
  */
-export function compose(
-  out: Uint32Array,
-  worldEl: Uint8Array,
-  bpEl: Uint8Array,
-  w: number,
-  h: number,
-  art: PreparedArt,
-  frontierX: number,
-): void {
-  const { k } = art;
+export function compose(out: Uint32Array, worldEl: Uint8Array, worldPlane: Uint8Array, prep: PreparedArt, frontierX: number): void {
+  const { k, view, initial } = prep;
+  const { w, h } = view;
   const aw = w * k;
   const fx = Math.max(0, Math.min(w, frontierX));
   for (let cy = 0; cy < h; cy++) {
     for (let cx = 0; cx < w; cx++) {
       const i = cy * w + cx;
-      const we = worldEl[i];
-      const be = bpEl[i];
-      const src =
-        cx >= fx
-          ? null
-          : we !== El.EMPTY
-            ? we === be
-              ? art.solid
-              : we === El.ROCK && be !== El.EMPTY
-                ? art.under
-                : null
-            : be === El.EMPTY
-              ? art.sky
-              : art.bg;
       const base = cy * k * aw + cx * k;
-      for (let yy = 0; yy < k; yy++) {
-        let p = base + yy * aw;
-        if (src) for (let xx = 0; xx < k; xx++, p++) out[p] = src[p];
-        else for (let xx = 0; xx < k; xx++, p++) out[p] = 0;
+      const we = worldEl[i];
+      if (cx >= fx) {
+        fill(out, base, aw, k, 0);
+      } else if (we === view.el[i] && worldPlane[i] === view.plane[i]) {
+        for (let yy = 0; yy < k; yy++) {
+          const row = base + yy * aw;
+          for (let xx = 0; xx < k; xx++) out[row + xx] = initial[row + xx];
+        }
+      } else if (we === El.EMPTY) {
+        // broken through everything: the background, plus soft edges of planes that never had a cell here
+        for (let yy = 0; yy < k; yy++) {
+          const row = base + yy * aw;
+          for (let xx = 0; xx < k; xx++) out[row + xx] = pixel(view, row + xx, false, 0, true, i);
+        }
+      } else {
+        const q = worldPlane[i];
+        if (q === NO_PLANE || view.planes[q]?.el[i] !== we) {
+          fill(out, base, aw, k, 0); // a dynamic or painted cell: its own color shows
+        } else {
+          for (let yy = 0; yy < k; yy++) {
+            const row = base + yy * aw;
+            for (let xx = 0; xx < k; xx++) out[row + xx] = pixel(view, row + xx, true, q, false, i);
+          }
+        }
       }
     }
+  }
+}
+
+function fill(out: Uint32Array, base: number, aw: number, k: number, v: number): void {
+  for (let yy = 0; yy < k; yy++) {
+    const row = base + yy * aw;
+    for (let xx = 0; xx < k; xx++) out[row + xx] = v;
   }
 }

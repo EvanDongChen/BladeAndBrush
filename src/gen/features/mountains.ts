@@ -1,6 +1,6 @@
 import { El, rgba } from '../../core/elements';
 import { registerFeature } from '../../core/features';
-import { artOf } from '../artState';
+import { artOf, PLANE } from '../artState';
 import { recordMountain } from '../mountainStore';
 import { contourWash } from '../paint/shaders';
 import { planOf, type Placement } from '../plan';
@@ -20,16 +20,17 @@ const PAPER_TONE: [number, number, number] = [236, 228, 210];
 const DRAW_ORDER: Record<string, number> = { far: 0, mid: 1, near: 2 };
 
 /**
- * Planned mountains (gen/plan.ts), back to front. Each is painted into the art (contour wash,
- * outline, texture strokes along its inner layers), then its ROCK cells follow the art's coverage;
- * nearer mountains overwrite farther ones.
+ * Planned mountains (gen/plan.ts), back to front. Each is painted complete into its plane's art
+ * (contour wash, outline, texture strokes along its inner layers) and its ROCK cells follow the
+ * art's coverage. The near row goes in the near plane, the mid row in the mid plane: the stack
+ * order hides the mid row behind the near one, and breaking through exposes it.
  */
 registerFeature({
   name: 'mountains',
   label: 'Mountains',
   order: 10,
   run: ({ bp, dims, params, rng, noise, newStroke }) => {
-    const { fg, fgPaint, u } = artOf(bp);
+    const { planes, u } = artOf(bp);
     const K = u.k;
     const ground = groundTop(dims.h) * K;
     const placements = planOf(bp)
@@ -43,6 +44,7 @@ registerFeature({
 
     function paintMountain(p: Placement): void {
       const tone = p.depth === 'mid' ? TONE.mid : TONE.near;
+      const plane = planes[p.depth === 'mid' ? PLANE.MID : PLANE.NEAR];
       const base = ground;
       const pr = getShape(p.kind).build(p, { u, params, base });
       if (pr.tops.length === 0) return;
@@ -68,12 +70,12 @@ registerFeature({
       });
       // Fill down to just inside the ground bank so no mountain floats.
       const tops = pr.tops.map((t) => (t < base ? t : u.artH));
-      fgPaint.fillColumns(pr.x0, tops, ground + K, shader, id);
+      plane.paint.fillColumns(pr.x0, tops, ground + K, shader, id);
 
       // Outline along the silhouette.
       const outline: [number, number][] = [];
       for (let j = 0; j < tops.length; j += 2) if (tops[j] < base) outline.push([pr.x0 + j, tops[j]]);
-      fgPaint.stroke(outline, { width: K * 0.7, color: rgba(...tone.ink, tone.outline), noise: 0.6 }, noise);
+      plane.paint.stroke(outline, { width: K * 0.7, color: rgba(...tone.ink, tone.outline), noise: 0.6 }, noise);
 
       // Texture: short strokes along the inner layers, more with ruggedness.
       const win = 24;
@@ -83,21 +85,23 @@ registerFeature({
           const len = 16 + rng.int(33);
           const path: [number, number][] = [];
           for (let s = j; s < Math.min(layer.length, j + len); s += 2) if (layer[s] < base) path.push([pr.x0 + s, layer[s]]);
-          fgPaint.stroke(path, { width: K * 0.35, color: rgba(...tone.ink, tone.texture), noise: 0.5 }, noise);
+          plane.paint.stroke(path, { width: K * 0.35, color: rgba(...tone.ink, tone.texture), noise: 0.5 }, noise);
         }
       }
 
-      rasterizeCoverage(bp, fg, K, id, El.ROCK, bp, [cell(pr.x0), cell(pr.peakY), cell(pr.x0 + tops.length), cell(ground + K)], true);
-      recordMountain(bp, { id, depth: p.depth, profile: pr });
+      rasterizeCoverage(bp, plane.buf, K, id, El.ROCK, plane.grid, [cell(pr.x0), cell(pr.peakY), cell(pr.x0 + tops.length), cell(ground + K)], true);
+      recordMountain(bp, { id, depth: p.depth, plane: p.depth === 'mid' ? PLANE.MID : PLANE.NEAR, profile: pr });
     }
 
-    /** Nearer mountains may hide farther ones completely: drop those, and fit bboxes to what is left. */
+    /** Mountains in the same plane may hide each other completely: drop those, and fit bboxes to what is left. */
     function pruneHidden(owned: number[]): void {
+      const near = planes[PLANE.NEAR].grid;
+      const mid = planes[PLANE.MID].grid;
       const boxes = new Map<number, [number, number, number, number]>();
       const mine = new Set(owned);
       for (let y = 0; y < dims.h; y++) {
         for (let x = 0; x < dims.w; x++) {
-          const o = bp.owner[y * dims.w + x];
+          const o = (mine.has(near.owner[y * dims.w + x]) ? near : mid).owner[y * dims.w + x];
           if (!mine.has(o)) continue;
           const b = boxes.get(o);
           if (!b) boxes.set(o, [x, y, x, y]);

@@ -6,6 +6,8 @@ import type { Profile } from './shapes';
 export interface MountainRec {
   id: number;
   depth: Depth;
+  /** The generator plane the mountain is in (PLANE.NEAR or PLANE.MID). */
+  plane: number;
   profile: Profile;
 }
 

@@ -4,6 +4,7 @@ import { Clock } from '../core/clock';
 import { describeGoal, evaluateGoal } from '../core/goals';
 import { levels, type LevelDef } from '../core/levels';
 import { defaultParams, params as paramDefs, type GenParams } from '../core/params';
+import { artView } from '../core/blueprint';
 import { Renderer } from '../core/render';
 import { ActionDriver } from '../core/replay';
 import { World } from '../core/world';
@@ -225,7 +226,7 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
   const stop = startLoop(
     clock,
     (dt) => {
-      renderer.draw(world, { cursor, frontierX: frontier.done ? undefined : frontier.x, art: bp.art ? { art: bp.art, el: bp.el } : undefined });
+      renderer.draw(world, { cursor, frontierX: frontier.done ? undefined : frontier.x, art: artView(bp) });
       fx.draw(renderer.g);
       if (down && cursor && isLineAbility(ability)) {
         const aim = aimEnd(pressedAt.x, pressedAt.y, cursor.x, cursor.y);

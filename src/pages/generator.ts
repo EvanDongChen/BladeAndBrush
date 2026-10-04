@@ -1,5 +1,5 @@
 import './bootstrap';
-import type { Blueprint } from '../core/blueprint';
+import { artView, type Blueprint } from '../core/blueprint';
 import { Clock } from '../core/clock';
 import { DEFAULT_DIMS } from '../core/constants';
 import { defaultParams } from '../core/params';
@@ -105,7 +105,7 @@ export function mountGenerator(root: HTMLElement): () => void {
 
   let frame = 0;
   const stop = startLoop(clock, () => {
-    renderer.draw(world, { frontierX: frontier.done ? undefined : frontier.x, art: bp.art ? { art: bp.art, el: bp.el } : undefined });
+    renderer.draw(world, { frontierX: frontier.done ? undefined : frontier.x, art: artView(bp) });
     if (frame++ % 10 === 0) {
       readout.update(scan(world));
       status.textContent = `seed ${seed} · tick ${world.tick} · frontier ${frontier.x}/${bp.w} · strokes ${bp.registry.strokes.size}`;

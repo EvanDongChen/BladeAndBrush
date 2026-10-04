@@ -92,7 +92,7 @@ describe('inkWash', () => {
 describe('rasterizeCoverage', () => {
   it('sets cells whose k x k block is at least half owned', () => {
     const bp = createBlueprint(1, defaultParams(), { w: 3, h: 1 });
-    const { fg } = attachArt(bp, 2);
+    const { buf: fg, grid } = attachArt(bp, 2).planes[1];
     // art is 6 x 2; cell c covers columns 2c..2c+1 of both rows
     fg.own[0] = 5;
     fg.own[1] = 5; // cell 0: 2 of 4 -> set
@@ -100,21 +100,21 @@ describe('rasterizeCoverage', () => {
     fg.own[4] = 5;
     fg.own[5] = 5;
     fg.own[10] = 5; // cell 2: 3 of 4 -> set
-    const bb = rasterizeCoverage(bp, fg, 2, 5, El.ROCK, bp, [0, 0, 2, 0], false);
-    expect(Array.from(bp.el)).toEqual([El.ROCK, El.EMPTY, El.ROCK]);
-    expect(bp.owner[2]).toBe(5);
+    const bb = rasterizeCoverage(bp, fg, 2, 5, El.ROCK, grid, [0, 0, 2, 0], false);
+    expect(Array.from(grid.el)).toEqual([El.ROCK, El.EMPTY, El.ROCK]);
+    expect(grid.owner[2]).toBe(5);
     expect(bb).toEqual([0, 0, 2, 0]);
   });
 
   it('does not overwrite a filled cell unless asked', () => {
     const bp = createBlueprint(1, defaultParams(), { w: 1, h: 1 });
-    const { fg } = attachArt(bp, 1);
-    bp.el[0] = El.ROCK;
+    const { buf: fg, grid } = attachArt(bp, 1).planes[1];
+    grid.el[0] = El.ROCK;
     fg.own[0] = 9;
-    expect(rasterizeCoverage(bp, fg, 1, 9, El.TREE, bp, [0, 0, 0, 0], false)).toBeNull();
-    expect(bp.el[0]).toBe(El.ROCK);
-    rasterizeCoverage(bp, fg, 1, 9, El.TREE, bp, [0, 0, 0, 0], true);
-    expect(bp.el[0]).toBe(El.TREE);
+    expect(rasterizeCoverage(bp, fg, 1, 9, El.TREE, grid, [0, 0, 0, 0], false)).toBeNull();
+    expect(grid.el[0]).toBe(El.ROCK);
+    rasterizeCoverage(bp, fg, 1, 9, El.TREE, grid, [0, 0, 0, 0], true);
+    expect(grid.el[0]).toBe(El.TREE);
   });
 });
 

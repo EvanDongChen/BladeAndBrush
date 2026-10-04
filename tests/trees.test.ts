@@ -117,45 +117,42 @@ describe('trees feature', () => {
     expect(count(none.el, El.TREE)).toBe(0);
   });
 
-  it('only face trees replace rock, and every one of those cells is marked onRock', () => {
+  it('trees stand in front of their terrain: the rock behind them is untouched', () => {
     const on = gen(2, { treeDensity: 0.9 });
     const off = gen(2, { treeDensity: 0.9 }, { trees: false });
-    let replaced = 0;
-    for (let i = 0; i < on.el.length; i++) {
-      if (off.el[i] === El.ROCK && on.el[i] === El.TREE) {
-        replaced++;
-        expect(on.onRock![i]).toBe(1);
-      }
-    }
-    expect(replaced).toBeGreaterThan(0); // face trees exist
-    expect(count(on.el, El.ROCK) + replaced).toBe(count(off.el, El.ROCK));
-    expect(on.onRock!.reduce((n, v) => n + v, 0)).toBe(replaced);
-    expect(on.art!.under).toBeDefined();
+    for (const q of [1, 3]) expect(Buffer.from(on.planes![q].el).equals(Buffer.from(off.planes![q].el))).toBe(true);
+    // some trees really do sit over rock (ridge lines across a face): the stack has TREE in front, ROCK behind
+    let overRock = 0;
+    for (let i = 0; i < on.el.length; i++) if (on.el[i] === El.TREE && on.behind![0].el[i] === El.ROCK) overRock++;
+    expect(overRock).toBeGreaterThan(0);
   });
 
-  it('every tree owns cells and stands on rock', () => {
+  it('every tree owns cells in an objects plane and stands on rock', () => {
     const bp = gen(3, { treeDensity: 0.7 });
     const trees = treeStrokes(bp);
     expect(trees.length).toBeGreaterThan(5);
     const owned = new Set<number>();
-    for (let i = 0; i < bp.el.length; i++) if (bp.el[i] === El.TREE) owned.add(bp.owner[i]);
+    for (const q of [0, 2]) for (let i = 0; i < bp.w * bp.h; i++) if (bp.planes![q].el[i] === El.TREE) owned.add(bp.planes![q].owner[i]);
     for (const t of trees) {
       expect(owned.has(t.id)).toBe(true);
       const [ax, ay] = t.anchor;
       let grounded = false;
-      // on rock, or (face trees) on rock it took over, which is marked onRock
       for (let y = ay - 1; y <= ay + 2; y++) {
         const i = y * bp.w + ax;
-        if (y >= 0 && y < bp.h && (bp.el[i] === El.ROCK || bp.onRock?.[i])) grounded = true;
+        if (y >= 0 && y < bp.h && (bp.planes![1].el[i] === El.ROCK || bp.planes![3].el[i] === El.ROCK)) grounded = true;
       }
       expect(grounded).toBe(true);
     }
   });
 
-  it('the scan counts exactly the registered trees', () => {
+  it('the scan counts the trees in front (the interactable ones), not trees hidden behind a mountain', () => {
     const bp = gen(4, { treeDensity: 0.6 });
     const world = new World(bp, 4);
     new Frontier(bp).revealAll(world);
-    expect(scan(world).counts.trees).toBe(treeStrokes(bp).length);
+    const visible = new Set<number>();
+    for (let i = 0; i < bp.el.length; i++) if (bp.el[i] === El.TREE) visible.add(bp.owner[i]);
+    expect(scan(world).counts.trees).toBe(visible.size);
+    expect(visible.size).toBeLessThanOrEqual(treeStrokes(bp).length);
+    expect(visible.size).toBeGreaterThan(0);
   });
 });

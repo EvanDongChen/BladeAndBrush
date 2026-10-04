@@ -29,7 +29,7 @@ registerLayer({
       px = new Uint32Array(image.data.buffer);
     }
     if (!offG || !image || !px) return;
-    compose(px, world.el, art.el, world.w, world.h, prepareArt(art.art), frontierX ?? world.w);
+    compose(px, world.el, world.plane, prepareArt(art), frontierX ?? world.w);
     offG.putImageData(image, 0, 0);
     g.drawImage(off, 0, 0, world.w, world.h);
   },

@@ -105,8 +105,7 @@ function burnOut(world: World, x: number, y: number, fuel: number): void {
   if (fuel !== 0) {
     if (world.events.has('burn')) world.events.emit('burn', { x, y, el: fuel });
     if (RIGID[fuel]) markUnsupported(world); // a burnt trunk drops its canopy
-    if (world.flags[y * world.w + x] & Flag.ON_ROCK) world.set(x, y, El.ROCK); // fuel growing on a mountain face: no hole
-    else if (r.chance(ashChanceOf(fuel))) world.set(x, y, El.ASH, { aux: r.int(256) });
+    if (r.chance(ashChanceOf(fuel))) world.set(x, y, El.ASH, { aux: r.int(256) });
     else if (r.chance(fireTunables.smokeChance)) world.set(x, y, El.SMOKE);
     else world.set(x, y, El.EMPTY);
   } else {

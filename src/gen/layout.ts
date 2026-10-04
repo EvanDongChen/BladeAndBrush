@@ -6,14 +6,17 @@
 export const DEPTH = {
   /** Feet of the distant ridges (background plane). */
   farTop: 0.29,
-  farBottom: 0.36,
+  farBottom: 0.35,
   /** Feet of the mountains: from far back to the front of the scene. */
-  mountTop: 0.42,
-  mountBottom: 0.94,
+  mountTop: 0.375,
+  mountBottom: 0.975,
+  /** Feet of the flat plateaus (the foreground land). */
+  flatTop: 0.69,
+  flatBottom: 0.875,
   /** Mountains whose foot is below this go in the near plane, above it in the mid plane. */
   split: 0.66,
   /** The foreground: boulders and big trees stand here. */
   foreTop: 0.86,
   /** A thin floor along the bottom (physics needs somewhere for things to land). */
-  floor: 0.965,
+  floor: 0.985,
 } as const;

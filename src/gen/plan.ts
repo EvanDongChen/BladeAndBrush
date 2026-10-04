@@ -21,7 +21,6 @@ export interface Placement {
 }
 
 const STEP = 10; // planning grid, painting units
-const EDGE = 60; // keep peak centers this far from the scroll ends
 
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 
@@ -42,70 +41,83 @@ export function makePlan(seed: number, params: GenParams, u: Units): Placement[]
   const noise = createNoise(hashSeed(seed, 'plan', 'noise'));
   const W = u.widthUnits;
   const H = SCROLL_H;
-  const mh = Math.max(0, params.mountainHeight);
+  const mh = Math.max(0, params.mountainHeight) * 2; // the slider's middle (0.5) is the reference size
   const sp = Math.min(1, Math.max(0, params.spacing));
-  const gap = minGap(sp);
   const out: Placement[] = [];
   if (mh <= 0) return out;
+  const depthOf = (y: number): Depth => (y > DEPTH.split * H ? 'near' : 'mid');
 
-  // 1. Cluster centres: the best-scoring x positions of a slow noise curve, at least `gap` apart.
+  // 1. Where mountains rise: high points of a noise curve along x. Tighter spacing = a faster
+  //    curve and a lower bar, so more of them.
+  const samp = 0.03 * lerp(1.35, 0.7, sp);
   const xs: number[] = [];
-  for (let x = EDGE; x <= W - EDGE; x += STEP) xs.push(x);
-  const raw = (x: number) => noise.fbm1(x / 400, 3);
+  for (let x = 0; x <= W; x += STEP / 2) xs.push(x);
+  const raw = xs.map((x) => noise.fbm1(x * samp, 4));
   let lo = Infinity;
   let hi = -Infinity;
-  for (const x of xs) {
-    lo = Math.min(lo, raw(x));
-    hi = Math.max(hi, raw(x));
+  for (const v of raw) {
+    lo = Math.min(lo, v);
+    hi = Math.max(hi, v);
   }
-  const score = (x: number) => (hi > lo ? (raw(x) - lo) / (hi - lo) : 1);
-  xs.sort((a, b) => score(b) - score(a) || a - b);
-  const centres: number[] = [];
-  for (const x of xs) if (!centres.some((c) => Math.abs(c - x) < gap)) centres.push(x);
+  const score = raw.map((v) => (hi > lo ? (v - lo) / (hi - lo) : 0));
+  const bar = lerp(0.72, 0.86, sp);
+  const peaks: number[] = [];
+  const minApart = lerp(260, 700, sp); // clusters keep open land between them
+  const order = xs.map((_, i) => i).sort((a, b) => score[b] - score[a]);
+  for (const i of order) {
+    if (score[i] < bar) break;
+    if (peaks.some((q) => Math.abs(q - xs[i]) < minApart)) continue;
+    peaks.push(xs[i]);
+  }
 
-  // 2. Each centre is a cluster of mountains at several depths (feet at different y), jittered in
-  //    x, so nearer ones overlap farther ones: that overlap is what reads as depth.
-  const spread = 160 + 140 * sp;
-  for (const c of centres) {
-    const s = score(c);
-    const n = 2 + rng.int(2) + (s > 0.6 ? 1 : 0);
+  // 2. At each, a stack of mountains at several depths (feet every 30 units from the back), jittered
+  //    sideways: the nearer ones overlap the farther ones, which is what reads as depth.
+  const cover = new Uint8Array(Math.ceil(W / STEP) + 1);
+  const taken: number[] = [];
+  const jitter = 260 * (0.5 + 0.5 * sp);
+  for (const px of peaks) {
+    // 2-4 mountains per cluster, their feet spread through the depth range
+    const count = 2 + Math.floor(noise.n1(px * 0.01 + 31.4) * 2.99);
+    const start = rng.range(0, 0.3);
+    for (let k = 0; k < count; k++) {
+      const y = lerp(DEPTH.mountTop, DEPTH.mountBottom, Math.min(1, start + (k / count) * 0.75 + rng.range(0, 0.1))) * H;
+      if (y > DEPTH.mountBottom * H) break;
+      const x = Math.min(W, Math.max(0, px + rng.range(-1, 1) * jitter));
+      if (taken.some((t) => Math.abs(t - x) < 10)) continue;
+      taken.push(x);
+      const halfWidth = rng.range(200, 300);
+      out.push({ kind: 'peak', x, y, halfWidth, height: mh * rng.range(100, 500), depth: depthOf(y), seed: 0 });
+      for (let c = Math.max(0, Math.floor((x - 200) / STEP)); c <= Math.min(cover.length - 1, Math.ceil((x + 200) / STEP)); c++) cover[c] = 1;
+    }
+  }
+
+  // 3. Plateaus (flat mountains) where nothing else stands: the foreground land.
+  for (let c = 0; c < cover.length; c++) {
+    if (cover[c] || !rng.chance(0.012 * lerp(1.5, 0.6, sp))) continue;
+    const n = 1 + rng.int(3);
     for (let j = 0; j < n; j++) {
-      const t = (j + rng.next()) / n; // 0 = farthest back in the cluster, 1 = nearest
-      const y = lerp(DEPTH.mountTop, DEPTH.mountBottom, t) * H;
-      const height = mh * lerp(260, 900, s) * rng.range(0.55, 1.05) * (0.8 + 0.3 * t);
-      if (height < 4) continue;
-      const kind = j > 0 && rng.chance(0.2) ? 'flat' : 'peak';
+      const y = lerp(DEPTH.flatBottom, DEPTH.flatTop, j / 3) * H;
       out.push({
-        kind,
-        x: Math.min(W, Math.max(0, c + rng.range(-1, 1) * spread)),
+        kind: 'flat',
+        x: Math.min(W, Math.max(0, c * STEP + rng.range(-1, 1) * 450)),
         y,
-        halfWidth: height * rng.range(0.55, 0.9) + 60,
-        height: kind === 'flat' ? height * 0.55 : height,
-        depth: y > DEPTH.split * H ? 'near' : 'mid',
+        halfWidth: rng.range(300, 500),
+        height: mh * rng.range(70, 120),
+        depth: depthOf(y),
         seed: 0,
       });
     }
   }
 
-  // 3. Low flat mountains in the wide gaps between clusters, toward the front.
-  const sorted = [...centres].sort((a, b) => a - b);
-  for (let i = 0; i + 1 < sorted.length; i++) {
-    const a = sorted[i];
-    const b = sorted[i + 1];
-    if (b - a < 1.4 * gap || !rng.chance(0.6)) continue;
-    const y = rng.range(0.8, 0.92) * H;
-    out.push({ kind: 'flat', x: (a + b) / 2 + rng.range(-60, 60), y, halfWidth: rng.range(220, 380), height: mh * rng.range(110, 200), depth: 'near', seed: 0 });
-  }
-
   // 4. Distant ridges, high on the page, across the whole scroll (background plane).
   const farRng = new Rng(hashSeed(seed, 'plan', 'far'));
-  for (let x = farRng.range(-100, 150); x < W + 200; x += farRng.range(380, 760)) {
+  for (let x = farRng.range(-300, 100); x < W + 300; x += farRng.range(700, 1100)) {
     out.push({
       kind: 'far',
       x: Math.min(W, Math.max(0, x)),
       y: farRng.range(DEPTH.farTop, DEPTH.farBottom) * H,
-      halfWidth: farRng.range(320, 560),
-      height: mh * farRng.range(170, 330),
+      halfWidth: [250, 500, 750][farRng.int(3)],
+      height: mh * farRng.range(110, 170),
       depth: 'far',
       seed: 0,
     });

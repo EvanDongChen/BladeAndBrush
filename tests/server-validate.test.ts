@@ -27,6 +27,19 @@ describe('validateSubmission', () => {
     expect(validateSubmission(body()).playerName).toBeNull();
   });
 
+  it('keeps the strokes taken and the budget when they are sane whole numbers', () => {
+    const v = validateSubmission(body({ result: { pass: true, progress: 1, strokes: 5, budget: 8 } }));
+    expect(v.result).toEqual({ pass: true, progress: 1, strokes: 5, budget: 8 });
+    // older clients that send neither still work
+    expect(validateSubmission(body()).result).toEqual({ pass: true, progress: 1 });
+  });
+
+  it('rejects strokes that are negative, fractional or absurd', () => {
+    for (const strokes of [-1, 1.5, 1001, '3', Number.NaN]) {
+      expect(() => validateSubmission(body({ result: { pass: true, progress: 1, strokes } })), String(strokes)).toThrow();
+    }
+  });
+
   it('rejects bad shapes', () => {
     for (const bad of [
       body({ seed: 1.5 }),

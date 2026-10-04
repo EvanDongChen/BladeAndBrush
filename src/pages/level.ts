@@ -21,8 +21,11 @@ import { aimEnd, aimTunables, chargeOf, drawAim, isLineAbility, lineColor } from
 import { step } from '../sim/step';
 import { siteHeader } from './chrome';
 import { audio } from '../audio/engine';
+import { submitWin, type WinData } from '../gallery/submit';
+import { APP_VERSION } from '../gallery/version';
 import { Fx } from './fx';
 import { arsenal } from './arsenal';
+import { nameMenu } from './nameMenu';
 import { button, h, handscroll, panel, seal, soundToggle, startLoop, toCell } from './ui';
 
 /** Header for players: no links to the workshops. */
@@ -96,6 +99,9 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
   // the red seal pressed onto the painting when the poem is complete
   const stamp = h('div', { class: 'stamp', 'aria-hidden': 'true' }, seal('完成', 'stamp-seal'));
   let winTimer = 0;
+  const submitNote = h('p', { class: 'submit-note' }); // in the completion scroll: where the painting was sent
+  const names = nameMenu((alias) => void sendToGallery(alias)); // in the completion scroll: sign the painting
+  let winData: WinData | null = null;
   const mount = h('span', { class: 'mount', 'aria-hidden': 'true' }); // the silk the painting is mounted on
   // a small gold bead on the bottom silk that follows the painting's song across the scroll
   const musicMark = h('span', { class: 'music-mark', 'aria-hidden': 'true' });
@@ -111,6 +117,10 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
     phase = 'play';
     marks = [];
     clearTimeout(winTimer);
+    winData = null;
+    submitNote.replaceChildren();
+    names.hide();
+    names.busy(false);
     stamp.classList.remove('on');
     complete?.close();
     banner.hidden = true;
@@ -224,6 +234,38 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
     ink.setAttribute('aria-label', `Ink left: ${left} of ${level.actionBudget}`);
   };
 
+  // ---- victory: the player signs the painting with a name and it goes to the gallery ----
+
+  /** The finished painting as a picture, without the cursor, peak marks or ink trails drawn over it. */
+  function snapshot(): string {
+    renderer.draw(world, { art: artView(bp) });
+    const out = document.createElement('canvas');
+    out.width = Math.min(1440, canvas.width);
+    out.height = Math.round((out.width * canvas.height) / canvas.width);
+    out.getContext('2d')?.drawImage(canvas, 0, 0, out.width, out.height);
+    return out.toDataURL('image/jpeg', 0.85);
+  }
+
+  async function sendToGallery(alias: string): Promise<void> {
+    if (!winData) return;
+    const strokes = winData.result.strokes ?? 0;
+    names.busy(true);
+    submitNote.replaceChildren(`Sending your painting to the gallery as ${alias}…`);
+    try {
+      await submitWin(winData, alias);
+      names.hide();
+      submitNote.replaceChildren(
+        'Sent to the gallery as ',
+        h('b', { class: 'alias' }, alias),
+        ` in ${strokes} ${strokes === 1 ? 'stroke' : 'strokes'}. `,
+        h('a', { href: './gallery.html' }, 'See it'),
+      );
+    } catch {
+      names.busy(false);
+      submitNote.replaceChildren('The gallery could not be reached. Press Send to try again.');
+    }
+  }
+
   const next = levels.all()[levels.all().findIndex((l) => l.id === level.id) + 1];
   complete = handscroll(
     'level complete',
@@ -232,6 +274,8 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
       { class: 'complete' },
       h('h3', {}, '完成'),
       h('p', {}, 'The landscape matches the poem.'),
+      names.node,
+      submitNote,
       h(
         'p',
         { class: 'cta-row' },
@@ -263,6 +307,19 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
     if (all && started) {
       phase = 'won';
       world.events.emit('levelWin', { levelId: level.id });
+      winData = {
+        levelId: level.id,
+        seed: level.seed,
+        params: { ...params },
+        actionLog: driver.log,
+        png: snapshot(),
+        result: { pass: true, progress: 1, strokes: used, budget: level.actionBudget },
+        scan: { ...result.counts },
+        worldHash: world.hash(),
+        appVersion: APP_VERSION,
+      };
+      submitNote.replaceChildren('Choose a name to sign your painting and send it to the gallery.');
+      names.show();
       stamp.classList.add('on'); // the seal lands first, then the scroll unrolls
       winTimer = window.setTimeout(() => {
         complete!.node.hidden = false;

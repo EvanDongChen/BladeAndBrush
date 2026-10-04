@@ -22,6 +22,26 @@ import { chooseMode, chooseRoot, degreeToMidi, type ModeName } from './theory';
  */
 export type Voice = 'guzheng' | 'pipa' | 'guqin' | 'harmonic' | 'dizi' | 'erhu' | 'chime' | 'muyu' | 'drum' | 'gong';
 
+/** Highest MIDI note each voice plays; anything above drops by octaves so nothing gets shrill. */
+export const TOP: Record<Voice, number> = {
+  guzheng: 84,
+  pipa: 81,
+  guqin: 72,
+  harmonic: 84,
+  dizi: 81,
+  erhu: 79,
+  chime: 88,
+  muyu: 127,
+  drum: 127,
+  gong: 127,
+};
+
+/** The note moved down whole octaves until it fits under its voice's TOP (same pitch class). */
+export function fitRange(voice: Voice, midi: number): number {
+  const top = TOP[voice];
+  return midi <= top ? midi : midi - 12 * Math.ceil((midi - top) / 12);
+}
+
 export interface Note {
   /** Offset from the start of the step, in beats (a step lasts one beat). */
   beat: number;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { Voice } from '../src/audio/composer';
+import { fitRange, TOP, type Voice } from '../src/audio/composer';
 import { STEPS, type Landscape } from '../src/audio/profile';
 import { composeSong, INTRO, readScroll, songFor, type Mark, type Scroll } from '../src/audio/song';
 import { renderString } from '../src/audio/strings';
@@ -97,6 +97,19 @@ describe('the painting song', () => {
     }
   });
 
+  it('nothing plays above its voice\'s range, and folding keeps the pitch class', () => {
+    for (const seed of [1, 2, 3, 4, 5, 6]) {
+      const song = composeSong(scroll({ water: seed % 2 ? 0.6 : 0, rugged: 0.7 }, [{ at: 0.3, kind: 'bird' }, { at: 0.6, kind: 'moon' }]), seed);
+      for (const n of song.notes) {
+        const m = fitRange(n.voice, n.midi);
+        expect(m).toBeLessThanOrEqual(TOP[n.voice]);
+        expect((((m - n.midi) % 12) + 12) % 12).toBe(0);
+      }
+    }
+    expect(fitRange('dizi', 100)).toBeLessThanOrEqual(TOP.dizi);
+    expect(fitRange('dizi', 70)).toBe(70);
+  });
+
   it('the painting picks the mode and the lead', () => {
     const watery = composeSong(scroll({ water: 0.6 }), 1);
     expect(watery.mode).toBe('yu');
@@ -116,7 +129,7 @@ describe('the painting song', () => {
     const song = composeSong(scroll({}, marks), 9);
     const at = (i: number) => song.notes.filter((n) => inSlice(n.beat, i) || inSlice(n.beat - 0.5, i));
     expect(at(3).some((n) => n.voice === 'muyu')).toBe(true);
-    expect(at(12).some((n) => n.voice === 'dizi' || n.voice === 'chime')).toBe(true);
+    expect(at(12).filter((n) => n.voice === 'guzheng' && n.vel <= 0.35).length).toBeGreaterThanOrEqual(2);
     expect(at(20).some((n) => n.voice === 'harmonic')).toBe(true);
     expect(at(27).filter((n) => n.voice === 'guzheng').length).toBeGreaterThanOrEqual(6);
     expect(composeSong(scroll(), 9).notes.some((n) => n.voice === 'muyu')).toBe(false);

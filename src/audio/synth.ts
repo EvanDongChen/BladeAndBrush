@@ -13,7 +13,7 @@
  * renders offline. They do not touch the World.
  */
 import { Rng } from '../core/rng';
-import type { Note } from './composer';
+import { fitRange, type Note } from './composer';
 import { renderString, STRING_RATE, type StringKind } from './strings';
 import { midiToHz } from './theory';
 
@@ -88,11 +88,11 @@ export function stringBuffer(ctx: Ctx, kind: StringKind, midi: number): AudioBuf
   return buf;
 }
 
-const STRING_LEVEL: Record<StringKind, number> = { guzheng: 0.42, pipa: 0.4, guqin: 0.5 };
+const STRING_LEVEL: Record<StringKind, number> = { guzheng: 1, pipa: 0.85, guqin: 1 };
 
 /** Render the samples a list of notes will need now, so nothing renders while the music plays. */
 export function prepareStrings(ctx: Ctx, notes: readonly Note[]): void {
-  for (const n of notes) if (n.voice === 'guzheng' || n.voice === 'pipa' || n.voice === 'guqin') stringBuffer(ctx, n.voice, n.midi);
+  for (const n of notes) if (n.voice === 'guzheng' || n.voice === 'pipa' || n.voice === 'guqin') stringBuffer(ctx, n.voice, fitRange(n.voice, n.midi));
 }
 
 /** A plucked string, with an optional slide into the note and a pressed bend after it. */
@@ -146,11 +146,11 @@ export function harmonic(ctx: Ctx, out: AudioNode, t: number, hz: number, vel: n
 
 // ---- winds and bowed strings ----
 
-/** 笛子: a breathy flute that swells in and gains vibrato, with the buzz of its reed membrane. */
+/** 笛子: a soft, breathy flute that swells in and gains vibrato. */
 export function dizi(ctx: Ctx, out: AudioNode, t: number, hz: number, vel: number, dur: number, grace = 0): void {
   const g = ctx.createGain();
   g.connect(out);
-  const peak = 0.24 * vel;
+  const peak = 0.2 * vel;
   const end = t + dur + 0.08;
   g.gain.setValueAtTime(FLOOR, t);
   g.gain.linearRampToValueAtTime(peak, t + 0.06);
@@ -159,17 +159,15 @@ export function dizi(ctx: Ctx, out: AudioNode, t: number, hz: number, vel: numbe
 
   const vibDepth = ctx.createGain();
   vibDepth.gain.setValueAtTime(0, t);
-  vibDepth.gain.linearRampToValueAtTime(hz * 0.009, t + Math.min(0.6, dur * 0.6));
+  vibDepth.gain.linearRampToValueAtTime(hz * 0.006, t + Math.min(0.6, dur * 0.6));
   const vib = ctx.createOscillator();
   vib.frequency.value = 5.6;
   vib.connect(vibDepth);
   vib.start(t);
   vib.stop(end);
 
-  const partials = [['sine', 1, 1], ['sine', 2, 0.22], ['sine', 3, 0.08], ['sawtooth', 1, 0.05]] as const;
-  for (const [type, mult, level] of partials) {
+  for (const [mult, level] of [[1, 1], [2, 0.15], [3, 0.04]] as const) {
     const o = ctx.createOscillator();
-    o.type = type;
     if (grace) {
       o.frequency.setValueAtTime(hz * mult * Math.pow(2, grace / 12), t);
       o.frequency.setValueAtTime(hz * mult, t + 0.07);
@@ -180,19 +178,16 @@ export function dizi(ctx: Ctx, out: AudioNode, t: number, hz: number, vel: numbe
     vibDepth.connect(o.frequency);
     const og = ctx.createGain();
     og.gain.value = level;
-    // the sawtooth is the membrane buzz: only its upper partials, around 3 kHz
-    if (type === 'sawtooth') o.connect(filter(ctx, 'bandpass', 3200, 3)).connect(og);
-    else o.connect(og);
-    og.connect(g);
+    o.connect(og).connect(g);
     o.start(t);
     o.stop(end);
   }
 
   const breath = noise(ctx, true);
   const bg = ctx.createGain();
-  bg.gain.setValueAtTime(0.5, t);
-  bg.gain.linearRampToValueAtTime(0.18, t + 0.12); // chiff on the attack, then a steady breath
-  breath.connect(filter(ctx, 'bandpass', hz * 2, 5)).connect(bg).connect(g);
+  bg.gain.setValueAtTime(0.25, t);
+  bg.gain.linearRampToValueAtTime(0.08, t + 0.12); // a little chiff on the attack, then a soft breath
+  breath.connect(filter(ctx, 'bandpass', hz, 8)).connect(bg).connect(g);
   breath.start(t);
   breath.stop(end);
 }
@@ -368,13 +363,14 @@ export function crackle(ctx: Ctx, out: AudioNode, t: number, rng: Rng, vel = 0.6
 
 /** Schedule one composed note. `beatSec` is the length of a beat in seconds. */
 export function playNote(ctx: Ctx, out: AudioNode, note: Note, t: number, beatSec: number): void {
-  const hz = midiToHz(note.midi);
+  const midi = fitRange(note.voice, note.midi);
+  const hz = midiToHz(midi);
   const dur = note.dur * beatSec;
   switch (note.voice) {
     case 'guzheng':
     case 'pipa':
     case 'guqin':
-      return pluckString(ctx, out, t, note.voice, note.midi, note.vel, dur, note.slide ?? 0, note.bend ?? 0);
+      return pluckString(ctx, out, t, note.voice, midi, note.vel, dur, note.slide ?? 0, note.bend ?? 0);
     case 'harmonic':
       return harmonic(ctx, out, t, hz, note.vel, dur);
     case 'dizi':

@@ -97,10 +97,12 @@ export function soundToggle(): HTMLButtonElement {
   const b = h('button', { type: 'button', class: 'sound-toggle' });
   const sync = () => {
     const on = !audio.muted;
+    const waiting = on && !audio.running; // the browser holds sound until the page is clicked
     b.textContent = on ? '音' : '靜';
+    b.classList.toggle('waiting', waiting);
     b.setAttribute('aria-pressed', String(on));
-    b.setAttribute('aria-label', on ? 'Sound on. Click to mute.' : 'Sound off. Click to turn on.');
-    b.title = on ? 'Mute' : 'Sound on';
+    b.setAttribute('aria-label', waiting ? 'Click anywhere to start the music.' : on ? 'Sound on. Click to mute.' : 'Sound off. Click to turn on.');
+    b.title = waiting ? 'Click anywhere to start the music' : on ? 'Mute' : 'Sound on';
   };
   b.addEventListener('click', () => audio.toggle());
   audio.onChange(sync);

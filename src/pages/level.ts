@@ -353,11 +353,6 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
       renderer.inCells((g) => {
         fx.draw(g);
         drawPeaks(g);
-        const at = audio.playhead(); // a faint ink line follows the music across the scroll
-        if (at !== null) {
-          g.fillStyle = 'rgba(38, 34, 30, 0.3)';
-          g.fillRect(Math.floor(at * level.dims.w), 0, 1, level.dims.h);
-        }
       });
       if (down && cursor && isLineAbility(ability)) {
         const aim = aimEnd(pressedAt.x, pressedAt.y, cursor.x, cursor.y);

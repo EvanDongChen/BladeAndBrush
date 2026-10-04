@@ -13,7 +13,7 @@ import type { Blueprint } from '../core/blueprint';
 import type { GameEvents } from '../core/events';
 import { Rng } from '../core/rng';
 import type { World } from '../core/world';
-import { Composer, type Voice } from './composer';
+import { Composer, fitRange, type Voice } from './composer';
 import { readLandscape, STEPS, type Landscape } from './profile';
 import { songFor, type Song } from './song';
 import { chime, crackle, dizi, erhu, gong, noiseBuffer, playNote, pluckString, prepareStrings, thud, tick, whoosh } from './synth';
@@ -111,8 +111,14 @@ export class AudioEngine {
   async enable(): Promise<void> {
     if (typeof AudioContext === 'undefined') return;
     if (!this.ctx) {
-      this.ctx = new AudioContext();
-      this.nodes = this.build(this.ctx);
+      const ctx = new AudioContext();
+      this.ctx = ctx;
+      this.nodes = this.build(ctx);
+      // the browser may hold the context suspended until a gesture: start the music the moment it runs
+      ctx.addEventListener('statechange', () => {
+        if (this.running && !this.muted) this.startScheduler();
+        this.emitChange();
+      });
     }
     await this.ctx.resume();
     this.applyMute();
@@ -120,16 +126,19 @@ export class AudioEngine {
     this.emitChange();
   }
 
-  /** Start sound on the first click, tap or key press anywhere (unless the player muted it). */
+  /**
+   * Try to start sound right away (some browsers allow it, e.g. after a click on the previous page),
+   * and otherwise on the first click, tap or key press anywhere. Not if the player muted it.
+   */
   armOnGesture(): void {
     if (typeof window === 'undefined') return;
+    const kinds = ['pointerdown', 'click', 'touchend', 'keydown'] as const;
     const go = () => {
-      window.removeEventListener('pointerdown', go);
-      window.removeEventListener('keydown', go);
-      if (!this.muted) void this.enable();
+      if (this.running) for (const k of kinds) window.removeEventListener(k, go);
+      else if (!this.muted) void this.enable();
     };
-    window.addEventListener('pointerdown', go);
-    window.addEventListener('keydown', go);
+    for (const k of kinds) window.addEventListener(k, go);
+    if (!this.muted) void this.enable();
   }
 
   setMuted(muted: boolean): void {
@@ -270,7 +279,7 @@ export class AudioEngine {
 
   private applyMute(): void {
     if (!this.ctx || !this.nodes) return;
-    this.nodes.master.gain.setTargetAtTime(this.muted ? 0 : 0.8, this.ctx.currentTime, 0.08);
+    this.nodes.master.gain.setTargetAtTime(this.muted ? 0 : 1, this.ctx.currentTime, 0.08);
   }
 
   private startScheduler(): void {
@@ -360,7 +369,7 @@ export class AudioEngine {
       const h = this.world?.h ?? 1;
       if (c) {
         const degree = Math.round((1 - e.y0 / h) * 9) + 2;
-        pluckString(ctx, out, t + 0.02, 'pipa', c.melodyMidi(degree), 0.8, 1.2, -2);
+        pluckString(ctx, out, t + 0.02, 'pipa', fitRange('pipa', c.melodyMidi(degree)), 0.8, 1.2, -2);
       }
     });
   }
@@ -368,7 +377,7 @@ export class AudioEngine {
   private droplet(t: number, out: AudioNode): void {
     const c = this.composer;
     if (!c) return;
-    chime(this.ctx!, out, t, midiToHz(c.melodyMidi(9 + this.rng.int(5)) + 12), 0.5, 0.9);
+    chime(this.ctx!, out, t, midiToHz(fitRange('chime', c.melodyMidi(9 + this.rng.int(5)) + 12)), 0.5, 0.9);
   }
 
   /** A gong, a guzheng run up the scale, a long dizi note and the guqin's low tonic. */

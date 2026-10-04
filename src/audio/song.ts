@@ -57,7 +57,7 @@ const LEADS: Record<ModeName, [Lead, Lead]> = {
 };
 
 /** Octave each lead plays in, relative to the melody register. */
-const LEAD_SHIFT: Record<Lead, number> = { guzheng: 0, dizi: 12, erhu: 0, pipa: 0, guqin: -12 };
+const LEAD_SHIFT: Record<Lead, number> = { guzheng: 0, dizi: 0, erhu: 0, pipa: 0, guqin: -12 };
 
 /** Beats of intro before the song reaches the left edge of the scroll. */
 export const INTRO = 4;
@@ -198,7 +198,7 @@ export function composeSong(scroll: Scroll, seed: number): Song {
 
     // A peak under a plucked lead gets a long dizi note above it.
     if (isPeak && !sustained && lead !== 'pipa') {
-      add({ beat: b + 0.25, dur: 2.2, midi: mel(degree) + 12, voice: 'dizi', vel: 0.45, grace: stepUp(degree) });
+      add({ beat: b + 0.25, dur: 2.2, midi: mel(degree), voice: 'dizi', vel: 0.4, grace: stepUp(degree) });
     }
 
     // Accompaniment: a broken chord every two slices on the phrase's harmony.
@@ -223,9 +223,9 @@ export function composeSong(scroll: Scroll, seed: number): Song {
       add({ beat: b + 0.375, dur: 0.6, midi: mel(degree + 1), voice: 'pipa', vel: 0.25 });
     }
     if (has(i, 'bird', 'butterfly')) {
-      const top = mel(degree + 7) + (lead === 'dizi' ? 0 : 12);
-      if (lead === 'dizi') add({ beat: b + 0.5, dur: 1, midi: mel(degree + 7) + 12, voice: 'chime', vel: 0.35 });
-      else for (let k = 0; k < 6; k++) add({ beat: b + 0.5 + k / 12, dur: 0.12, midi: k % 2 ? top + stepUp(degree + 7) : top, voice: 'dizi', vel: 0.22 });
+      // a bird call: two light plucks, a step apart, above the melody
+      add({ beat: b + 0.5, dur: 0.8, midi: mel(degree + 4), voice: 'guzheng', vel: 0.3 });
+      add({ beat: b + 0.67, dur: 1.2, midi: mel(degree + 5), voice: 'guzheng', vel: 0.35 });
     }
     if (has(i, 'spring')) {
       for (let k = 0; k < 6; k++) add({ beat: b + 0.3 + k * 0.09, dur: 1.6, midi: mel(degree + 6 - k), voice: 'guzheng', vel: 0.3 - k * 0.03 });
@@ -255,7 +255,7 @@ export function composeSong(scroll: Scroll, seed: number): Song {
   for (let k = 0; k < 5; k++) add({ beat: t + k * 0.08, dur: 5, midi: low([0, 3, 5, 7, 10][k]) + 12, voice: 'guzheng', vel: 0.4 });
   add({ beat: t, dur: 6, midi: low(0), voice: 'guqin', vel: 0.6 });
   if (tall) add({ beat: t, dur: 6, midi: root - 12, voice: 'gong', vel: 0.5 });
-  else add({ beat: t + 0.5, dur: 2, midi: mel(10) + 12, voice: 'chime', vel: 0.4 });
+  else add({ beat: t + 0.5, dur: 2, midi: mel(10), voice: 'chime', vel: 0.4 });
 
   notes.sort((a, b) => a.beat - b.beat);
   return { root, mode, lead, bpm, notes, scroll: [INTRO, end], length: t + 6 };

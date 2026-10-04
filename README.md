@@ -6,6 +6,8 @@
 
 <p align="center"><b>Zhan-Shui (斬山水): cut the mountains, carve the water.</b></p>
 
+<p align="center">By Evan Chen and Emmy Fong</p>
+
 <p align="center"><a href="https://evandongchen.github.io/BladeAndBrush/"><b>Play it in your browser</b></a> · <a href="https://evandongchen.github.io/BladeAndBrush/tutorial.html">Tutorial</a> · <a href="https://evandongchen.github.io/BladeAndBrush/gallery.html">Gallery</a></p>
 
 ![A procedurally painted shan-shui landscape](src/images/bg.png)
@@ -20,17 +22,13 @@ Each scroll comes with a poem, and your task is to make the painting match it.
 
 ## How to play
 
-![Read the poem](src/images/howToPlay1.png)
+<p align="center">
+  <img src="src/images/howToPlay1.png" alt="Read the poem: each scroll opens with a few lines of verse, and every line is a goal" width="25%" />
+  <img src="src/images/howToPlay2.png" alt="Shape the painting: tune the mountains, the forest and the wind" width="25%" />
+  <img src="src/images/howToPlay3.png" alt="Take up the blade: slash, burn, pour and push until the painting matches the poem, then seal it" width="25%" />
+</p>
 
-**Read the poem.** Each scroll opens with a few lines of verse, and every line is a goal: one peak standing alone, a moon cleaved in two, rain falling on a thirsty village, a caged swarm set free. A line lights up when the painting fulfils it.
-
-![Shape the painting](src/images/howToPlay2.png)
-
-**Shape the painting.** Before you touch the blade, tune the landscape itself. Raise or lower the mountains, spread them apart, thicken the forest, turn the wind. The scroll repaints itself each time you let go.
-
-![Take up the blade](src/images/howToPlay3.png)
-
-**Take up the blade.** Your ink is measured in strokes, so every one counts. Drag to aim a stroke, hold to charge it, and release to strike:
+Your ink is measured in strokes, so every one counts. Drag to aim a stroke, hold to charge it, and release to strike:
 
 | | Ability | What it does |
 |---|---|---|

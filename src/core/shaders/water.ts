@@ -1,15 +1,16 @@
-import { hash3 } from '../elements';
-import { clamp01, lerp, pack, registerShader, smoothstep } from '../shaders';
+import { clamp01, lerp, mix, pack, registerShader, smoothstep } from '../shaders';
 
-/** Light at the surface to deep indigo at the bottom: a woodblock-print blue. */
-const TOP = [132, 172, 202];
-const BOT = [24, 44, 88];
+/** A pale blue-grey ink wash at the surface, deepening to a dark indigo wash at the bottom. */
+const TOP = [206, 222, 230];
+const BOT = [66, 96, 134];
+const INK = pack(44, 66, 100);
+const PAPER = pack(240, 238, 228);
 
 /**
- * Water: ONE gradient across the whole body (each vertical run of water is lit at its surface and
- * dark at its bottom), with two layers of fine brush streaks drifting in opposite directions and
- * crossing slowly: pale streaks that fade with depth, darker ones that deepen it, a bright rim at
- * the surface, and the odd pale glint.
+ * Water as an ink painter draws it: ONE wash across the whole body (each vertical run of water is
+ * pale at its surface and dark at its bottom), thin dark ink lines running through it, pale gaps
+ * between them, and a fine ink line along the waterline. The lines flow slowly in two directions
+ * and cross, so the water moves but stays a drawing.
  */
 registerShader({
   element: 'water',
@@ -18,27 +19,14 @@ registerShader({
   shade: (p) => {
     const t = clamp01(p.depth);
     const d = Math.pow(t, 0.85);
-    let r = lerp(TOP[0], BOT[0], d);
-    let g = lerp(TOP[1], BOT[1], d);
-    let b = lerp(TOP[2], BOT[2], d);
+    let col = pack(lerp(TOP[0], BOT[0], d), lerp(TOP[1], BOT[1], d), lerp(TOP[2], BOT[2], d));
     const a = p.tex('flow', p.x * 0.5 + p.tick * 0.8, p.y * 1.5);
     const c = p.tex('flow', p.x * 0.38 - p.tick * 0.5 + 91, p.y * 1.2 + 37);
-    const light = (Math.max(0, a - 0.55) * 2.4 + Math.max(0, c - 0.62) * 2) * (1 - 0.6 * t);
-    const dark = Math.max(0, 0.4 - a) * 1.5 + Math.max(0, 0.35 - c) * 1.2;
-    r += light * 70;
-    g += light * 70;
-    b += light * 55;
-    const shade = 1 - dark * 0.3;
-    r *= shade;
-    g *= shade;
-    b *= shade;
-    if (p.topEdge) {
-      const rim = 1 - smoothstep(0, 0.35, p.fy);
-      r += rim * 46;
-      g += rim * 46;
-      b += rim * 36;
-    }
-    if (t < 0.7 && (hash3(p.x >> 1, p.y >> 1, p.tick >> 3) & 511) === 0) return pack(222, 238, 246);
-    return pack(r, g, b);
+    const pale = (smoothstep(0.62, 0.7, c) * 0.5 + smoothstep(0.7, 0.8, a) * 0.3) * (1 - 0.7 * t);
+    col = mix(col, PAPER, pale * 0.5);
+    const line = smoothstep(0.64, 0.72, a) * 0.5 + smoothstep(0.7, 0.78, c) * 0.35;
+    col = mix(col, INK, Math.min(0.7, line) * (0.5 + 0.35 * t));
+    if (p.topEdge) col = mix(col, INK, (1 - smoothstep(0.1, 0.3, p.fy)) * 0.55);
+    return col;
   },
 });

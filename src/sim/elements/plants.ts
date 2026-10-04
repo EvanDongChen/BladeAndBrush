@@ -20,11 +20,9 @@ registerPlacer({
   place: (world, x, y, o) => {
     const hue = o.variant ?? world.rng.int(4);
     const cells: readonly [number, number, number][] = [
-      [0, -4, 1],
-      [0, -5, 0],
-      [-1, -4, 0],
-      [1, -4, 0],
-      [0, -3, 0],
+      [0, -3, 1],
+      [-1, -3, 0],
+      [1, -3, 0],
       [0, -2, 2],
       [0, -1, 2],
     ];

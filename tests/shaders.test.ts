@@ -36,18 +36,29 @@ describe('shader registry', () => {
 });
 
 describe('shadeCells', () => {
-  it('draws a lone cell with soft rounded corners, inside its own cell only', () => {
-    const wd = world(5, 5);
-    wd.set(2, 2, El.WATER);
+  it('draws a lone cell as a soft rounded blob that spills at most one cell around it', () => {
+    const wd = world(7, 7);
+    wd.set(3, 3, El.WATER);
     const out = run(wd);
-    expect(alphaAt(out, wd, 2 * K + 2, 2 * K + 2)).toBeGreaterThan(200); // centre
-    expect(alphaAt(out, wd, 2 * K, 2 * K)).toBeLessThan(alphaAt(out, wd, 2 * K + 2, 2 * K + 2)); // corner softer
-    for (let y = 0; y < 5 * K; y++) {
-      for (let x = 0; x < 5 * K; x++) {
-        const inCell = x >= 2 * K && x < 3 * K && y >= 2 * K && y < 3 * K;
-        if (!inCell) expect(out[y * 5 * K + x]).toBe(0);
+    expect(alphaAt(out, wd, 3 * K + 2, 3 * K + 2)).toBeGreaterThan(150); // centre
+    expect(alphaAt(out, wd, 3 * K, 3 * K)).toBeLessThan(alphaAt(out, wd, 3 * K + 2, 3 * K + 2)); // corner softer
+    for (let y = 0; y < 7 * K; y++) {
+      for (let x = 0; x < 7 * K; x++) {
+        const nearCell = x >= 2 * K && x < 5 * K && y >= 2 * K && y < 5 * K;
+        if (!nearCell) expect(out[y * 7 * K + x]).toBe(0);
       }
     }
+  });
+
+  it('turns a staircase edge into a smooth slope (the empty cells beside it get partly filled)', () => {
+    const wd = world(12, 12);
+    for (let i = 0; i < 8; i++) wd.set(2 + i, 2 + i, El.ROCK);
+    const out = run(wd);
+    // a cell just beside the diagonal's step has some ink, though the world cell there is empty
+    expect(wd.get(3, 2)).toBe(El.EMPTY);
+    let spill = 0;
+    for (let y = 2 * K; y < 3 * K; y++) for (let x = 3 * K; x < 4 * K; x++) spill += out[y * 12 * K + x] >>> 24;
+    expect(spill).toBeGreaterThan(0);
   });
 
   it('joins neighbouring cells without seams', () => {
@@ -80,17 +91,17 @@ describe('shadeCells', () => {
   });
 
   it('skips cells that are showing the generator art, shades the rest', () => {
-    const wd = world(6, 4);
-    const bp = createBlueprint(1, defaultParams(), { w: 6, h: 4 });
-    bp.el[1 * 6 + 1] = El.ROCK;
-    bp.plane = new Uint8Array(24).fill(NO_PLANE);
-    bp.plane[1 * 6 + 1] = 1;
-    const view: ArtView = { art: { k: K, planes: [], bg: new Uint32Array(0) }, w: 6, h: 4, el: bp.el, plane: bp.plane, planes: [] };
-    wd.set(1, 1, El.ROCK);
-    wd.plane[1 * 6 + 1] = 1; // pristine: same element and plane as the blueprint
-    wd.set(4, 1, El.ROCK); // not in the blueprint: a loose piece
+    const wd = world(12, 6);
+    const bp = createBlueprint(1, defaultParams(), { w: 12, h: 6 });
+    bp.el[2 * 12 + 1] = El.ROCK;
+    bp.plane = new Uint8Array(72).fill(NO_PLANE);
+    bp.plane[2 * 12 + 1] = 1;
+    const view: ArtView = { art: { k: K, planes: [], bg: new Uint32Array(0) }, w: 12, h: 6, el: bp.el, plane: bp.plane, planes: [] };
+    wd.set(1, 2, El.ROCK);
+    wd.plane[2 * 12 + 1] = 1; // pristine: same element and plane as the blueprint
+    for (let y = 1; y <= 3; y++) for (let x = 6; x <= 8; x++) wd.set(x, y, El.ROCK); // a loose piece, not in the blueprint
     const out = run(wd, view);
-    expect(alphaAt(out, wd, 1 * K + 2, 1 * K + 2)).toBe(0);
-    expect(alphaAt(out, wd, 4 * K + 2, 1 * K + 2)).toBeGreaterThan(200);
+    expect(alphaAt(out, wd, 1 * K + 2, 2 * K + 2)).toBe(0);
+    expect(alphaAt(out, wd, 7 * K + 2, 2 * K + 2)).toBeGreaterThan(200);
   });
 });

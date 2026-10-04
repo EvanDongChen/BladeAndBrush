@@ -1,5 +1,6 @@
 import { compose, prepareArt } from '../artCompose';
 import { registerLayer } from '../render';
+import { shadeCells } from '../shadeCells';
 
 let off: HTMLCanvasElement | null = null;
 let offG: CanvasRenderingContext2D | null = null;
@@ -7,18 +8,21 @@ let image: ImageData | null = null;
 let px: Uint32Array | null = null;
 
 /**
- * Hybrid art layer (section 3.8): every visible art pixel belongs to a cell that still matches
- * the blueprint (see compose()). Built at k x resolution offscreen, drawn once per frame.
+ * The ink layer (still named `art`): everything drawn at art resolution, in one buffer and one
+ * upload. First the generator's art for the cells that still match the blueprint (see compose()),
+ * then the shaders for the sim cells that do not (water, fire, loose pieces...). Pages without art
+ * (the sandbox) get just the shaders.
  */
 registerLayer({
   name: 'art',
   order: 20,
   kind: 'canvas',
   flag: 'artLayer',
-  draw: ({ g, world, art, frontierX }) => {
-    if (!art) return;
-    const aw = world.w * art.art.k;
-    const ah = world.h * art.art.k;
+  draw: ({ g, world, art, frontierX, scale, shaded }) => {
+    if (!art && !shaded) return;
+    const k = art ? art.art.k : scale;
+    const aw = world.w * k;
+    const ah = world.h * k;
     if (!off || off.width !== aw || off.height !== ah) {
       off = document.createElement('canvas');
       off.width = aw;
@@ -29,7 +33,9 @@ registerLayer({
       px = new Uint32Array(image.data.buffer);
     }
     if (!offG || !image || !px) return;
-    compose(px, world.el, world.plane, prepareArt(art), frontierX ?? world.w);
+    if (art) compose(px, world.el, world.plane, prepareArt(art), frontierX ?? world.w);
+    else px.fill(0);
+    if (shaded && k === scale) shadeCells(px, world, k, art, frontierX ?? world.w);
     offG.putImageData(image, 0, 0);
     g.drawImage(off, 0, 0, world.w, world.h);
   },

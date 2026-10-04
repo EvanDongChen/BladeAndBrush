@@ -5,6 +5,7 @@
  * has to know about gen/, sim/ or levels/.
  */
 import.meta.glob('../core/layers/*.ts', { eager: true });
+import.meta.glob('../core/shaders/*.ts', { eager: true });
 import.meta.glob('../sim/elements/*.ts', { eager: true });
 import.meta.glob('../gen/elements/*.ts', { eager: true });
 import.meta.glob('../sim/behaviors/*.ts', { eager: true });

@@ -15,7 +15,8 @@
     "server": "tsx watch server/index.ts",
     "start": "tsx server/index.ts",
     "bench": "vitest run --config bench/vitest.config.ts",
-    "bench:baseline": "node -e \"require('fs').copyFileSync('bench/results/latest.json','bench/baseline.json')\""
+    "bench:baseline": "node -e \"require('fs').copyFileSync('bench/results/latest.json','bench/baseline.json')\"",
+    "bench:browser": "node bench/browser.ts"
   },
   "engines": {
     "node": ">=22"
@@ -26,6 +27,7 @@
     "@types/pg": "^8.23.1",
     "eslint": "^9.39.5",
     "jsdom": "^26.1.0",
+    "playwright-core": "^1.63.0",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.71.0",
     "vite": "^6.4.3",

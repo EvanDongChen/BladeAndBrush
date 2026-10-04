@@ -85,8 +85,8 @@ function tapsFor(k: number): { b: Int8Array; w: Float32Array } {
 
 /**
  * Coverage tables: the B-spline blend `v` and the soft coverage of every sub-pixel depend only on
- * the 5x5 occupancy pattern (25 bits) and k, so each pattern is computed once. Entry s*2 = v,
- * s*2+1 = cover, for sub-pixel s = sy*k + sx.
+ * the 5x5 occupancy pattern (25 bits) and k, so each pattern is computed once. Entry s*2 = the shader's `v`
+ * (stretched so an interior reads ~1), s*2+1 = cover, for sub-pixel s = sy*k + sx.
  */
 const coverCache = new Map<number, Map<number, Float64Array>>();
 function coverFor(k: number, key: number): Float64Array {
@@ -108,12 +108,43 @@ function coverFor(k: number, key: number): Float64Array {
         for (let i2 = 0; i2 < 4; i2++) rs += T.w[sx * 4 + i2] * ((key >>> (row + bx + 1 + i2)) & 1);
         v += T.w[sy * 4 + j] * rs;
       }
-      tab[(sy * k + sx) * 2] = v;
+      tab[(sy * k + sx) * 2] = v < 0.44 ? v : 0.44 + (v - 0.44) * 1.3;
       tab[(sy * k + sx) * 2 + 1] = smoothstep(0.22, 0.56, v);
     }
   }
   byKey.set(key, tab);
   return tab;
+}
+
+/**
+ * Per-k sub-pixel constants: `f[s]` = position (s + 0.5) / k inside the cell, and for the colour
+ * blend of sub-pixel (sx, sy) its four nearest cells (`cell`, indices into the 3x3 col9) and their
+ * bilinear weights (`w`), in the order the blend adds them.
+ */
+const subCache = new Map<number, { f: Float64Array; cell: Uint8Array; w: Float64Array }>();
+function subFor(k: number): { f: Float64Array; cell: Uint8Array; w: Float64Array } {
+  let t = subCache.get(k);
+  if (t) return t;
+  t = { f: new Float64Array(k), cell: new Uint8Array(k * k * 4), w: new Float64Array(k * k * 4) };
+  for (let s = 0; s < k; s++) t.f[s] = (s + 0.5) / k;
+  for (let sy = 0; sy < k; sy++) {
+    const uy = t.f[sy] - 0.5;
+    const dyDir = uy < 0 ? -1 : 1;
+    const ay = Math.abs(uy);
+    for (let sx = 0; sx < k; sx++) {
+      const ux = t.f[sx] - 0.5;
+      const dxDir = ux < 0 ? -1 : 1;
+      const ax = Math.abs(ux);
+      for (let n = 0; n < 4; n++) {
+        const ddx = n & 1 ? dxDir : 0;
+        const ddy = n & 2 ? dyDir : 0;
+        t.cell[(sy * k + sx) * 4 + n] = (ddy + 1) * 3 + ddx + 1;
+        t.w[(sy * k + sx) * 4 + n] = (n & 1 ? ax : 1 - ax) * (n & 2 ? ay : 1 - ay);
+      }
+    }
+  }
+  subCache.set(k, t);
+  return t;
 }
 
 /** For `run` shaders: where each cell sits in its vertical run of the same family. */
@@ -310,40 +341,34 @@ export function shadeCells(
     const pos = isRun ? runPos[ref] : 0;
     const len = isRun ? Math.max(MIN_RUN, runLen[ref]) : 1;
 
+    const sub = subFor(k);
     for (let sy = 0; sy < k; sy++) {
-      const fy = (sy + 0.5) / k;
-      const uy = fy - 0.5;
-      const dyDir = uy < 0 ? -1 : 1;
-      const ay = Math.abs(uy);
+      const fy = sub.f[sy];
       const rowIdx = (cy * k + sy) * aw + cx * k;
+      // the same for the whole pixel row
+      px.y = cy * k + sy;
+      px.fy = fy;
+      px.depth = len > 1 ? (pos + fy) / len : 0;
       for (let sx = 0; sx < k; sx++) {
-        const fx = (sx + 0.5) / k;
-        const ux = fx - 0.5;
-        const v = cov[(sy * k + sx) * 2];
-        const cover = cov[(sy * k + sx) * 2 + 1];
+        const s2 = (sy * k + sx) * 2;
+        const cover = cov[s2 + 1];
         if (cover <= 0.01) continue;
         px.x = cx * k + sx;
-        px.y = cy * k + sy;
-        px.fx = fx;
-        px.fy = fy;
+        px.fx = sub.f[sx];
         px.cover = cover;
-        px.v = v < 0.44 ? v : 0.44 + (v - 0.44) * 1.3; // interior reads ~1, an edge ~0.5
-        px.depth = len > 1 ? (pos + fy) / len : 0;
+        px.v = cov[s2]; // interior reads ~1, an edge ~0.5
         if (useBase) {
           // blend the colors of the four nearest cells, weighted by occupancy
-          const dxDir = ux < 0 ? -1 : 1;
-          const ax = Math.abs(ux);
+          const s4 = (sy * k + sx) * 4;
           let wr = 0;
           let wg = 0;
           let wb = 0;
           let wa = 0;
           let ws = 0;
           for (let t = 0; t < 4; t++) {
-            const ddx = t & 1 ? dxDir : 0;
-            const ddy = t & 2 ? dyDir : 0;
-            const c = col9[(ddy + 1) * 3 + ddx + 1];
+            const c = col9[sub.cell[s4 + t]];
             if (c === 0) continue;
-            const wgt = (t & 1 ? ax : 1 - ax) * (t & 2 ? ay : 1 - ay);
+            const wgt = sub.w[s4 + t];
             wr += wgt * (c & 255);
             wg += wgt * ((c >>> 8) & 255);
             wb += wgt * ((c >>> 16) & 255);

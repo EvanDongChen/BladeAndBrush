@@ -1,6 +1,7 @@
 import './bootstrap';
 import { artView, type Blueprint } from '../core/blueprint';
 import { Clock } from '../core/clock';
+import { flags } from '../core/config';
 import { DEFAULT_DIMS } from '../core/constants';
 import { defaultParams } from '../core/params';
 import { Renderer } from '../core/render';
@@ -89,6 +90,12 @@ export function mountGenerator(root: HTMLElement): () => void {
     const p = toCell(canvas, e);
     world.clearCircle(p.x / DEFAULT_ART_K, p.y / DEFAULT_ART_K, digRadius, { cut: true });
   };
+  const farOn = h('input', { type: 'checkbox' });
+  farOn.checked = flags.farLayerInteractive;
+  farOn.addEventListener('change', () => {
+    flags.farLayerInteractive = farOn.checked;
+    rebuild();
+  });
   canvas.classList.add('paintable');
   canvas.addEventListener('pointerdown', (e) => {
     digging = true;
@@ -124,6 +131,7 @@ export function mountGenerator(root: HTMLElement): () => void {
           'Dig (test layers)',
           h('label', { class: 'row' }, h('span', {}, 'Drag to dig'), digOn),
           h('label', { class: 'row' }, h('span', {}, 'Radius'), digInput),
+          h('label', { class: 'row' }, h('span', {}, 'Far ridges interactive'), farOn),
           h('p', { class: 'home-note' }, 'Breaks cells; the layer behind comes forward. Restart (or change a slider) to refill.'),
         ),
         panel('Scan', readout.node),

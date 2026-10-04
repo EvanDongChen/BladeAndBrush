@@ -27,6 +27,8 @@ jobs:
       - run: npm run build
         env:
           GITHUB_PAGES: '1'
+          # Points the shipped gallery at the hosted API. Unset = localStorage mode.
+          VITE_GALLERY_API: ${{ vars.VITE_GALLERY_API }}
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist

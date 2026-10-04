@@ -20,8 +20,8 @@ registerLevel({
   },
   setpieces: [
     { type: 'moon', x: 0.5, y: 0.2, r: 0.075, clear: 0.09 },
-    { type: 'mountain', x: 0.27, height: 0.95 },
-    { type: 'mountain', x: 0.73, height: 0.95 },
+    { type: 'mountain', x: 0.27, height: 1.3, y: 0.72 },
+    { type: 'mountain', x: 0.73, height: 1.3, y: 0.72 },
   ],
   goals: [
     { type: 'metric', metric: 'moonBroken', op: '>=', n: 1, text: 'Break the moon' },

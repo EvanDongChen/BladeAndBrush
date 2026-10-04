@@ -21,7 +21,8 @@ registerLevel({
   setpieces: [
     { type: 'captives', count: 3, animal: 'bird' },
     { type: 'spring', rate: 0.5, x: 0.2 },
-    { type: 'people', count: 3, kind: 'trapper', tags: ['trapper'] },
+    { type: 'people', count: 2, kind: 'trapper', tags: ['trapper'], x0: 0.04, x1: 0.14, camp: true },
+    { type: 'people', count: 1, kind: 'trapper', tags: ['trapper'], x0: 0.86, x1: 0.94, camp: true },
   ],
   goals: [
     { type: 'metric', metric: 'animalsFreed', op: '>=', n: 1, text: 'Free every caged bird' },

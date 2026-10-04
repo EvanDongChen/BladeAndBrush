@@ -18,7 +18,7 @@ registerLevel({
     treeDensity: { value: 0.45 },
     gravity: { value: 2, locked: true, visible: false },
   },
-  setpieces: [{ type: 'mountain', x: 0.5, height: 1.3, width: 0.8 }],
+  setpieces: [{ type: 'mountain', x: 0.5, height: 1.5, y: 0.7, halfWidth: 0.1 }],
   goals: [
     { type: 'metric', metric: 'tallMountains', op: '==', n: 1, text: 'Exactly one tall peak' },
     { type: 'metric', metric: 'shortMountains', op: '==', n: 0, text: 'No lesser peaks' },

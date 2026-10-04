@@ -144,7 +144,7 @@ describe('levels', () => {
   }, 60_000);
 
   it('4 The Trap: open each hollow beside its bird, tap the spring, cut down the trappers', () => {
-    const { world, act, goals, used, level } = play('level-4');
+    const { world, act, goals } = play('level-4');
     const birds = objectsOf(world, 'bird');
     expect(birds).toHaveLength(3);
     expect(scan(world).counts.animalsTrapped).toBe(3);

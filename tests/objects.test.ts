@@ -109,7 +109,7 @@ describe('setpieces', () => {
   it('a forced mountain is planned where the level asks; a clearing stays free', () => {
     const bp = generate(5, params, opts([{ type: 'mountain', x: 0.5, height: 1 }, { type: 'clearing', x0: 0.1, x1: 0.3 }]));
     const u = artOf(bp).u;
-    const hints = hintsOf(bp, u)!;
+    const hints = hintsOf(bp)!;
     expect(hints.mountains).toHaveLength(1);
     const plan = makePlan(5, params, u, hints).filter((p) => p.depth !== 'far');
     expect(plan.some((p) => Math.abs(p.x - 0.5 * u.widthUnits) < 1 && p.depth === 'near')).toBe(true);

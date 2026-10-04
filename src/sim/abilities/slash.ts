@@ -7,6 +7,7 @@ import { markUnsupported } from '../behaviors/rigid';
 import { forCapsule } from '../brush';
 import { registerLineAbility } from '../lineAbility';
 import { CUTTABLE } from '../physics';
+import { isProtected } from '../protect';
 import { defineTunables } from '../tunables';
 
 export const slashTunables = defineTunables(
@@ -52,6 +53,7 @@ function carve(world: World, ax: number, ay: number, bx: number, by: number, r: 
   forCapsule(world, ax, ay, bx, by, r * (1 + roughness), (x, y, ox, oy, d) => {
     const n = edgeNoise.fbm2(x * grain, y * grain, 3); // 0..1
     if (d > r * (1 + roughness * (2 * n - 1))) return;
+    if (isProtected(world, y * w + x)) return; // the blade passes over what the level protects
     const prev = el[y * w + x];
     world.clearBehind(y * w + x);
     if (CUTTABLE[prev]) {

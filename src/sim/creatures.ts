@@ -222,8 +222,12 @@ function die(world: World, def: CreatureDef, c: Creature, burning: boolean): voi
   }
 }
 
-/** Nudges tried, in order, when an invulnerable creature has to re-form somewhere free. */
-const NUDGES: readonly [number, number][] = [[0, 0], [0, -1], [-1, 0], [1, 0], [0, -2], [-2, 0], [2, 0], [0, 1], [-1, -1], [1, -1], [0, -3], [-3, 0], [3, 0]];
+/** Nudges tried, nearest first, when an invulnerable creature has to re-form somewhere free. */
+const NUDGES: readonly [number, number][] = (() => {
+  const out: [number, number][] = [];
+  for (let dy = -6; dy <= 6; dy++) for (let dx = -6; dx <= 6; dx++) out.push([dx, dy]);
+  return out.sort((a, b) => a[0] * a[0] + a[1] * a[1] - (b[0] * b[0] + b[1] * b[1]) || a[1] - b[1] || a[0] - b[0]);
+})();
 
 /**
  * An invulnerable creature that lost a cell (cut, burnt, crushed) re-forms whole: what is left of it
@@ -273,7 +277,13 @@ function reform(world: World, def: CreatureDef, i: number, ax: number, ay: numbe
     draw(world, def, ax + dx, ay + dy, 0, 1, variant, 0, id);
     return true;
   }
-  return true; // nowhere to re-form right now: it is gone from view this tick but not dead (no splat)
+  // no room for all of it yet (a crowded hollow): it keeps one cell, its anchor, where this part
+  // was, and heal() grows it back whole as soon as there is room
+  const px = i % w;
+  const py = (i / w) | 0;
+  world.set(px, py, def.el, { aux: ANCHOR | def.paint(0, variant), owner: variant, obj: id, vx: 1, vy: 0 });
+  world.flags[i] |= Flag.UPDATED;
+  return true;
 }
 
 const cur: Creature = { x: 0, y: 0, frame: 0, face: 1, variant: 0, life: 0, obj: 0 };

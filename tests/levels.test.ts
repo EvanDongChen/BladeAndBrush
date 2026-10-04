@@ -148,11 +148,11 @@ describe('levels', () => {
     expect(goals()).toEqual([true, true, true]);
   }, 120_000);
 
-  it('4 The Trap: open each hollow beside its bird, tap the spring, cut down the trappers', () => {
+  it('4 The Trap: cut each hollow open to release its swarm, tap the spring, cut down the trappers', () => {
     const { world, act, goals } = play('level-4');
     const birds = objectsOf(world, null, 'captive');
-    expect(birds).toHaveLength(3);
-    expect(scan(world).counts.animalsTrapped).toBe(3);
+    expect(birds.length).toBeGreaterThanOrEqual(12); // swarms, not single birds
+    expect(scan(world).counts.animalsTrapped).toBe(birds.length);
     /** First open-air cell going from (x, y) along (dx, dy): where a cut from outside should start. */
     const outside = (x: number, y: number, dx: number, dy: number) => {
       const sky = skyReach(world);
@@ -164,22 +164,22 @@ describe('levels', () => {
       }
       return { x: x + dx * 120, y: y + dy * 120 };
     };
-    // open each hollow at its lower corner, from the open air, while the bird is up the other end
+    // one cut into each hollow: the birds cannot be hurt, so straight into the swarm
+    const hollows: { x: number; y: number; n: number }[] = [];
     for (const b of birds) {
-      const side = indexObjects(world).firstCell(b.id) % world.w < b.x ? 1 : -1;
-      for (let t = 0; t < 400; t++) {
-        const box = indexObjects(world).bbox(b.id);
-        if (box && (side > 0 ? box[2] < b.x : box[0] > b.x) && box[3] < b.y + 1) break;
-        step(world);
-      }
-      const end = { x: b.x + side * 4, y: b.y + 2 };
-      const from = outside(end.x, end.y, side * 0.7, -0.7);
-      act('slash', from.x, from.y, end.x, end.y, 1.5);
+      const h = hollows.find((o) => Math.abs(o.x / o.n - b.x) < 30 && Math.abs(o.y / o.n - b.y) < 20);
+      if (h) (h.x += b.x), (h.y += b.y), h.n++;
+      else hollows.push({ x: b.x, y: b.y, n: 1 });
+    }
+    for (const h of hollows) {
+      const end = { x: Math.round(h.x / h.n), y: Math.round(h.y / h.n) };
+      const from = outside(end.x, end.y, 0.7, -0.7);
+      act('slash', from.x, from.y, end.x, end.y, 2);
     }
     const spring = objectsOf(world, 'spring')[0];
     const tap = { x: spring.x, y: spring.bbox[3] - 1 };
     // tap it on the side away from the nearest bird, so its water does not flood a bird's way out
-    const nearest = birds.reduce((a, b) => (Math.abs(b.x - spring.x) < Math.abs(a.x - spring.x) ? b : a));
+    const nearest = birds.reduce((a, b) => (Math.abs(b.x - spring.x) < Math.abs(a.x - spring.x) ? b : a)); // a hollow's swarm
     const from = outside(tap.x, tap.y, nearest.x > spring.x ? -0.8 : 0.8, 0.6);
     act('slash', from.x, from.y, tap.x, tap.y, 3, 0, 900);
     for (let k = 0; k < 3; k++) {

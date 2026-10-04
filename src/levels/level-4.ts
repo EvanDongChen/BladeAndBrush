@@ -9,8 +9,8 @@ import { registerLevel } from '../core/levels';
 registerLevel({
   id: 'level-4',
   title: 'The Trap',
-  poem: ['Open the stone and let the caged birds fly,', 'wake the spring to fill a pond for them to drink;', 'and leave no trapper on the land.'],
-  tip: 'The caged birds cannot be hurt, so cut freely, but water in a tunnel blocks their way out: open the spring away from them.',
+  poem: ['Open the stone and let the caged swarms fly,', 'wake the spring to fill a pond for them to drink;', 'and leave no trapper on the land.'],
+  tip: 'A swarm of birds hides in each hollow. They cannot be hurt, so cut wide to let them pour out, but water in a tunnel blocks their way: open the spring away from them.',
   dims: DEFAULT_DIMS,
   seed: 44,
   params: {
@@ -21,7 +21,7 @@ registerLevel({
     wanderers: { value: 0, locked: true, visible: false }, // the only people here are the trappers
   },
   setpieces: [
-    { type: 'captives', count: 3, animal: 'bird', invulnerable: true },
+    { type: 'captives', count: 2, flock: 8, animal: 'bird', invulnerable: true }, // two hollows, a swarm in each
     { type: 'spring', rate: 0.5, x: 0.2 },
     { type: 'people', count: 2, kind: 'trapper', tags: ['trapper'], x0: 0.04, x1: 0.14, camp: true },
     { type: 'people', count: 1, kind: 'trapper', tags: ['trapper'], x0: 0.86, x1: 0.94, camp: true },

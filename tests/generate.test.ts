@@ -154,7 +154,7 @@ describe('mountains', () => {
   };
   const mean = (a: number[]) => a.reduce((s, v) => s + v, 0) / a.length;
   const wiggle = (a: number[]) => a.slice(1).reduce((s, v, i) => s + Math.abs(v - a[i]), 0);
-  const gen = (seed: number, over: Record<string, number>) => generate(seed, { ...defaultParams(), ...over }, { k, features: { trees: false } });
+  const gen = (seed: number, over: Record<string, number>) => generate(seed, { ...defaultParams(), ...over }, { k, features: { trees: false, clouds: false } });
 
   it('replace the stub bumps', () => {
     expect(enabledFeatures().map((f) => f.name)).toContain('mountains');

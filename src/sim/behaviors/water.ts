@@ -1,7 +1,9 @@
 import { registerBehavior } from '../../core/behaviors';
 import { El } from '../../core/elements';
 import type { World } from '../../core/world';
+import { CLOUD } from '../elements/cloud';
 import { at, BLOCKED, canSink, fall, moveCell, REPLACEABLE, slideDiagonal } from '../physics';
+import { dropThroughCloud } from './cloud';
 import { defineTunables } from '../tunables';
 
 export const waterTunables = defineTunables(
@@ -20,6 +22,7 @@ export const waterTunables = defineTunables(
  */
 export function updateWater(world: World, x: number, y: number): void {
   if (fall(world, x, y)) return;
+  if (at(world, x, y + 1) === CLOUD && world.inBounds(x, y + 1) && dropThroughCloud(world, x, y)) return; // water falls through clouds
   if (slideDiagonal(world, x, y)) return;
 
   const i = y * world.w + x;

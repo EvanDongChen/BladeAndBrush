@@ -21,8 +21,21 @@ const NAMES = ['E', 'SE', 'S', 'SW', 'W', 'NW', 'N', 'NE'];
 
 export function windPad(initial: { x: number; y: number }, onChange: (x: number, y: number) => void): WindPad {
   const canvas = h('canvas', { class: 'nature-dial wind-dial', tabindex: 0, role: 'slider', 'aria-label': 'Wind direction and strength' });
-  const readout = h('output', { class: 'nature-readout' });
-  const node = h('div', { class: 'nature-pad' }, h('span', { class: 'nature-title' }, 'Wind'), canvas, readout);
+  const value = h('output', { class: 'nature-value' });
+  const word = h('span', { class: 'nature-word' });
+  const node = h(
+    'div',
+    { class: 'nature-pad' },
+    canvas,
+    h(
+      'div',
+      { class: 'nature-info' },
+      h('span', { class: 'nature-title' }, 'Wind'),
+      value,
+      word,
+      h('span', { class: 'nature-hint' }, 'Drag the arrow to aim it. Double-click for calm.'),
+    ),
+  );
   const dpr = Math.min(2, window.devicePixelRatio || 1);
   canvas.width = SIZE * dpr;
   canvas.height = SIZE * dpr;
@@ -37,13 +50,16 @@ export function windPad(initial: { x: number; y: number }, onChange: (x: number,
 
   function describe(): void {
     const s = Math.hypot(wx, wy);
-    if (s < 0.05) readout.textContent = 'calm';
-    else {
+    if (s < 0.05) {
+      value.textContent = 'Calm';
+      word.textContent = 'still air';
+    } else {
       const a = Math.atan2(wy, wx); // screen angle, y down
       const name = NAMES[(Math.round(a / (Math.PI / 4)) + 8) % 8];
-      readout.textContent = `${name} wind · ${Math.round(s * 100)}%`;
+      value.textContent = `${name} ${Math.round(s * 100)}%`;
+      word.textContent = s < 0.35 ? 'a breeze' : s < 0.7 ? 'strong wind' : 'a gale';
     }
-    canvas.setAttribute('aria-valuetext', readout.textContent ?? '');
+    canvas.setAttribute('aria-valuetext', `${value.textContent}, ${word.textContent}`);
   }
 
   function update(x: number, y: number, report: boolean): void {

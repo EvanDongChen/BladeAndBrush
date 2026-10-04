@@ -23,8 +23,21 @@ const TRACK_X = 22;
 export function gravityPad(initial: number, range: { min: number; max: number; normal: number }, onChange: (v: number) => void): GravityPad {
   const { min, max, normal } = range;
   const canvas = h('canvas', { class: 'nature-dial gravity-dial', tabindex: 0, role: 'slider', 'aria-label': 'Gravity', 'aria-valuemin': min, 'aria-valuemax': max });
-  const readout = h('output', { class: 'nature-readout' });
-  const node = h('div', { class: 'nature-pad' }, h('span', { class: 'nature-title' }, 'Gravity'), canvas, readout);
+  const shown = h('output', { class: 'nature-value' });
+  const word = h('span', { class: 'nature-word' });
+  const node = h(
+    'div',
+    { class: 'nature-pad' },
+    canvas,
+    h(
+      'div',
+      { class: 'nature-info' },
+      h('span', { class: 'nature-title' }, 'Gravity'),
+      shown,
+      word,
+      h('span', { class: 'nature-hint' }, 'Drag the bead. Above the line, things fly up.'),
+    ),
+  );
   const dpr = Math.min(2, window.devicePixelRatio || 1);
   canvas.width = W * dpr;
   canvas.height = H * dpr;
@@ -40,11 +53,11 @@ export function gravityPad(initial: number, range: { min: number; max: number; n
   const yOf = (v: number) => TOP + ((v - min) / (max - min)) * (BOTTOM - TOP);
 
   function describe(): void {
-    const word =
+    word.textContent =
       value === 0 ? 'weightless' : value < 0 ? 'upside down' : value === normal ? 'normal' : value < normal ? 'light' : value >= normal + 4 ? 'crushing' : 'heavy';
-    readout.textContent = value === 0 ? 'float · weightless' : `${value < 0 ? '↑' : '↓'} ${Math.abs(value)} · ${word}`;
+    shown.textContent = value === 0 ? 'Float' : `${value < 0 ? '↑' : '↓'} ${Math.abs(value)}`;
     canvas.setAttribute('aria-valuenow', String(value));
-    canvas.setAttribute('aria-valuetext', readout.textContent ?? '');
+    canvas.setAttribute('aria-valuetext', `${shown.textContent}, ${word.textContent}`);
   }
 
   function update(v: number, report: boolean): void {

@@ -1275,30 +1275,29 @@ input[type='number'] {
 }
 
 .nature {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 28px;
-  margin-bottom: 6px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 10px;
+  margin-bottom: 10px;
 }
 
+/* each knob is a small card: the chart on the left, what it is set to on the right */
 .nature-pad {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 6px;
-}
-
-.nature-title {
-  font: 600 13px var(--font-serif);
-  color: var(--ink-soft);
+  gap: 14px;
+  padding: 10px 12px;
+  background: rgba(246, 240, 225, 0.55);
+  border: 1px solid var(--line);
+  border-radius: 4px;
 }
 
 .nature-dial {
+  flex: none;
   cursor: ns-resize;
   touch-action: none;
   border-radius: 6px;
-  background: rgba(246, 240, 225, 0.6);
+  background: rgba(255, 252, 244, 0.8);
   box-shadow: inset 0 0 0 1px var(--line);
 }
 
@@ -1312,11 +1311,37 @@ input[type='number'] {
   outline-offset: 2px;
 }
 
-.nature-readout {
-  font: 13px var(--font-serif);
+.nature-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.nature-title {
+  font: 600 11px var(--font-serif);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
   color: var(--ink-soft);
+}
+
+.nature-value {
+  font: 700 26px/1.1 var(--font-serif);
+  color: var(--ink);
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
+}
+
+.nature-word {
+  font: italic 14px var(--font-serif);
+  color: var(--seal);
+}
+
+.nature-hint {
+  margin-top: 6px;
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--ink-soft);
 }
 
 /* ---------- Level page: stage HUD ---------- */

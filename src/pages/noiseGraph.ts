@@ -10,12 +10,15 @@ import { button, h } from './ui';
  * the painting will have, all standing on one ground line (nearest in front) because the scanner
  * measures every mountain from its own foot. The red line is the scanner's tall-peak bar. A dot
  * marks every peak the scanner will count: filled red above the bar (a tall peak), a ring below.
- * A mountain without a dot is hidden behind others (or is a plateau) and does not count.
+ * Mountains that do not count (summit hidden in the painting, or a plateau) merge into one faint
+ * shape behind. A legend (top right) names the marks, and the readout under the graph says what
+ * the thing under the pointer does, so the panel needs no instructions.
  *
  * - Drag the red line down to grow every mountain under it (mountain height), up to shrink them.
  * - Drag a mountain up or down to change only that one's height; double-click it to undo that.
- * - The ruler under the mountains is the least gap between mountain groups (spacing): drag its
+ * - The ruler in the top-left corner is the least gap between mountain groups (spacing): drag its
  *   right end. Spacing decides which mountains exist, so it drops per-mountain height edits.
+ *   Ticks along the bottom mark the group centres.
  *
  * Edits only change the graph. The painting changes when Redraw is pressed.
  */
@@ -31,8 +34,9 @@ export interface NoiseGraph {
 
 /** Pointer slop around the red line and the ruler's handle, px. */
 const LINE_GRAB = 7;
-/** The spacing ruler's distance above the bottom edge, px. */
-const RULER_Y = 12;
+/** The spacing ruler's place in the top-left corner, px. */
+const RULER_X = 10;
+const RULER_Y = 22;
 
 export function noiseGraph(opts: {
   seed: () => number;
@@ -64,25 +68,12 @@ export function noiseGraph(opts: {
     pending = { ...pending, heights: {} };
     recompute();
   });
-  const hint = h(
-    'p',
-    { class: 'home-note' },
-    [
-      lockH ? 'This painting keeps its mountain heights.' : 'Drag the red line down to raise every mountain, up to lower them. Drag one mountain up or down to change just that one; double-click it to put it back.',
-      lockS ? '' : 'Drag the end of the ruler underneath to spread the mountain groups out or bring them closer.',
-      'Red dots are tall peaks (above the line), rings are lesser ones.',
-      lockH && lockS ? '' : 'Press Redraw to paint it.',
-    ]
-      .filter(Boolean)
-      .join(' '),
-  );
   const node = h(
     'div',
     { class: 'noise-wrap' },
     canvas,
     readout,
     h('div', { class: 'row' }, redrawBtn, revertBtn, ...(lockH ? [] : [resetBtn])),
-    hint,
   );
 
   interface Edits {
@@ -113,17 +104,9 @@ export function noiseGraph(opts: {
   /** Graph y of the tall-peak bar. */
   const tallY = () => sky.h - sky.tallRise;
 
-  /** The ruler: from the left of the closest pair of groups, minApart long (cells). */
+  /** The ruler, in cells: fixed at the top-left corner, minApart long. */
   const ruler = () => {
-    const g = sky.groups;
-    let a = g.length ? g[0] : sky.w * 0.1;
-    let best = Infinity;
-    for (let i = 1; i < g.length; i++) {
-      if (g[i] - g[i - 1] < best) {
-        best = g[i] - g[i - 1];
-        a = g[i - 1];
-      }
-    }
+    const a = (RULER_X / Math.max(1, canvas.clientWidth)) * sky.w;
     return { a, b: a + sky.minApart };
   };
 
@@ -147,10 +130,12 @@ export function noiseGraph(opts: {
     const dirty = !same(pending, drawn);
     let text = `Height ${pending.mh.toFixed(2)} · spacing ${pending.sp.toFixed(2)} · ${sky.groups.length} group${sky.groups.length === 1 ? '' : 's'} · ${tall} tall peak${tall === 1 ? '' : 's'}, ${peaks.length - tall} lesser`;
     if (edited) text += ` · ${edited} mountain${edited === 1 ? '' : 's'} resized`;
-    if (hover?.kind === 'mountain') {
+    if (hover?.kind === 'line') text = 'Red line: peaks above it are tall. Drag down to raise every mountain, up to lower them';
+    else if (hover?.kind === 'gap') text = `Min gap between mountain groups (spacing ${pending.sp.toFixed(2)}): drag to spread them out or bring them closer`;
+    else if (hover?.kind === 'mountain') {
       const s = pending.heights[hover.m.index] ?? 1;
-      const kind = hover.m.peak ? (hover.m.peak.tall ? 'tall peak' : 'lesser peak') : hover.m.kind === 'flat' ? 'plateau, not a peak' : 'hidden, not counted';
-      text += ` · this one: ${kind}${s === 1 ? '' : `, ×${s.toFixed(2)}`}`;
+      const kind = hover.m.peak ? (hover.m.peak.tall ? 'tall peak' : 'lesser peak') : hover.m.kind === 'flat' ? 'plateau, not a peak' : 'summit hidden behind a taller mountain, not counted';
+      text = `This mountain: ${kind}${s === 1 ? '' : `, ×${s.toFixed(2)}`} · drag up or down to resize it${s === 1 ? '' : ', double-click to put it back'}`;
     }
     if (dirty) text += ' · not painted yet';
     readout.textContent = text;
@@ -179,16 +164,32 @@ export function noiseGraph(opts: {
       for (let j = 0; j < m.tops.length; j++) g.lineTo((m.x0 + j) * sx, gy(m, m.tops[j]) * sy);
       g.lineTo((m.x0 + m.tops.length - 1) * sx, ht);
     };
-    // Back to front, the way the painting stacks them; farther rows are washed greyer. Far
-    // ridges are background (never scanned) and left out.
+    // Mountains that do not count (summit hidden in the painting, or a plateau): one faint merged
+    // shape behind, no outlines, so they never read as peaks. Far ridges (never scanned) are left out.
+    const rest = new Float32Array(Math.ceil(sky.w)).fill(sky.h);
     for (const m of sky.mountains) {
-      if (m.depth === 'far') continue;
+      if (m.depth === 'far' || m.peak) continue;
+      for (let j = 0; j < m.tops.length; j++) {
+        const x = m.x0 + j;
+        if (x >= 0 && x < rest.length) rest[x] = Math.min(rest[x], gy(m, m.tops[j]));
+      }
+    }
+    g.beginPath();
+    g.moveTo(0, ht);
+    for (let x = 0; x < rest.length; x++) g.lineTo(x * sx, rest[x] * sy);
+    g.lineTo(w, ht);
+    g.closePath();
+    g.fillStyle = 'rgba(120, 112, 100, 0.16)';
+    g.fill();
+    // The mountains that count, back to front, each with its dot.
+    for (const m of sky.mountains) {
+      if (m.depth === 'far' || !m.peak) continue;
       const hot = hover?.kind === 'mountain' && hover.m.index === m.index;
       const edited = pending.heights[m.index] !== undefined;
       outline(m);
-      g.fillStyle = hot ? '#efe5cf' : m.depth === 'mid' ? '#e4dccb' : '#f6f0e2';
+      g.fillStyle = hot ? '#efe5cf' : '#f6f0e2';
       g.fill();
-      g.strokeStyle = hot || edited ? '#8a2a1e' : m.depth === 'mid' ? 'rgba(46, 43, 40, 0.55)' : '#2e2b28';
+      g.strokeStyle = hot || edited ? '#8a2a1e' : '#2e2b28';
       g.lineWidth = hot ? 2 : 1;
       g.stroke();
     }
@@ -215,16 +216,16 @@ export function noiseGraph(opts: {
     }
 
     // Spacing: a tick under every group centre, and the ruler (least gap between groups).
-    const ry = ht - RULER_Y;
     g.strokeStyle = '#6b645c';
     g.lineWidth = 1;
     for (const x of sky.groups) {
       g.beginPath();
-      g.moveTo(x * sx, ry - 4);
-      g.lineTo(x * sx, ry + 4);
+      g.moveTo(x * sx, ht);
+      g.lineTo(x * sx, ht - 7);
       g.stroke();
     }
-    const { a, b } = drag?.kind === 'gap' ? { a: drag.anchor, b: drag.anchor + sky.minApart } : ruler();
+    const ry = RULER_Y;
+    const { a, b } = ruler();
     const gapHot = !lockS && (hover?.kind === 'gap' || drag?.kind === 'gap');
     g.beginPath();
     g.moveTo(a * sx, ry);
@@ -263,6 +264,57 @@ export function noiseGraph(opts: {
         g.stroke();
       }
     }
+    legend(g, w);
+  }
+
+  /** Top-right key: what the marks mean. */
+  function legend(g: CanvasRenderingContext2D, w: number): void {
+    const rows: [string, (x: number, y: number) => void][] = [
+      ['tall peak', (x, y) => {
+        g.beginPath();
+        g.arc(x, y, 3.5, 0, Math.PI * 2);
+        g.fillStyle = '#b22222';
+        g.fill();
+      }],
+      ['lesser peak', (x, y) => {
+        g.beginPath();
+        g.arc(x, y, 3.5, 0, Math.PI * 2);
+        g.fillStyle = '#f6f0e2';
+        g.fill();
+        g.strokeStyle = '#2e2b28';
+        g.lineWidth = 1.25;
+        g.stroke();
+      }],
+      ['tall line', (x, y) => {
+        g.beginPath();
+        g.moveTo(x - 6, y);
+        g.lineTo(x + 6, y);
+        g.strokeStyle = '#b22222';
+        g.lineWidth = 2;
+        g.stroke();
+      }],
+      ['not a peak', (x, y) => {
+        g.fillStyle = 'rgba(120, 112, 100, 0.3)';
+        g.fillRect(x - 6, y - 4, 12, 8);
+      }],
+    ];
+    g.font = '11px ui-monospace, Consolas, monospace';
+    const bw = 18 + Math.max(...rows.map(([t]) => g.measureText(t)?.width ?? t.length * 7)) + 8;
+    const bh = rows.length * 15 + 6;
+    const x0 = w - bw - 6;
+    const y0 = 6;
+    g.fillStyle = 'rgba(250, 246, 236, 0.9)';
+    g.fillRect(x0, y0, bw, bh);
+    g.strokeStyle = 'rgba(46, 43, 40, 0.25)';
+    g.lineWidth = 1;
+    g.strokeRect(x0 + 0.5, y0 + 0.5, bw - 1, bh - 1);
+    g.textBaseline = 'middle';
+    rows.forEach(([text, mark], i) => {
+      const y = y0 + 10 + i * 15;
+      mark(x0 + 11, y);
+      g.fillStyle = '#2e2b28';
+      g.fillText(text, x0 + 21, y);
+    });
   }
 
   /** Pointer in grid cells, plus graph px y and px per cell. */
@@ -282,13 +334,13 @@ export function noiseGraph(opts: {
     const p = at(e);
     const r = canvas.getBoundingClientRect();
     const pxPerCellX = r.width / sky.w;
-    if (!lockS && Math.abs(p.x - ruler().b) * pxPerCellX <= LINE_GRAB + 2 && Math.abs(r.height - RULER_Y - p.py) <= LINE_GRAB + 2)
+    if (!lockS && Math.abs(p.x - ruler().b) * pxPerCellX <= LINE_GRAB + 2 && Math.abs(RULER_Y - p.py) <= LINE_GRAB + 2)
       return { kind: 'gap' };
     if (lockH) return null;
     if (Math.abs(p.y - tallY()) * p.perCell <= LINE_GRAB) return { kind: 'line' };
     for (let i = sky.mountains.length - 1; i >= 0; i--) {
       const m = sky.mountains[i];
-      if (m.depth === 'far') continue;
+      if (m.depth === 'far' || !m.peak) continue; // only the mountains that count can be grabbed
       const t = m.tops[Math.round(p.x) - m.x0];
       // Inside the silhouette, or a few px above its top so short ones are easy to grab.
       if (t !== undefined && t < m.base && p.y >= gy(m, t) - 6 / p.perCell) return { kind: 'mountain', m };

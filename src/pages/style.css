@@ -250,6 +250,17 @@ canvas.paintable {
   color: var(--ink-soft);
 }
 
+/* fixedPanel(): a heading, not a toggle (no hover, no roll mark) */
+.panel-fixed,
+.panel-fixed:hover {
+  cursor: default;
+  background: var(--paper-2);
+}
+
+.panel-fixed::after {
+  content: none;
+}
+
 .panel.rolled .panel-toggle {
   border-bottom-color: transparent;
 }

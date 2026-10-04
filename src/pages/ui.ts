@@ -47,6 +47,16 @@ export function panel(title: string, ...children: (Node | string)[]): HTMLElemen
   return section;
 }
 
+/** A panel that always stays open: the same look as panel(), with a plain heading instead of a toggle. */
+export function fixedPanel(title: string, ...children: (Node | string)[]): HTMLElement {
+  return h(
+    'section',
+    { class: 'panel' },
+    h('h3', {}, h('span', { class: 'panel-toggle panel-fixed' }, title)),
+    h('div', { class: 'panel-body' }, h('div', { class: 'panel-inner' }, ...children)),
+  );
+}
+
 export function button(label: string, onClick: () => void, attrs: Attrs = {}): HTMLButtonElement {
   const b = h('button', { type: 'button', ...attrs }, label);
   b.addEventListener('click', onClick);

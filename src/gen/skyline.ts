@@ -16,7 +16,7 @@ export interface SkyMountain {
   depth: Depth;
   /** Foot of the mountain. */
   base: number;
-  /** Where the scanner measures it from: the foot plus the occluder's skirt. */
+  /** Where the scanner measures it from: the cell row below the occluder's skirt. */
   foot: number;
   /** Silhouette top per column, from x0; `h` where the shape is absent. */
   x0: number;
@@ -73,7 +73,7 @@ export function skyline(
     const base = u.toArt(p.y);
     const pr = getShape(p.kind).build(p, { u, params, base });
     if (pr.tops.length === 0) return;
-    mountains.push({ index, kind: p.kind, depth: p.depth, base, foot: base + u.toArt(FOOT_SKIRT), x0: pr.x0, tops: pr.tops, peakX: pr.peakX, peakY: pr.peakY });
+    mountains.push({ index, kind: p.kind, depth: p.depth, base, foot: Math.ceil(base + u.toArt(FOOT_SKIRT)), x0: pr.x0, tops: pr.tops, peakX: pr.peakX, peakY: pr.peakY });
   });
   mountains.sort((a, b) => (a.depth === 'far' ? 0 : 1) - (b.depth === 'far' ? 0 : 1) || a.base - b.base);
   const tallRise = DEFAULT_THRESHOLDS.tallFrac * u.artH;
@@ -111,7 +111,7 @@ function markPeaks(mountains: SkyMountain[], w: number, h: number, floorY: numbe
     }
   });
   const heights = new Int16Array(w);
-  for (let x = 0; x < w; x++) heights[x] = h - Math.ceil(top[x]);
+  for (let x = 0; x < w; x++) heights[x] = h - Math.round(top[x]); // a cell is filled when its coverage passes half
   const minProm = DEFAULT_THRESHOLDS.minProminence * Math.max(1, h / REFERENCE_H);
   for (const raw of findPeaks(heights, minProm)) {
     const i = owner[raw.x];

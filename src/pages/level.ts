@@ -13,7 +13,7 @@ import { ActionDriver } from '../core/replay';
 import { World } from '../core/world';
 import { Frontier } from '../gen/frontier';
 import { generate } from '../gen/generate';
-import { mountainUnder, scan } from '../gen/scan';
+import { mountainUnder, rockHeights, scan } from '../gen/scan';
 import type { Blueprint } from '../core/blueprint';
 import type { GoalSpec } from '../core/goals';
 import type { Peak } from '../core/scan';
@@ -27,7 +27,7 @@ import { Fx } from './fx';
 import { arsenal } from './arsenal';
 import { nameMenu } from './nameMenu';
 import { noiseGraph } from './noiseGraph';
-import { button, h, handscroll, panel, seal, soundToggle, startLoop, toCell } from './ui';
+import { button, fixedPanel, h, handscroll, panel, seal, soundToggle, startLoop, toCell } from './ui';
 
 /** Header for players: no links to the workshops. */
 function levelHeader(sub: string): HTMLElement {
@@ -318,7 +318,7 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
   /** Light the verses as the painting changes; once it has settled after the last stroke, judge it. */
   function checkGoals(): void {
     const result = scan(world);
-    marks = markPeaks ? peakMarks(result.peaks, result.heights) : [];
+    marks = markPeaks ? peakMarks(result.peaks, rockHeights(world)) : []; // peaks are found on the rock skyline
     const started = changed();
     let all = true;
     for (const v of verses) {
@@ -359,8 +359,8 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
   }
 
   /**
-   * Where to mark each peak. The scanner measures the skyline including trees, so a peak's column can
-   * be a tree top; the mark goes on the highest rock of the mountain the peak belongs to instead.
+   * Where to mark each peak: on the highest rock of the mountain the peak belongs to (peaks are found
+   * on the rock skyline, so trees never move a mark).
    * Peaks on untracked terrain (no mountain object) stay at the top of their column.
    */
   function peakMarks(found: Peak[], columnHeights: Int16Array): { x: number; y: number; tall: boolean }[] {
@@ -445,14 +445,15 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
       h(
         'aside',
         { class: 'controls' },
-                panel(
-          'Shape the painting',
-          h('p', { class: 'home-note' }, level.tip ?? 'Tune the painting before you cut: it repaints when you let go of a slider.'),
-          ...(showGraph ? [graph.node] : []),
-          paramRows,
-          button('Start over', regenerate),
+        fixedPanel('Shape the painting', ...(showGraph ? [graph.node] : []), paramRows),
+        fixedPanel(
+          'Abilities',
+          bar.node,
+          ink,
+          h('label', { class: 'row brush-row' }, h('span', {}, 'Brush size'), radiusInput, radiusDot),
+          // Start over wipes every cut and stroke and gives the ink back (the graph's edits stay).
+          h('div', { class: 'row' }, sealButton, button('Start over', regenerate)),
         ),
-        panel('Abilities', bar.node, ink, h('label', { class: 'row brush-row' }, h('span', {}, 'Brush size'), radiusInput, radiusDot), sealButton),
       ),
     ),
   );

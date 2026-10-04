@@ -1,5 +1,110 @@
-/* The tutorial page (tutorial.html): the lesson list, the lesson card and the praise seal. The
-   scroll frame, ability card and status line come from style.css, the same as the level page. */
+/* The tutorial page (tutorial.html): the lesson list (left of the scroll), the lesson card (inside
+   the scroll, top right) and the praise seal. The scroll frame, ability card and status line come
+   from style.css, the same as the level page. */
+
+/* ---- layout: lessons on the left, the scroll beside them; everything in view without scrolling ---- */
+.layout.tutorial-layout {
+  grid-template-columns: 210px minmax(0, 1fr);
+  align-items: start;
+  max-width: 1700px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.tut-lessons {
+  position: sticky;
+  top: 84px;
+}
+
+.tutorial-layout .stage {
+  position: static;
+}
+
+/* ---- the lesson card, inside the scroll at the top right ---- */
+.tut-card {
+  position: absolute;
+  z-index: 4;
+  top: calc(var(--mount, 24px) + 10px);
+  right: 16px;
+  width: min(370px, 40%);
+  max-height: calc(100% - 2 * var(--mount, 24px) - 20px);
+  overflow: auto;
+  padding: 10px 12px 12px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: rgba(251, 247, 238, 0.94);
+  box-shadow: 0 6px 18px rgba(46, 30, 14, 0.18);
+  backdrop-filter: blur(2px);
+}
+
+/* the mountain graph needs room: its painting is short, so the card may hang below the scroll */
+.tut-card:has(.noise-wrap) {
+  width: min(520px, 52%);
+  max-height: none;
+  overflow: visible;
+}
+
+.tut-card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tut-card-head .tut-title {
+  flex: 1;
+  margin: 0;
+}
+
+.tut-fold {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  line-height: 1;
+  font-size: 16px;
+}
+
+.tut-card-body {
+  margin-top: 8px;
+}
+
+.tut-card.folded {
+  overflow: visible;
+}
+
+.tut-card.folded .tut-card-body {
+  display: none;
+}
+
+.tut-card .arsenal {
+  grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
+}
+
+.tut-card .tut-teach {
+  font-size: 13.5px;
+  line-height: 1.55;
+  margin-bottom: 10px;
+}
+
+@media (max-width: 900px) {
+  .layout.tutorial-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .tut-lessons {
+    position: static;
+    order: 2;
+  }
+
+  /* on a narrow screen the card leaves the painting and sits under it */
+  .tut-card,
+  .tut-card:has(.noise-wrap) {
+    position: static;
+    width: auto;
+    max-height: none;
+    margin: 10px 0 0;
+  }
+}
 
 /* ---- the five lessons, one per stroke ---- */
 .tut-steps {
@@ -148,12 +253,12 @@
   background: var(--seal-dark);
 }
 
-/* ---- praise: a red 好 seal pressed onto the scroll when a lesson is done ---- */
+/* ---- praise: a red 好 seal pressed onto the scroll, bottom left, when a lesson is done ---- */
 .tut-praise {
   position: absolute;
   z-index: 4;
-  top: calc(var(--mount, 24px) + 14px);
-  right: 22px;
+  bottom: calc(var(--mount, 24px) + 14px);
+  left: 22px;
   display: grid;
   place-items: center;
   width: 46px;

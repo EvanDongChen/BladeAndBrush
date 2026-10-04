@@ -1,4 +1,5 @@
 import './bootstrap';
+import type { AbilityId } from '../core/abilities';
 import { artView, type Blueprint } from '../core/blueprint';
 import { Clock } from '../core/clock';
 import type { LevelDims } from '../core/constants';
@@ -31,7 +32,7 @@ const TURN_MS = 1200;
 const TINT = { wind: '79, 122, 108', gravity: '125, 106, 63', graph: '181, 38, 43' };
 
 /** What a finished lesson is remembered by (strokes by their ability id, as before). */
-const keyOf = (l: Lesson) => (l.kind === 'stroke' ? l.ability : l.kind === 'nature' ? l.control : 'graph');
+const keyOf = (l: Lesson) => (l.kind === 'stroke' ? (l.id ?? l.ability) : l.kind === 'nature' ? l.control : 'graph');
 const tintOf = (l: Lesson) => (l.kind === 'stroke' ? lineColor(l.ability) : l.kind === 'nature' ? TINT[l.control] : TINT.graph);
 
 function readDone(): Set<string> {
@@ -137,7 +138,14 @@ export function mountTutorial(root: HTMLElement): () => void {
   const goalText = h('span', { class: 'tut-goal-text' });
   const goalFill = h('span', { class: 'tut-goal-fill' });
   const goal = h('div', { class: 'tut-goal' }, goalText, h('span', { class: 'tut-goal-bar' }, goalFill));
-  const bar = arsenal(() => {});
+  /** The stroke picked on the rack (a lesson may offer more than one, e.g. rain: water, then fire). */
+  let picked: AbilityId = '';
+  /** Open the lesson card again (set once the card exists; a new lesson always starts unfolded). */
+  let unfold = () => {};
+  const bar = arsenal((id) => {
+    picked = id;
+    stage.style.setProperty('--blade', lineColor(id));
+  });
   const hint = h('p', { class: 'tut-hint' });
   /** Where the lesson's control goes: the stroke's card, a Nature knob, or the mountain graph. */
   const tool = h('div', { class: 'tut-tool' });
@@ -166,7 +174,7 @@ export function mountTutorial(root: HTMLElement): () => void {
     pressedTick = world.tick;
     cursor = p;
     last = { ...p, t: performance.now() };
-    driver.begin(l.ability, { ...p, speed: 0 }, { radius: l.radius });
+    driver.begin(picked || l.ability, { ...p, speed: 0 }, { radius: l.radius });
   });
   canvas.addEventListener('pointermove', (e) => {
     const l = strokeLesson();
@@ -229,7 +237,9 @@ export function mountTutorial(root: HTMLElement): () => void {
       buildScene(lesson);
       const l = lesson;
       // only this lesson's stroke is on the rack
-      for (const card of bar.node.querySelectorAll<HTMLElement>('[data-ability]')) card.style.display = card.dataset.ability === l.ability ? '' : 'none';
+      // only this lesson's strokes are on the rack
+      const offered = [l.ability, ...(l.also ?? [])];
+      for (const card of bar.node.querySelectorAll<HTMLElement>('[data-ability]')) card.style.display = offered.includes(card.dataset.ability ?? '') ? '' : 'none';
       bar.select(l.ability);
       brushCursor(canvas, world.w, l.radius);
       tool.append(bar.node);
@@ -258,6 +268,7 @@ export function mountTutorial(root: HTMLElement): () => void {
     teach.textContent = lesson.teach;
     goalText.textContent = lesson.goal;
     praise.classList.remove('on');
+    unfold();
     stepButtons.forEach((b, k) => {
       b.classList.toggle('on', k === i);
       b.classList.toggle('done', done.has(keyOf(LESSONS[k])));
@@ -335,12 +346,12 @@ export function mountTutorial(root: HTMLElement): () => void {
   function startDemo(): void {
     open(index);
     if (lesson.kind === 'stroke') {
-      strokeDemo = { stroke: 0, pressAt: world.tick + DEMO_PAUSE, releaseAt: 0, pressed: false };
+      strokeDemo = { stroke: 0, pressAt: world.tick + (lesson.solution[0].wait ?? DEMO_PAUSE), releaseAt: 0, pressed: false };
     } else if (lesson.kind === 'nature') {
       const p = world.params;
       turnDemo = { from: { gravity: p.gravity, wind: p.wind ?? 0, windY: p.windY ?? 0 }, t: 0 };
     } else {
-      // lower the red line to the solution and redraw, as if the player had dragged it
+      // raise the Height slider to the solution and redraw, as if the player had dragged it
       graphParams.mountainHeight = lesson.solution.mountainHeight;
       graph?.reset();
       paintGraph(lesson);
@@ -353,14 +364,15 @@ export function mountTutorial(root: HTMLElement): () => void {
     if (!strokeDemo || !l) return;
     const s = l.solution[strokeDemo.stroke];
     if (!strokeDemo.pressed && world.tick >= strokeDemo.pressAt) {
-      driver.begin(l.ability, { x: s.from[0], y: s.from[1], speed: 0 }, { radius: l.radius });
+      bar.select(s.ability ?? l.ability); // the demonstration picks the card, as a player would
+      driver.begin(s.ability ?? l.ability, { x: s.from[0], y: s.from[1], speed: 0 }, { radius: l.radius });
       strokeDemo.pressed = true;
       strokeDemo.releaseAt = world.tick + 1 + s.hold;
     } else if (strokeDemo.pressed && world.tick >= strokeDemo.releaseAt) {
       driver.move({ x: s.to[0], y: s.to[1], speed: 4 });
       driver.end();
       const more = strokeDemo.stroke + 1 < l.solution.length;
-      strokeDemo = more ? { stroke: strokeDemo.stroke + 1, pressAt: world.tick + DEMO_PAUSE, releaseAt: 0, pressed: false } : null;
+      strokeDemo = more ? { stroke: strokeDemo.stroke + 1, pressAt: world.tick + (l.solution[strokeDemo.stroke + 1].wait ?? DEMO_PAUSE), releaseAt: 0, pressed: false } : null;
     }
   }
 
@@ -385,13 +397,13 @@ export function mountTutorial(root: HTMLElement): () => void {
   /** The aim line to draw this frame: the player's, or the demo's while it holds. */
   function aimToDraw(): { ability: string; aim: ReturnType<typeof aimEnd>; r: number; charge: number } | null {
     const l = strokeLesson();
-    if (!l || !isLineAbility(l.ability)) return null;
+    if (!l || !isLineAbility(picked || l.ability)) return null;
     if (strokeDemo?.pressed) {
       const s = l.solution[strokeDemo.stroke];
       const held = strokeDemo.releaseAt - 1 - s.hold;
-      return { ability: l.ability, aim: aimEnd(s.from[0], s.from[1], s.to[0], s.to[1]), r: l.radius, charge: chargeOf(world.tick - held) };
+      return { ability: s.ability ?? l.ability, aim: aimEnd(s.from[0], s.from[1], s.to[0], s.to[1]), r: l.radius, charge: chargeOf(world.tick - held) };
     }
-    if (down && cursor) return { ability: l.ability, aim: aimEnd(pressedAt.x, pressedAt.y, cursor.x, cursor.y), r: l.radius, charge: chargeOf(world.tick - pressedTick) };
+    if (down && cursor) return { ability: picked || l.ability, aim: aimEnd(pressedAt.x, pressedAt.y, cursor.x, cursor.y), r: l.radius, charge: chargeOf(world.tick - pressedTick) };
     return null;
   }
 
@@ -411,20 +423,24 @@ export function mountTutorial(root: HTMLElement): () => void {
     g.restore();
   }
 
-  open(index); // fill the lesson in before the panels are on the page, so they do not animate open
+  // the lesson card sits inside the scroll, top right; it folds down to its title to show the painting
+  const fold = h('button', { type: 'button', class: 'tut-fold', 'aria-expanded': 'true', title: 'Fold the lesson away' }, '–');
+  const body = h('div', { class: 'tut-card-body' }, teach, goal, tool, hint, h('div', { class: 'row tut-actions' }, showMe, reset, next));
+  const card = h('section', { class: 'tut-card', 'aria-label': 'Lesson' }, h('div', { class: 'tut-card-head' }, title, fold), body);
+  const setFolded = (folded: boolean) => {
+    card.classList.toggle('folded', folded);
+    fold.textContent = folded ? '+' : '–';
+    fold.title = folded ? 'Open the lesson' : 'Fold the lesson away';
+    fold.setAttribute('aria-expanded', String(!folded));
+  };
+  unfold = () => setFolded(false);
+  fold.addEventListener('click', () => setFolded(!card.classList.contains('folded')));
+  frame.append(card);
+
+  open(index); // fill the lesson in before the card is on the page, so it does not animate open
   root.replaceChildren(
     siteHeader('how', 'Tutorial'),
-    h(
-      'main',
-      { class: 'layout level-layout tutorial', id: 'main' },
-      stage,
-      h(
-        'aside',
-        { class: 'controls' },
-        fixedPanel('Lessons', steps),
-        fixedPanel('Lesson', title, teach, goal, tool, hint, h('div', { class: 'row tut-actions' }, showMe, reset, next)),
-      ),
-    ),
+    h('main', { class: 'layout tutorial-layout', id: 'main' }, h('nav', { class: 'tut-lessons', 'aria-label': 'Lessons' }, fixedPanel('Lessons', steps)), stage),
   );
   (graph as NoiseGraph | null)?.sync(); // the graph's canvas has a size now that it is on the page
   if (query.has('show')) startDemo(); // ?step=2&show links straight to the demonstration

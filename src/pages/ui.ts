@@ -317,10 +317,10 @@ export function startLoop(clock: Clock, frame: (dtMs: number) => void, shouldAdv
   };
 }
 
-/** Pointer position in cell coordinates. */
-export function toCell(canvas: HTMLCanvasElement, e: PointerEvent): { x: number; y: number } {
+/** Pointer position in cell coordinates (`scale` = canvas pixels per cell, the renderer's scale). */
+export function toCell(canvas: HTMLCanvasElement, e: PointerEvent, scale = 1): { x: number; y: number } {
   const r = canvas.getBoundingClientRect();
-  const x = ((e.clientX - r.left) / Math.max(1, r.width)) * canvas.width;
-  const y = ((e.clientY - r.top) / Math.max(1, r.height)) * canvas.height;
+  const x = ((e.clientX - r.left) / Math.max(1, r.width)) * (canvas.width / scale);
+  const y = ((e.clientY - r.top) / Math.max(1, r.height)) * (canvas.height / scale);
   return { x: Math.round(x * 100) / 100, y: Math.round(y * 100) / 100 };
 }

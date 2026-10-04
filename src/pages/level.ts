@@ -4,6 +4,7 @@ import { Clock } from '../core/clock';
 import { describeGoal, evaluateGoal } from '../core/goals';
 import { levels, type LevelDef } from '../core/levels';
 import { defaultParams, params as paramDefs, type GenParams } from '../core/params';
+import { DEFAULT_ART_K } from '../gen/artState';
 import { artView } from '../core/blueprint';
 import { Renderer } from '../core/render';
 import { ActionDriver } from '../core/replay';
@@ -51,7 +52,8 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
   const initial = { ...params };
 
   const canvas = h('canvas', { class: 'grid paintable' });
-  const renderer = new Renderer(canvas, level.dims);
+  const renderer = new Renderer(canvas, level.dims, DEFAULT_ART_K);
+  canvas.style.imageRendering = 'auto'; // the canvas is k x the grid: smooth it, do not pixelate
   const fx = new Fx();
   const status = h('div', { class: 'status' });
   const stage = h('div', { class: 'stage' });
@@ -104,7 +106,7 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
   canvas.addEventListener('pointerdown', (e) => {
     if (!ability || !frontier.done || used >= level.actionBudget) return;
     canvas.setPointerCapture?.(e.pointerId);
-    const p = toCell(canvas, e);
+    const p = toCell(canvas, e, renderer.scale);
     used++;
     down = true;
     pressedAt = p;
@@ -114,7 +116,7 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
     driver.begin(ability, { ...p, speed: 0 }, { radius });
   });
   canvas.addEventListener('pointermove', (e) => {
-    const p = toCell(canvas, e);
+    const p = toCell(canvas, e, renderer.scale);
     cursor = { ...p, r: radius };
     if (!down) return;
     const now = performance.now();
@@ -283,10 +285,10 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
     clock,
     (dt) => {
       renderer.draw(world, { cursor, frontierX: frontier.done ? undefined : frontier.x, art: artView(bp) });
-      fx.draw(renderer.g);
+      renderer.inCells((g) => fx.draw(g));
       if (down && cursor && isLineAbility(ability)) {
         const aim = aimEnd(pressedAt.x, pressedAt.y, cursor.x, cursor.y);
-        drawAim(renderer.g, ability, aim, radius, chargeOf(world.tick - pressedTick));
+        renderer.inCells((g) => drawAim(g, ability, aim, radius, chargeOf(world.tick - pressedTick)));
       }
       showInk();
       if (frames++ % 10 === 0 && frontier.done) checkGoals();

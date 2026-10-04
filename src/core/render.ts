@@ -90,6 +90,14 @@ export class Renderer {
     }
   }
 
+  /** Run overlay drawing on the main canvas in CELL units (the context is scaled for the call). */
+  inCells(fn: (g: CanvasRenderingContext2D) => void): void {
+    this.g.save();
+    this.g.setTransform(this.scale, 0, 0, this.scale, 0, 0);
+    fn(this.g);
+    this.g.restore();
+  }
+
   isOn(layer: Layer): boolean {
     return flagOn(layer.flag) && (this.toggles.get(layer.name) ?? !layer.debug);
   }

@@ -7,12 +7,11 @@ import { describeGoal, evaluateGoal } from '../core/goals';
 import { levels, type LevelDef } from '../core/levels';
 import { defaultParams, params as paramDefs, type GenParams } from '../core/params';
 import { DEFAULT_ART_K } from '../gen/artState';
-import { artView } from '../core/blueprint';
+import { artView, createBlueprint } from '../core/blueprint';
 import { Renderer } from '../core/render';
 import { ActionDriver } from '../core/replay';
 import { World } from '../core/world';
 import { Frontier } from '../gen/frontier';
-import { generate } from '../gen/generate';
 import { mountainUnder, scan } from '../gen/scan';
 import type { Blueprint } from '../core/blueprint';
 import type { GoalSpec } from '../core/goals';
@@ -24,9 +23,10 @@ import { audio } from '../audio/engine';
 import { submitWin, type WinData } from '../gallery/submit';
 import { APP_VERSION } from '../gallery/version';
 import { Fx } from './fx';
+import { generateAsync } from './genClient';
 import { arsenal } from './arsenal';
 import { nameMenu } from './nameMenu';
-import { button, h, handscroll, panel, seal, soundToggle, startLoop, toCell } from './ui';
+import { brushCursor, button, displayScale, h, handscroll, panel, seal, soundToggle, startLoop, toCell } from './ui';
 
 /** Header for players: no links to the workshops. */
 function levelHeader(sub: string): HTMLElement {
@@ -81,7 +81,7 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
   const initial = { ...params };
 
   const canvas = h('canvas', { class: 'grid paintable' });
-  const renderer = new Renderer(canvas, level.dims, DEFAULT_ART_K);
+  const renderer = new Renderer(canvas, level.dims, displayScale(level.dims.w, DEFAULT_ART_K));
   canvas.style.imageRendering = 'auto'; // the canvas is k x the grid: smooth it, do not pixelate
   const fx = new Fx();
   const status = h('div', { class: 'status' });
@@ -108,8 +108,27 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
   const frame = h('div', { class: 'frame' }, mount, canvas, hudTool, banner, stamp, rollLeft, rollLead, musicMark);
   let tip = '';
 
+  /** Generation runs on a worker: until it answers, the old painting (or an empty scroll) stays. */
+  let pending = 0;
+  let painted: GenParams | null = null;
   function regenerate(): void {
-    bp = generate(level.seed, params, { features: level.featuresEnabled, setpieces: level.setpieces });
+    // "Try again" with the same sliders reuses the painting: no need to generate it again
+    if (painted && paramDefs.all().every((d) => painted![d.key] === params[d.key])) {
+      restart(bp);
+      return;
+    }
+    const want = { ...params };
+    const id = ++pending;
+    generateAsync(level.seed, want, { features: level.featuresEnabled, setpieces: level.setpieces }, renderer.scale).then((next) => {
+      if (id !== pending || stopped) return; // a newer repaint was asked for meanwhile
+      pending = 0;
+      painted = want;
+      restart(next);
+    });
+  }
+
+  function restart(next: Blueprint): void {
+    bp = next;
     world = new World(level.dims, level.seed, { ...params });
     frontier = new Frontier(bp);
     driver = new ActionDriver();
@@ -135,6 +154,7 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
     step(world);
   });
   let complete: ReturnType<typeof handscroll> | undefined;
+  restart(createBlueprint(level.seed, params, level.dims, level.setpieces)); // an empty scroll until the painting arrives
   audio.armOnGesture();
   regenerate();
 
@@ -159,6 +179,7 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
   canvas.addEventListener('pointermove', (e) => {
     const p = toCell(canvas, e, renderer.scale);
     cursor = { ...p, r: radius };
+    brushCursor(canvas, world.w, radius);
     if (!down) return;
     const now = performance.now();
     const ticks = Math.max(1e-3, ((now - last.t) / Clock.STEP_MS) * clock.speed);
@@ -200,6 +221,7 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
     radius = Math.max(1, Math.min(24, r));
     radiusInput.value = String(radius);
     radiusDot.style.setProperty('--d', `${6 + radius}px`);
+    brushCursor(canvas, level.dims.w, radius);
   };
   radiusInput.addEventListener('input', () => setRadius(Number(radiusInput.value)));
   setRadius(radius);
@@ -289,9 +311,33 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
   /** Has the player changed anything yet? Goals the fresh painting already meets do not count. */
   const changed = () => used > 0 || Object.keys(initial).some((k) => params[k] !== initial[k]);
 
+  let lastScan: ReturnType<typeof scan> | null = null;
+  let lastScanWorld: World | null = null;
+  let lastScanKey = -1;
+  let checkQueued = false;
+  let stopped = false;
+  /** Run checkGoals when the browser is idle, so a scan never lands inside a frame. */
+  function queueCheck(): void {
+    if (checkQueued) return;
+    checkQueued = true;
+    const run = () => {
+      checkQueued = false;
+      if (!stopped) checkGoals();
+    };
+    if ('requestIdleCallback' in window) requestIdleCallback(run, { timeout: 300 });
+    else setTimeout(run, 0);
+  }
+
   /** Light the verses as the painting changes; once it has settled after the last stroke, judge it. */
   function checkGoals(): void {
-    const result = scan(world);
+    // the scan reads cells, owners, objects and object stats: rescan only when those changed
+    const key = scanKey(world);
+    if (!lastScan || world !== lastScanWorld || key !== lastScanKey) {
+      lastScan = scan(world);
+      lastScanWorld = world;
+      lastScanKey = key;
+    }
+    const result = lastScan;
     marks = markPeaks ? peakMarks(result.peaks, result.heights) : [];
     const started = changed();
     let all = true;
@@ -431,10 +477,11 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
 
   bar.selectIndex(0); // start with the first ability selected
   let frames = 0;
+  let shownX = -1;
   const stop = startLoop(
     clock,
     (dt) => {
-      renderer.draw(world, { cursor, frontierX: frontier.done ? undefined : frontier.x, art: artView(bp) });
+      renderer.draw(world, { frontierX: frontier.done ? undefined : frontier.x, art: artView(bp) });
       renderer.inCells((g) => {
         fx.draw(g);
         drawPeaks(g);
@@ -444,16 +491,21 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
         renderer.inCells((g) => drawAim(g, ability, aim, radius, chargeOf(world.tick - pressedTick)));
       }
       showInk();
-      if (frames++ % 10 === 0 && frontier.done) checkGoals();
+      if (frames++ % 10 === 0 && frontier.done && !pending) queueCheck();
       bar.setSpent(phase !== 'play');
       banner.hidden = phase !== 'failed';
       sealButton.toggleAttribute('disabled', phase !== 'play' || used === 0);
-      frame.style.setProperty('--p', String(frontier.x / level.dims.w));
+      if (frontier.x !== shownX) {
+        shownX = frontier.x;
+        frame.style.setProperty('--p', String(frontier.x / level.dims.w));
+      }
       const at = audio.playhead();
       musicMark.classList.toggle('on', at !== null);
       if (at !== null) frame.style.setProperty('--music', at.toFixed(4));
       frame.classList.toggle('ready', frontier.done);
-      status.textContent = !frontier.done
+      const text = pending
+        ? 'Grinding the ink…'
+        : !frontier.done
         ? 'The landscape is painting itself…'
         : phase === 'settling'
           ? 'The ink is drying…'
@@ -462,9 +514,10 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
             : phase === 'won'
               ? 'The landscape matches the poem.'
               : tip;
+      if (status.textContent !== text) status.textContent = text; // an unchanged write would still force a relayout
       fx.endFrame(canvas, dt);
     },
-    () => fx.shouldAdvance(),
+    () => !pending && fx.shouldAdvance(), // hold the scroll rolled up until the painting has arrived
   );
   const onKey = (e: KeyboardEvent) => {
     if (e.ctrlKey || e.metaKey || e.altKey) return;
@@ -476,12 +529,31 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
   };
   addEventListener('keydown', onKey);
   return () => {
+    stopped = true;
     stop();
     fx.detach();
     audio.detach();
     clearTimeout(winTimer);
     removeEventListener('keydown', onKey);
   };
+}
+
+/** A cheap fingerprint of everything the scan reads: cells, owners, object ids and object stats. */
+function scanKey(world: World): number {
+  let h = 0x811c9dc5;
+  const fold = (a: Uint8Array | Uint16Array) => {
+    const words = new Uint32Array(a.buffer, a.byteOffset, a.byteLength >> 2);
+    for (let i = 0; i < words.length; i++) h = Math.imul(h ^ words[i], 0x01000193);
+    for (let i = (words.length * 4) / a.BYTES_PER_ELEMENT; i < a.length; i++) h = Math.imul(h ^ a[i], 0x01000193);
+  };
+  fold(world.el);
+  fold(world.owner);
+  fold(world.obj);
+  for (const o of world.objects.values()) {
+    h = Math.imul(h ^ o.id ^ o.cells, 0x01000193);
+    for (const v of Object.values(o.stats)) h = Math.imul(h ^ Math.round(v * 1000), 0x01000193);
+  }
+  return h >>> 0;
 }
 
 function levelMissing(root: HTMLElement, id: string | null): void {

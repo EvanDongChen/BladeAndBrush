@@ -18,7 +18,9 @@ import { Fx } from './fx';
 import { tunables } from '../sim/tunables';
 import {
   abilityBar,
+  brushCursor,
   button,
+  displayScale,
   elementPalette,
   h,
   layerToggles,
@@ -60,7 +62,7 @@ export function mountSandbox(root: HTMLElement): () => void {
   let recording: Recording | null = null;
 
   const canvas = h('canvas', { class: 'grid paintable' });
-  const renderer = new Renderer(canvas, DEFAULT_DIMS, DEFAULT_ART_K);
+  const renderer = new Renderer(canvas, DEFAULT_DIMS, displayScale(DEFAULT_DIMS.w, DEFAULT_ART_K));
   canvas.style.imageRendering = 'auto'; // the canvas is k x the grid: smooth it, do not pixelate
   const fx = new Fx(); // blade trails, shake, hit-stop
   const status = h('div', { class: 'status' });
@@ -118,6 +120,7 @@ export function mountSandbox(root: HTMLElement): () => void {
   canvas.addEventListener('pointermove', (e) => {
     const p = toCell(canvas, e, renderer.scale);
     cursor = { ...p, r: radius };
+    brushCursor(canvas, world.w, radius);
     if (!down) return;
     const now = performance.now();
     const ticks = Math.max(1e-3, ((now - last.t) / Clock.STEP_MS) * clock.speed);
@@ -161,7 +164,10 @@ export function mountSandbox(root: HTMLElement): () => void {
   });
 
   const radiusInput = h('input', { type: 'range', min: 1, max: 24, step: 1, value: radius });
-  radiusInput.addEventListener('input', () => (radius = Number(radiusInput.value)));
+  radiusInput.addEventListener('input', () => {
+    radius = Number(radiusInput.value);
+    brushCursor(canvas, DEFAULT_DIMS.w, radius);
+  });
 
   const pauseBtn = button('Pause', () => {
     clock.paused = !clock.paused;
@@ -271,7 +277,7 @@ export function mountSandbox(root: HTMLElement): () => void {
   const stop = startLoop(
     clock,
     (dt) => {
-      renderer.draw(world, { cursor, art: bp ? artView(bp) : undefined });
+      renderer.draw(world, { art: bp ? artView(bp) : undefined });
       renderer.inCells((g) => fx.draw(g));
       // skill-shot preview: drawn from live pointer input, so it shows instantly (even when paused)
       if (down && cursor && isLineAbility(tool.ability)) {

@@ -51,6 +51,11 @@ export interface Shader {
   run?: boolean;
   /** The shader ignores `base` (skips the per-pixel color blending between neighbouring cells). */
   noBase?: boolean;
+  /**
+   * The output depends only on the cells (not on the tick), so a body at rest is drawn once and
+   * then left alone. Leave it off for anything that moves on its own (water, fire, smoke).
+   */
+  static?: boolean;
   /** Packed RGBA; alpha is its own opacity (multiplied by coverage). */
   shade(p: ShadePx): number;
 }
@@ -127,7 +132,6 @@ export const PAPER_COLOR = pack(240, 233, 216);
 // ---- stroke textures: tileable, deterministic, built once ----
 
 const SIZE = 256;
-const textures = new Map<TexName, Uint8Array>();
 
 /** Tileable value noise on an nx x ny lattice, `oct` octaves, as 0..255. */
 function buildTexture(name: TexName, nx: number, ny: number, oct: number, sharpen: number): Uint8Array {
@@ -169,13 +173,23 @@ function buildTexture(name: TexName, nx: number, ny: number, oct: number, sharpe
   return out;
 }
 
-function texture(name: TexName): Uint8Array {
-  let t = textures.get(name);
-  if (t) return t;
+let flowTex: Uint8Array | null = null;
+let hatchTex: Uint8Array | null = null;
+let cloudTex: Uint8Array | null = null;
+
+/**
+ * The texture's 256x256 bytes (0..255), for shaders that sample it in their inner loop: index
+ * `((Math.floor(v) & 255) << 8) | (Math.floor(u) & 255)`, divide by 255.
+ */
+export function texture(name: TexName): Uint8Array {
+  if (name === 'flow') return flowTex ?? (flowTex = buildNamed(name));
+  if (name === 'hatch') return hatchTex ?? (hatchTex = buildNamed(name));
+  return cloudTex ?? (cloudTex = buildNamed(name));
+}
+
+function buildNamed(name: TexName): Uint8Array {
   // flow: long thin horizontal streaks; hatch: fine strokes; cloud: soft blobs
-  t = name === 'flow' ? buildTexture(name, 5, 56, 2, 1.8) : name === 'hatch' ? buildTexture(name, 9, 70, 2, 2.4) : buildTexture(name, 8, 8, 3, 1.1);
-  textures.set(name, t);
-  return t;
+  return name === 'flow' ? buildTexture(name, 5, 56, 2, 1.8) : name === 'hatch' ? buildTexture(name, 9, 70, 2, 2.4) : buildTexture(name, 8, 8, 3, 1.1);
 }
 
 export function sampleTexture(name: TexName, u: number, v: number): number {

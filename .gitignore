@@ -7,3 +7,6 @@ coverage/
 **/zz_test_dummy*.ts
 
 docs/
+
+# local benchmark runs (bench/baseline.json is committed)
+bench/results/

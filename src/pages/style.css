@@ -1751,3 +1751,192 @@ header.top nav .sound-toggle {
   opacity: 0.55;
   cursor: default;
 }
+
+/* ---------- Gallery: level tabs, the painting being viewed, and the shelf of partly rolled scrolls ---------- */
+
+.gallery-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin: 0 0 8px;
+}
+
+.gallery-tab[aria-pressed='true'] {
+  color: #f8efdc;
+  background-color: var(--ink);
+  border-color: var(--ink);
+}
+
+.gallery-status {
+  text-align: center;
+}
+
+.gallery-status[hidden] {
+  display: none;
+}
+
+.gallery-stage {
+  position: relative;
+  max-width: 1100px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+/* A scroll that can be rolled open by any amount: --f is 0 (shut) to 1 (fully open). */
+.pscroll {
+  --f: 1;
+  --rod: 18px;
+  position: relative;
+  padding: 0 var(--rod);
+}
+
+.ps-paper {
+  overflow: hidden;
+  background: var(--paper) var(--grain);
+  border-top: 6px solid var(--silk);
+  border-bottom: 6px solid var(--silk);
+  clip-path: inset(0 calc((1 - var(--f)) * 50%) 0 calc((1 - var(--f)) * 50%));
+  transition: clip-path 0.85s var(--ease-scroll);
+}
+
+.ps-paper img {
+  display: block;
+  width: 100%;
+  height: auto;
+  user-select: none;
+}
+
+.ps-rod {
+  position: absolute;
+  top: -5px;
+  bottom: -5px;
+  width: var(--rod);
+  border-radius: 3px;
+  background: var(--wood-2);
+  border: 1px solid var(--wood-1);
+  transition: left 0.85s var(--ease-scroll);
+}
+
+.ps-rod.left {
+  left: calc((1 - var(--f)) * (50% - var(--rod)));
+}
+
+.ps-rod.right {
+  left: calc(100% - var(--rod) - (1 - var(--f)) * (50% - var(--rod)));
+}
+
+.gallery-entry {
+  margin-bottom: 8px;
+}
+
+.gallery-entry .gallery-caption {
+  margin-top: 14px;
+  justify-content: center;
+  text-align: center;
+}
+
+/* the shelf: square scrolls, a slice of each painting showing between the rollers */
+.gallery-shelf {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, 190px);
+  justify-content: center;
+  gap: 22px 18px;
+  max-width: 1100px;
+  width: 100%;
+  margin: 28px auto 0;
+}
+
+.shelf-item {
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+  padding: 8px 4px 6px;
+  text-align: center;
+  background: none;
+  border: 0;
+  border-radius: 4px;
+  color: var(--ink);
+}
+
+.shelf-item:hover {
+  background: none;
+}
+
+/* 182px wide with 12px rollers: at --f 0.6 the open part is 119px, so the window between the rollers is square */
+.shelf-item .pscroll.thumb {
+  --f: 0.6;
+  --rod: 12px;
+  width: 182px;
+  height: 119px;
+  transition: transform 0.25s;
+}
+
+.shelf-item:hover .pscroll.thumb,
+.shelf-item:focus-visible .pscroll.thumb {
+  --f: 0.85; /* it rolls a little further open when you point at it */
+  transform: translateY(-3px);
+}
+
+/* the picture is laid over the square and centred, so its width never decides how wide the tile is */
+.pscroll.thumb .ps-paper {
+  position: relative;
+  height: 100%;
+  border-top-width: 4px;
+  border-bottom-width: 4px;
+}
+
+.pscroll.thumb .ps-paper img {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: auto;
+  height: 100%;
+  max-width: none;
+  transform: translateX(-50%);
+}
+
+.pscroll.thumb .ps-rod {
+  top: -3px;
+  bottom: -3px;
+}
+
+.shelf-label {
+  display: flex;
+  justify-content: center;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.shelf-name {
+  font: 400 17px var(--font-brush);
+  letter-spacing: 0.05em;
+}
+
+.shelf-strokes {
+  font: 12px var(--font-mono);
+  color: var(--ink-soft);
+}
+
+.shelf-strokes::after {
+  content: ' strokes';
+}
+
+.shelf-level {
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+
+@media (max-width: 640px) {
+  .gallery-shelf {
+    grid-template-columns: repeat(auto-fill, 140px);
+    gap: 16px 10px;
+  }
+
+  /* 132px wide: at --f 0.6 the open part is 89px */
+  .shelf-item .pscroll.thumb {
+    width: 132px;
+    height: 89px;
+  }
+}

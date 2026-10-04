@@ -34,6 +34,24 @@ export function siteHeader(active: SiteSection, sub?: string): HTMLElement {
   return bar;
 }
 
+export type WorkshopPage = 'generator' | 'sandbox';
+
+const WORKSHOP: [WorkshopPage, string, string, string][] = [
+  ['generator', '造', 'Generator', './generator.html'],
+  ['sandbox', '沙', 'Sandbox', './sandbox.html'],
+];
+
+/** The workshop's own tabs (Generator, Sandbox), shown under the site header on those two pages. */
+export function workshopTabs(active: WorkshopPage): HTMLElement {
+  const nav = h('nav', { class: 'workshop-tabs', 'aria-label': 'Workshop' }, h('span', { class: 'workshop-label' }, '工坊 Workshop'));
+  for (const [key, glyph, label, href] of WORKSHOP) {
+    const a = h('a', { href, class: 'workshop-tab' }, h('span', { class: 'workshop-tab-glyph', 'aria-hidden': 'true' }, glyph), label);
+    if (key === active) a.setAttribute('aria-current', 'page');
+    nav.append(a);
+  }
+  return nav;
+}
+
 /** The site footer: a large brushed 山水, the credits and the links. */
 export function siteFooter(): HTMLElement {
   return h(

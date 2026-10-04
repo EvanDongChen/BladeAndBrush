@@ -71,38 +71,6 @@ export function seal(text = '斬山水', extra = ''): HTMLElement {
   return s;
 }
 
-const NAV_LINKS = [
-  ['Home', './index.html'],
-  ['Generator', './generator.html'],
-  ['Sandbox', './sandbox.html'],
-  ['Gallery', './gallery.html'],
-] as const;
-
-type NavLabel = (typeof NAV_LINKS)[number][0];
-
-function navBar(active: NavLabel | null, title: string, sub?: string): HTMLElement {
-  const nav = h('nav', {});
-  for (const [label, href] of NAV_LINKS) {
-    const a = h('a', { href }, label);
-    if (label === active) a.setAttribute('aria-current', 'page');
-    nav.append(a);
-  }
-  const brand = h('a', { class: 'brand', href: './index.html' }, seal(), h('span', { class: 'brand-name' }, title));
-  if (sub) brand.append(h('span', { class: 'brand-sub' }, sub));
-  return h('header', { class: 'top' }, h('h1', {}, brand), nav);
-}
-
-/** Header for the workshop pages (Generator, Sandbox). */
-export function pageHeader(title: string): HTMLElement {
-  const active = NAV_LINKS.find(([l]) => l === title)?.[0] ?? null;
-  return navBar(active, 'Blade & Brush', title);
-}
-
-/** Site navbar for the player-facing pages (Home, Gallery). */
-export function siteNav(active: NavLabel): HTMLElement {
-  return navBar(active, 'Blade & Brush');
-}
-
 /** A header button that mutes and unmutes the music: 音 (sound) when on, 靜 (still) when off. */
 export function soundToggle(): HTMLButtonElement {
   const b = h('button', { type: 'button', class: 'sound-toggle' });

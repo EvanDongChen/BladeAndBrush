@@ -16,8 +16,8 @@ registerLevel({
   seed: 33,
   params: {
     wind: { value: 0.1, label: 'Wind', min: -0.5, max: 0.5 },
-    mountainHeight: { value: 0.6, visible: false },
-    spacing: { value: 0.4, visible: false },
+    mountainHeight: { value: 0.6, label: 'Mountain height' }, // shaped with the mountain graph
+    spacing: { value: 0.4, label: 'Space between mountains' },
     treeDensity: { value: 0.4, visible: false },
     gravity: { value: 2, locked: true, visible: false },
   },

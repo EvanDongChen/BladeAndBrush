@@ -29,3 +29,6 @@ export const BEHIND_LAYERS = 4;
 
 /** World.plane value for cells that came from no blueprint plane (painted, spawned, dynamic). */
 export const NO_PLANE = 255;
+
+/** World.plane value for cells that came from the far (background) plane; see flags.farLayerInteractive. */
+export const FAR_PLANE = 4;

@@ -9,6 +9,12 @@ export const flags: Record<string, boolean> = {
   splatter: true,
   fireSpread: true,
   glow: true,
+  /**
+   * Layered pixels: false = the far ridges are background art only (not interactive, never scanned).
+   * true = the reveal puts them in the world as real ROCK at the back of each stack, so they can be
+   * cut, burnt through and scanned. Read when the painting is revealed.
+   */
+  farLayerInteractive: false,
 };
 
 /** Generator feature toggles by feature name. Missing = enabled; false = removed from the pipeline. */

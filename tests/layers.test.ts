@@ -71,3 +71,47 @@ describe('layered pixels', () => {
     expect(run()).toBe(run());
   });
 });
+
+import { flags } from '../src/core/config';
+import { FAR_PLANE } from '../src/core/constants';
+import { defaultParams } from '../src/core/params';
+import { Frontier } from '../src/gen/frontier';
+import { generate } from '../src/gen/generate';
+
+describe('farLayerInteractive', () => {
+  const reveal = () => {
+    const bp = generate(2, defaultParams(), { k: 1 });
+    const w = new World(bp, 2);
+    new Frontier(bp).revealAll(w);
+    return { bp, w };
+  };
+
+  it('is off by default: the far ridges stay background art', () => {
+    expect(flags.farLayerInteractive).toBe(false);
+    const { w } = reveal();
+    expect(w.plane.some((p) => p === FAR_PLANE)).toBe(false);
+    expect(w.behindPlane.some((a) => a.some((p) => p === FAR_PLANE))).toBe(false);
+  });
+
+  it('when on, far ridges become real rock at the back of the stack', () => {
+    flags.farLayerInteractive = true;
+    try {
+      const { bp, w } = reveal();
+      let front = 0;
+      for (let i = 0; i < w.size; i++) if (w.plane[i] === FAR_PLANE) (front++, expect(w.el[i]).toBe(El.ROCK));
+      expect(front).toBeGreaterThan(0);
+      const rock = (el: Uint8Array) => el.reduce((n, v) => n + (v === El.ROCK ? 1 : 0), 0);
+      expect(rock(w.el)).toBeGreaterThan(rock(bp.el));
+      // breaking the near mountain in front of a far ridge brings that ridge forward
+      let i = 0;
+      while (i < w.size && !(w.plane[i] === 1 && w.behindPlane.some((a) => a[i] === FAR_PLANE))) i++;
+      if (i < w.size) {
+        w.set(i % w.w, (i / w.w) | 0, El.EMPTY);
+        w.applyPending();
+        expect(w.el[i]).not.toBe(El.EMPTY);
+      }
+    } finally {
+      flags.farLayerInteractive = false;
+    }
+  });
+});

@@ -1,5 +1,5 @@
 import type { ArtView } from './blueprint';
-import { NO_PLANE } from './constants';
+import { FAR_PLANE, NO_PLANE } from './constants';
 import { El, rgba } from './elements';
 
 /** Same base color as the paper layer (without its grain). */
@@ -101,7 +101,13 @@ export function compose(out: Uint32Array, worldEl: Uint8Array, worldPlane: Uint8
         }
       } else {
         const q = worldPlane[i];
-        if (q === NO_PLANE || view.planes[q]?.el[i] !== we) {
+        if (q === FAR_PLANE && we === El.ROCK) {
+          // an interactive far ridge: the background art, on paper, behind whatever planes never had a cell here
+          for (let yy = 0; yy < k; yy++) {
+            const row = base + yy * aw;
+            for (let xx = 0; xx < k; xx++) out[row + xx] = pixel(view, row + xx, true, view.art.planes.length, false, i);
+          }
+        } else if (q === NO_PLANE || view.planes[q]?.el[i] !== we) {
           fill(out, base, aw, k, 0); // a dynamic or painted cell: its own color shows
         } else {
           for (let yy = 0; yy < k; yy++) {

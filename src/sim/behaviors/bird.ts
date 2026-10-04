@@ -25,6 +25,9 @@ const UP: Pixel[] = [
   [2, -2, 0],
 ];
 
+/** How far (cells) a circling bird strays from its home before it turns back. */
+const CIRCLE_RADIUS = 36;
+
 /** Flap cycle over the three poses: glide, up, glide, down. */
 const CYCLE = [0, 2, 0, 1];
 
@@ -55,6 +58,13 @@ function think(world: World, c: Creature, def: CreatureDef): void {
       const r = rng.next();
       vdir = r < 0.4 ? 0 : r < 0.7 ? 1 : 2;
       timer = 8 + rng.int(40);
+    }
+    // a bird the level set circling (e.g. round a peak) keeps to its home: its object's anchor
+    const home = c.obj !== 0 ? world.objects.get(c.obj) : undefined;
+    if (home?.tags.includes('circling')) {
+      if (Math.abs(c.x - home.x) > CIRCLE_RADIUS) face = home.x > c.x ? 1 : -1;
+      if (c.y > home.y + 8) vdir = 1;
+      else if (c.y < home.y - 12) vdir = 2;
     }
     let dy = vdir === 1 ? -1 : vdir === 2 ? 1 : 0;
     if (dy !== 0 && rng.chance(0.5)) dy = 0; // climbs and dives are gentle

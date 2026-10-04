@@ -222,8 +222,29 @@ function die(world: World, def: CreatureDef, c: Creature, burning: boolean): voi
   }
 }
 
-/** A part cell: if its anchor is gone, it dies with it. */
-function updatePart(world: World, x: number, y: number): void {
+/** Nudges tried, nearest first, when an invulnerable creature has to re-form somewhere free. */
+const NUDGES: readonly [number, number][] = (() => {
+  const out: [number, number][] = [];
+  for (let dy = -6; dy <= 6; dy++) for (let dx = -6; dx <= 6; dx++) out.push([dx, dy]);
+  return out.sort((a, b) => a[0] * a[0] + a[1] * a[1] - (b[0] * b[0] + b[1] * b[1]) || a[1] - b[1] || a[0] - b[0]);
+})();
+
+/**
+ * An invulnerable creature that lost a cell (cut, burnt, crushed) re-forms whole: what is left of it
+ * is cleared and it is drawn again where it is, or as near as there is room. If there is no room
+ * anywhere near, what is left of it simply waits; it never dies.
+ */
+function heal(world: World, def: CreatureDef, c: Creature): void {
+  for (const [dx, dy] of NUDGES) {
+    if (!poseFree(world, def, c.x + dx, c.y + dy, c.frame, c.face, c.x, c.y)) continue;
+    erase(world, def, c);
+    draw(world, def, c.x + dx, c.y + dy, c.frame, c.face, c.variant, c.life, c.obj);
+    return;
+  }
+}
+
+/** A part cell: if its anchor is gone, it dies with it (unless the creature is invulnerable). */
+function updatePart(world: World, x: number, y: number, def: CreatureDef): void {
   const { w, el, aux } = world;
   const i = y * w + x;
   const ax = x + world.vx[i];
@@ -231,10 +252,38 @@ function updatePart(world: World, x: number, y: number): void {
   if (world.inBounds(ax, ay)) {
     const a = ay * w + ax;
     if (el[a] === el[i] && (aux[a] & ANCHOR) !== 0) return;
+    if (reform(world, def, i, ax, ay)) return;
     perish(world, x, y, el[a] === El.FIRE); // a burning anchor sets its parts alight
     return;
   }
+  if (reform(world, def, i, x, y)) return;
   perish(world, x, y, false);
+}
+
+/**
+ * The anchor of an invulnerable creature is gone (cut away): its part at index i rebuilds it whole
+ * around where the anchor was (or as near as there is room), clearing its leftover parts first.
+ */
+function reform(world: World, def: CreatureDef, i: number, ax: number, ay: number): boolean {
+  const id = world.obj[i];
+  if (id === 0 || !world.objects.get(id)?.tags.includes('invulnerable')) return false;
+  const variant = world.owner[i];
+  const { w, h, obj, el } = world;
+  for (let y = Math.max(0, ay - 4); y <= Math.min(h - 1, ay + 4); y++) {
+    for (let x = Math.max(0, ax - 4); x <= Math.min(w - 1, ax + 4); x++) if (obj[y * w + x] === id && el[y * w + x] === def.el) world.set(x, y, El.EMPTY);
+  }
+  for (const [dx, dy] of NUDGES) {
+    if (!poseFree(world, def, ax + dx, ay + dy, 0, 1, -1, -1)) continue;
+    draw(world, def, ax + dx, ay + dy, 0, 1, variant, 0, id);
+    return true;
+  }
+  // no room for all of it yet (a crowded hollow): it keeps one cell, its anchor, where this part
+  // was, and heal() grows it back whole as soon as there is room
+  const px = i % w;
+  const py = (i / w) | 0;
+  world.set(px, py, def.el, { aux: ANCHOR | def.paint(0, variant), owner: variant, obj: id, vx: 1, vy: 0 });
+  world.flags[i] |= Flag.UPDATED;
+  return true;
 }
 
 const cur: Creature = { x: 0, y: 0, frame: 0, face: 1, variant: 0, life: 0, obj: 0 };
@@ -243,7 +292,7 @@ const cur: Creature = { x: 0, y: 0, frame: 0, face: 1, variant: 0, life: 0, obj:
 function updateCreature(world: World, x: number, y: number, def: CreatureDef): void {
   const i = y * world.w + x;
   if ((world.aux[i] & ANCHOR) === 0) {
-    updatePart(world, x, y);
+    updatePart(world, x, y, def);
     return;
   }
   const c = cur;
@@ -256,6 +305,10 @@ function updateCreature(world: World, x: number, y: number, def: CreatureDef): v
   c.obj = world.obj[i];
   const hurt = damage(world, def, c);
   if (hurt !== 0) {
+    if (c.obj !== 0 && world.objects.get(c.obj)?.tags.includes('invulnerable')) {
+      heal(world, def, c); // a creature the level protects (a caged bird) pulls itself back together
+      return;
+    }
     die(world, def, c, hurt === 2);
     return;
   }

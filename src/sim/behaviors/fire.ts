@@ -9,6 +9,7 @@ import { LEAF } from '../elements/leaf';
 import { STEAM } from '../elements/steam';
 import { at, FLAMMABILITY, NEIGHBORS4, NEIGHBORS8, REPLACEABLE, RIGID } from '../physics';
 import { defineTunables } from '../tunables';
+import { isProtected } from '../protect';
 import { rise } from './gas';
 import { markUnsupported } from './rigid';
 
@@ -94,6 +95,7 @@ function emberRateOf(fuel: number): number {
  */
 export function ignite(world: World, x: number, y: number): void {
   const i = y * world.w + x;
+  if (isProtected(world, i)) return; // what the level protects does not burn
   const fuel = FLAMMABILITY[world.el[i]] > 0 ? world.el[i] : 0;
   world.set(x, y, El.FIRE, { aux: fuel, life: lifetime(world, fuel) });
   world.flags[i] |= Flag.UPDATED; // starts burning next tick

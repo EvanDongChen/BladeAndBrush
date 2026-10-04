@@ -17,7 +17,7 @@ export interface SetpieceSpec {
 /** A mountain a setpiece needs in the plan. Positions are fractions of the scroll. */
 export interface PlannedMountain {
   x: number;
-  /** 0..1 like the planner's own mountains (up to 1.5 to tower over them); the height slider still scales it. */
+  /** 0..1 like the planner's own mountains (up to 2.5 to tower over them); the height slider still scales it. */
   height?: number;
   /** 'flat' is a plateau with a ground slab on top (things can stand on it). Default 'peak'. */
   kind?: 'peak' | 'flat';

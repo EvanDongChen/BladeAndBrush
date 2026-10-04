@@ -28,8 +28,9 @@ export function siteHeader(active: SiteSection, sub?: string): HTMLElement {
     h('span', { class: 'site-word' }, h('span', { class: 'site-word-en' }, 'Blade', h('i', {}, '&'), 'Brush'), sub ? h('span', { class: 'site-word-sub' }, sub) : ''),
   );
   const bar = h('header', { class: 'site-header' }, h('a', { class: 'skip-link', href: '#main' }, 'Skip to content'), brand, nav);
-  const onScroll = () => bar.classList.toggle('scrolled', window.scrollY > 24);
-  addEventListener('scroll', onScroll, { passive: true });
+  // (the guards keep the header usable where there is no window to scroll, such as the DOM test harness)
+  const onScroll = () => bar.classList.toggle('scrolled', typeof scrollY === 'number' && scrollY > 24);
+  if (typeof addEventListener === 'function') addEventListener('scroll', onScroll, { passive: true });
   onScroll();
   return bar;
 }

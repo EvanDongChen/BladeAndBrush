@@ -2,7 +2,7 @@ import type { Blueprint } from '../core/blueprint';
 import { createNoise } from '../core/noise';
 import type { GenParams } from '../core/params';
 import { hashSeed, Rng } from '../core/rng';
-import { setpieceOf, type PlannedMountain } from '../core/setpieces';
+import { setpieceOf, type PlannedMountain, type SetpieceSpec } from '../core/setpieces';
 import { artOf } from './artState';
 import { DEPTH } from './layout';
 import { SCROLL_H, type Units } from './units';
@@ -33,16 +33,21 @@ export interface PlanHints {
   clear: [number, number][];
 }
 
-/** Plan hints from a blueprint's setpieces, or undefined for a free painting. */
-export function hintsOf(bp: Blueprint): PlanHints | undefined {
-  if (bp.setpieces.length === 0) return undefined;
+/** Plan hints from a setpiece list, or undefined for a free painting. */
+export function hintsFor(setpieces: SetpieceSpec[]): PlanHints | undefined {
+  if (setpieces.length === 0) return undefined;
   const hints: PlanHints = { mountains: [], clear: [] };
-  for (const spec of bp.setpieces) {
+  for (const spec of setpieces) {
     const sp = setpieceOf(spec);
     hints.mountains.push(...(sp.places?.(spec) ?? []));
     for (const [a, b] of sp.clears?.(spec) ?? []) hints.clear.push([Math.min(a, b), Math.max(a, b)]);
   }
   return hints;
+}
+
+/** Plan hints from a blueprint's setpieces, or undefined for a free painting. */
+export function hintsOf(bp: Blueprint): PlanHints | undefined {
+  return hintsFor(bp.setpieces);
 }
 
 /** Minimum distance between peaks in the near row; `spacing` is the 0..1 slider. */

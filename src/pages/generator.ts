@@ -57,14 +57,13 @@ export function mountGenerator(root: HTMLElement): () => void {
   const graph = noiseGraph({
     seed: () => seed,
     params,
-    levelForced: () =>
-      setpieces.flatMap((s) => (s.type === 'mountain' && typeof s.x === 'number' ? [s.x * scrollW] : [])),
+    setpieces: () => setpieces,
     onChange: () => rebuild(),
   });
 
   function rebuild(): void {
     const ed = graph.edits();
-    const pins = ed.pins.map((x) => ({ type: 'mountain', x: x / scrollW }));
+    const pins = ed.pins.map((p) => ({ type: 'mountain', x: p.x / scrollW, ...(p.h === undefined ? {} : { height: p.h }) }));
     bp = generate(seed, params, {
       features: toggles,
       setpieces: [...setpieces, ...pins],

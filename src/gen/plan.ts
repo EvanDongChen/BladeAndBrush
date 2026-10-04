@@ -69,7 +69,13 @@ export interface ScoreCurve {
  * overrides (the noise-graph gate) pass barOver; otherwise the bar follows
  * spacing, exactly as before.
  */
-export function scoreCurve(seed: number, spacing: number, widthUnits: number, barOver?: number): ScoreCurve {
+export function scoreCurve(
+  seed: number,
+  spacing: number,
+  widthUnits: number,
+  barOver?: number,
+  scoreOver?: Record<number, number>,
+): ScoreCurve {
   const noise = createNoise(hashSeed(seed, 'plan', 'noise'));
   const sp = Math.min(1, Math.max(0, spacing));
   const samp = 0.03 * lerp(1.35, 0.7, sp);
@@ -82,7 +88,14 @@ export function scoreCurve(seed: number, spacing: number, widthUnits: number, ba
     lo = Math.min(lo, v);
     hi = Math.max(hi, v);
   }
-  const score = raw.map((v) => (hi > lo ? (v - lo) / (hi - lo) : 0));
+  // Painted offsets (the noise-graph brush) nudge samples after normalize,
+  // clamped to the same 0..1 range. Keyed by sample index; the grid depends
+  // only on the scroll width, so keys stay stable while spacing changes.
+  const score = raw.map((v, i) => {
+    const s = hi > lo ? (v - lo) / (hi - lo) : 0;
+    const d = scoreOver?.[i] ?? 0;
+    return Math.min(1, Math.max(0, s + d));
+  });
   return { xs, score, bar: barOver ?? lerp(0.72, 0.86, sp), minApart: lerp(260, 700, sp) };
 }
 
@@ -110,7 +123,14 @@ export function pickPeaks(curve: ScoreCurve, forced: number[] = []): number[] {
  *   touching a neighbour in their row (a land gap that grows with spacing).
  * - Together the near and mid rows cover at most COVER_MAX of the scroll, so land shows.
  */
-export function makePlan(seed: number, params: GenParams, u: Units, hints?: PlanHints, barOver?: number): Placement[] {
+export function makePlan(
+  seed: number,
+  params: GenParams,
+  u: Units,
+  hints?: PlanHints,
+  barOver?: number,
+  scoreOver?: Record<number, number>,
+): Placement[] {
   const rng = new Rng(hashSeed(seed, 'plan'));
   const noise = createNoise(hashSeed(seed, 'plan', 'noise'));
   const W = u.widthUnits;
@@ -137,7 +157,7 @@ export function makePlan(seed: number, params: GenParams, u: Units, hints?: Plan
 
   // 1. Where mountains rise: high points of a noise curve along x. Tighter spacing = a faster
   //    curve and a lower bar, so more of them.
-  const curve = scoreCurve(seed, params.spacing, W, barOver);
+  const curve = scoreCurve(seed, params.spacing, W, barOver, scoreOver);
   const peaks = pickPeaks(curve, forced);
 
   // 2. At each, a stack of mountains at several depths (feet every 30 units from the back), jittered
@@ -223,7 +243,7 @@ const cache = new WeakMap<Blueprint, Placement[]>();
 export function planOf(bp: Blueprint): Placement[] {
   let pl = cache.get(bp);
   if (!pl) {
-    pl = makePlan(bp.seed, bp.params, artOf(bp).u, hintsOf(bp), bp.planBar);
+    pl = makePlan(bp.seed, bp.params, artOf(bp).u, hintsOf(bp), bp.planBar, bp.planScore);
     cache.set(bp, pl);
   }
   return pl;

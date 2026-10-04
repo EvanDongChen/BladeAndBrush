@@ -64,10 +64,12 @@ export function mountGenerator(root: HTMLElement): () => void {
 
   function rebuild(): void {
     const ed = graph.edits();
+    const pins = ed.pins.map((x) => ({ type: 'mountain', x: x / scrollW }));
     bp = generate(seed, params, {
       features: toggles,
-      setpieces: [...setpieces, ...ed.pins.map((x) => ({ type: 'mountain', x: x / scrollW }))],
+      setpieces: [...setpieces, ...pins],
       ...(ed.gate === undefined ? {} : { planBar: ed.gate }),
+      ...(Object.keys(ed.offsets).length === 0 ? {} : { planScore: ed.offsets }),
     });
     world = new World(DEFAULT_DIMS, seed, params);
     frontier = new Frontier(bp, columnsPerTick);

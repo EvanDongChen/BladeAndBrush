@@ -24,6 +24,8 @@ export interface GenerateOptions {
    * gate, 0..1). Undefined = the bar follows spacing, exactly as always.
    */
   planBar?: number;
+  /** Painted score offsets for the picker curve, keyed by sample index. */
+  planScore?: Record<number, number>;
 }
 
 /** Registered features that are switched on, in pipeline order. */
@@ -60,7 +62,7 @@ function pipeline(specs: SetpieceSpec[], overrides?: Record<string, boolean>): S
  */
 export function generate(seed: number, params: GenParams, opts: GenerateOptions = {}): Blueprint {
   const dims = opts.dims ?? DEFAULT_DIMS;
-  const bp = createBlueprint(seed, params, dims, opts.setpieces, opts.planBar);
+  const bp = createBlueprint(seed, params, dims, opts.setpieces, opts.planBar, opts.planScore);
   attachArt(bp, opts.k ?? DEFAULT_ART_K);
   let nextOwner = 1;
   const newStroke: FeatureCtx['newStroke'] = (info) => {

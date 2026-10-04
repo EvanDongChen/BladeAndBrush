@@ -306,9 +306,10 @@ export function registryInspector(): HTMLElement {
  * the URL overrides it (e.g. ?k=4 for full resolution).
  */
 export function displayScale(cellsWide: number, max: number): number {
+  if (typeof location === 'undefined' || typeof innerWidth === 'undefined') return max; // no window (tests)
   const forced = Number(new URLSearchParams(location.search).get('k'));
   if (forced >= 1) return Math.min(max, Math.round(forced));
-  const need = (innerWidth * (devicePixelRatio || 1)) / cellsWide;
+  const need = (innerWidth * (globalThis.devicePixelRatio || 1)) / cellsWide;
   return Math.max(1, Math.min(max, Math.ceil(need - 0.15)));
 }
 

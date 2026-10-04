@@ -1,7 +1,7 @@
 import { registerBehavior } from '../../core/behaviors';
 import { El } from '../../core/elements';
 import type { World } from '../../core/world';
-import { at, BLOCKED, canSink, fall, FLAMMABILITY, FREE, K_STATIC, KIND, moveCell, REPLACEABLE, slideDiagonal } from '../physics';
+import { at, BLOCKED, BREEZE, canSink, fall, fallDir, FLAMMABILITY, FREE, K_STATIC, KIND, moveCell, REPLACEABLE, slideDiagonal, windOf, windYOf } from '../physics';
 import { defineTunables } from '../tunables';
 
 export const waterTunables = defineTunables(
@@ -16,16 +16,48 @@ export const waterTunables = defineTunables(
 /**
  * Fall, else slide diagonally down, else flow sideways. The flow direction is kept in vx so a
  * stream keeps going one way instead of jittering. Sideways flow stops above a gap, so water
- * drops into grooves on its own.
+ * drops into grooves on its own. A strong wind blows falling drops sideways, drives the surface
+ * downwind (water piles up against the far bank) and, in a gale, whips spray off the top. An
+ * updraft lifts water into the air (a strong one carries it away upward); a downdraft only makes
+ * it fall harder, which the fall already covers.
  */
 export function updateWater(world: World, x: number, y: number): void {
+  const wind = windOf(world);
+  const gust = Math.abs(wind) - BREEZE;
+  const down = fallDir(world);
+  const wx = wind > 0 ? 1 : -1;
+  const lift = (-windYOf(world) - BREEZE) / (1 - BREEZE); // 0..1 above the breeze
+  if (lift > 0 && world.rng.chance(lift * 0.9)) {
+    // the updraft carries it up (with the wind, if that blows too), or at least holds it aloft
+    const sx = gust > 0 ? wx : 0;
+    if (REPLACEABLE[at(world, x + sx, y - 1)]) {
+      const j = moveCell(world, x, y, x + sx, y - 1, FREE);
+      world.vy[j] = 0;
+      return;
+    }
+    if (REPLACEABLE[at(world, x, y + down)]) return;
+  }
+  if (gust > 0) {
+    const free = REPLACEABLE[at(world, x, y + down)] === 1;
+    // airborne: slant downwind as it falls
+    if (free && world.rng.chance(gust * 0.9) && REPLACEABLE[at(world, x + wx, y + down)]) {
+      moveCell(world, x, y, x + wx, y + down, FREE);
+      return;
+    }
+    // a gale lifts spray off an open surface
+    if (!free && gust > 0.35 && REPLACEABLE[at(world, x, y - down)] && world.rng.chance((gust - 0.35) * 0.25) && REPLACEABLE[at(world, x + wx, y - down)]) {
+      moveCell(world, x, y, x + wx, y - down, FREE);
+      return;
+    }
+  }
   if (fall(world, x, y)) return;
-  if (throughPlants(world, x, y)) return;
+  if (down > 0 && throughPlants(world, x, y)) return;
   if (slideDiagonal(world, x, y)) return;
 
   const i = y * world.w + x;
   let dir = world.vx[i];
-  if (dir === 0) dir = world.rng.chance(0.5) ? 1 : -1;
+  if (dir === 0) dir = world.rng.chance(0.5 + 0.4 * wind) ? 1 : -1; // the wind pushes still water downwind
+  if (gust > 0 && dir !== wx && world.rng.chance(Math.min(1, gust * 1.6))) dir = wx; // and drives it in a strong wind
 
   const reach = waterTunables.dispersion | 0;
   let dist = 0;
@@ -33,7 +65,7 @@ export function updateWater(world: World, x: number, y: number): void {
     const nx = x + dir * k;
     if (!REPLACEABLE[at(world, nx, y)]) break;
     dist = k;
-    if (canSink(El.WATER, at(world, nx, y + 1)) !== BLOCKED) break; // fall in here next tick
+    if (canSink(El.WATER, at(world, nx, y + down)) !== BLOCKED) break; // fall in here next tick
   }
   if (dist === 0) {
     world.vx[i] = -dir; // blocked: try the other way next tick

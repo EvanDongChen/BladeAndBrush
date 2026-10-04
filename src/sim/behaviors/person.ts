@@ -1,4 +1,5 @@
 import type { World } from '../../core/world';
+import { BREEZE, gravityOf, windOf, windYOf } from '../physics';
 import { PERSON } from '../elements/person';
 import {
   canPose,
@@ -6,6 +7,7 @@ import {
   defineCreature,
   flee,
   groundedAt,
+  nudge,
   relocate,
   scanFire,
   type Creature,
@@ -59,15 +61,66 @@ const TOGETHER: Pixel[] = [...BODY, [0, 1, LEG]];
 const IDLE = 2;
 
 /**
+ * Fall: one cell per tick at the default gravity, faster when gravity is turned up. At zero
+ * gravity villagers float slowly up; below zero they fly up, faster the lower it goes.
+ */
+function fallPerson(world: World, def: CreatureDef, c: Creature): void {
+  const g = gravityOf(world);
+  if (g > 0) {
+    const steps = Math.max(1, Math.round(g / 2));
+    for (let k = 0; k < steps; k++) {
+      if (groundedAt(world, def, c.x, c.y, c.frame, c.face) || !relocate(world, def, c, 0, 1)) break;
+    }
+  } else if (g < 0) {
+    const steps = Math.max(1, Math.round(-g / 2));
+    for (let k = 0; k < steps; k++) if (!nudge(world, def, c, 0, -1)) break;
+  } else if (world.tick % 3 === 0) {
+    nudge(world, def, c, 0, -1);
+  }
+  blow(world, def, c, true);
+}
+
+/**
+ * The wind shoves villagers downwind (and up or down with an updraft or downdraft): up to a cell
+ * a tick in a gale, faster in the air than on the ground. On the ground they are pushed up small
+ * steps, and a gale now and then lifts them off their feet. Pushes stop short of the edges.
+ */
+function blow(world: World, def: CreatureDef, c: Creature, airborne: boolean): void {
+  // up or down: an updraft lifts them (two cells a tick at full, so it beats normal gravity), a downdraft drags them down
+  const wy = windYOf(world);
+  const draft = Math.abs(wy) - BREEZE;
+  if (draft > 0) {
+    const r = draft / (1 - BREEZE);
+    if (wy < 0) {
+      if (world.tick % Math.max(1, Math.round(4 * (1 - r))) === 0) {
+        for (let k = r > 0.6 ? 2 : 1; k > 0; k--) if (!nudge(world, def, c, 0, -1)) break;
+      }
+    } else if (airborne && world.tick % Math.max(1, Math.round(3 * (1 - r))) === 0) relocate(world, def, c, 0, 1);
+  }
+  const wind = windOf(world);
+  const gust = Math.abs(wind) - BREEZE;
+  if (gust <= 0) return;
+  const dx = wind > 0 ? 1 : -1;
+  const every = Math.max(1, Math.round((airborne ? 4 : 7) * (1 - gust / (1 - BREEZE))));
+  if (world.tick % every !== 0) return;
+  if (nudge(world, def, c, dx, 0)) {
+    if (!airborne && gust > 0.4 && world.tick % 5 === 0) nudge(world, def, c, 0, -1); // swept off their feet
+    return;
+  }
+  if (!airborne) nudge(world, def, c, dx, -1); // shoved up a step
+}
+
+/**
  * Stroll: walk a while, stand a while, now and then turn around. Falls when the ground goes,
  * steps up small steps and down short drops, turns back at cliffs and walls, and runs away from
  * nearby fire. life = (running ? 128 : 0) | timer (ticks left in the current walk or pause).
  */
 function think(world: World, c: Creature, def: CreatureDef): void {
-  if (!groundedAt(world, def, c.x, c.y, c.frame, c.face)) {
-    relocate(world, def, c, 0, 1); // fall
+  if (gravityOf(world) <= 0 || !groundedAt(world, def, c.x, c.y, c.frame, c.face)) {
+    fallPerson(world, def, c);
     return;
   }
+  blow(world, def, c, false);
   const t = creatureTunables;
   const { rng } = world;
   let panic = (c.life & 128) !== 0;

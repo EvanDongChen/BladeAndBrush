@@ -162,6 +162,20 @@ export function relocate(world: World, def: CreatureDef, c: Creature, dx: number
   return true;
 }
 
+/**
+ * Cells kept clear at the left and right edges (the scroll's rollers cover them on the level
+ * page) and at the top: wind and lift never push a creature in there, so it stays in view.
+ */
+export const EDGE_MARGIN = 16;
+const TOP_MARGIN = 10;
+
+/** relocate() for pushes from wind, lift and upside-down gravity: refuses to push a creature toward an edge it is already near. */
+export function nudge(world: World, def: CreatureDef, c: Creature, dx: number, dy: number): boolean {
+  const nx = c.x + dx;
+  if ((dx < 0 && nx < EDGE_MARGIN) || (dx > 0 && nx >= world.w - EDGE_MARGIN) || (dy < 0 && c.y + dy < TOP_MARGIN)) return false;
+  return relocate(world, def, c, dx, dy);
+}
+
 /** Would the pose be free, and (if `grounded`) have ground under its lowest cells? Does not move. */
 export function canPose(world: World, def: CreatureDef, c: Creature, dx: number, dy: number, frame: number, face: number, grounded: boolean): boolean {
   const nx = c.x + dx;

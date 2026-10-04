@@ -5,7 +5,7 @@ import type { World } from '../../core/world';
 import { DUST } from '../elements/dust';
 import { RAIN } from '../elements/rain';
 import { STEAM } from '../elements/steam';
-import { at, BLOCKED, canRise, FREE, moveCell, REPLACEABLE } from '../physics';
+import { at, BLOCKED, canRise, FREE, moveCell, REPLACEABLE, windOf } from '../physics';
 import { cloudAt, soak } from './cloud';
 import { defineTunables } from '../tunables';
 
@@ -39,7 +39,7 @@ function startLife(world: World, base: number): number {
 export function rise(world: World, x: number, y: number, drift: number): void {
   const me = world.el[y * world.w + x];
   if (world.rng.chance(drift)) {
-    const dx = world.rng.chance(0.5) ? 1 : -1;
+    const dx = world.rng.chance(0.5 + 0.45 * windOf(world)) ? 1 : -1; // smoke and steam lean downwind
     if (REPLACEABLE[at(world, x + dx, y)]) {
       moveCell(world, x, y, x + dx, y, FREE);
       return;

@@ -14,6 +14,19 @@ export interface SetpieceSpec {
   [arg: string]: unknown;
 }
 
+/** A mountain a setpiece needs in the plan. Positions are fractions of the scroll. */
+export interface PlannedMountain {
+  x: number;
+  /** 0..1 like the planner's own mountains (up to 1.5 to tower over them); the height slider still scales it. */
+  height?: number;
+  /** 'flat' is a plateau with a ground slab on top (things can stand on it). Default 'peak'. */
+  kind?: 'peak' | 'flat';
+  /** Foot of the mountain, 0..1 of the scroll height (farther away = higher up). Default: near the front. */
+  y?: number;
+  /** Half width, as a fraction of the scroll width. Default: the planner's usual size. */
+  halfWidth?: number;
+}
+
 /** Drop a file into gen/setpieces/ that calls registerSetpiece(). */
 export interface Setpiece {
   type: string;
@@ -28,6 +41,8 @@ export interface Setpiece {
    * open ground for a village or open sky under the moon.
    */
   clears?(spec: SetpieceSpec): [x0: number, x1: number][];
+  /** Mountains this setpiece needs, planned first; the free ones are planned around them. */
+  places?(spec: SetpieceSpec): PlannedMountain[];
   run?(ctx: FeatureCtx, spec: SetpieceSpec): void;
 }
 

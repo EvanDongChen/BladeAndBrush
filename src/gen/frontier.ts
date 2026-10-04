@@ -80,7 +80,7 @@ export class Frontier {
   /** Registry entries sorted by when they are revealed, and the next one to reveal. */
   private readonly pending: StrokeInfo[];
   private next = 0;
-  /** Cells per object id over every plane of the blueprint (WorldObject.cells). */
+  /** Cells per object id in front, as revealed (WorldObject.cells): what a metric sees of it untouched. */
   private readonly cellCount = new Map<number, number>();
 
   constructor(
@@ -88,11 +88,9 @@ export class Frontier {
     public columnsPerTick = 4,
   ) {
     this.pending = [...bp.registry.strokes.values()].sort((a, b) => revealAt(a) - revealAt(b) || a.id - b.id);
-    for (const g of bp.planes ?? [{ el: bp.el, owner: bp.owner }]) {
-      for (let i = 0; i < g.owner.length; i++) {
-        const o = g.owner[i];
-        if (o !== 0 && g.el[i] !== El.EMPTY) this.cellCount.set(o, (this.cellCount.get(o) ?? 0) + 1);
-      }
+    for (let i = 0; i < bp.owner.length; i++) {
+      const o = bp.owner[i];
+      if (o !== 0 && bp.el[i] !== El.EMPTY) this.cellCount.set(o, (this.cellCount.get(o) ?? 0) + 1);
     }
   }
 

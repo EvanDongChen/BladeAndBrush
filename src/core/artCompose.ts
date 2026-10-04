@@ -43,6 +43,11 @@ function pixel(view: ArtView, p: number, paper: boolean, from: number, spillOnly
   return acc;
 }
 
+/** Use an `initial` composite computed elsewhere (a worker) for this view. */
+export function adoptPrepared(view: ArtView, initial: Uint32Array): void {
+  prepared.set(view.art, { k: view.art.k, view, initial });
+}
+
 /** Precompute (once per art, cached) the as-generated picture. */
 export function prepareArt(view: ArtView): PreparedArt {
   let prep = prepared.get(view.art);

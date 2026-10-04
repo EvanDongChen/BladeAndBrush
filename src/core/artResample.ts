@@ -32,6 +32,13 @@ export function resampleArt(view: ArtView, k: number): ArtView {
   return out;
 }
 
+/** Use a resampled view computed elsewhere (a worker) for `src` at its k. */
+export function adoptResampled(src: ArtBuffers, view: ArtView): void {
+  let byK = cache.get(src);
+  if (!byK) cache.set(src, (byK = new Map()));
+  byK.set(view.art.k, view);
+}
+
 interface Weights {
   /** Per output pixel o: `count[o]` sources, their indices `idx` and weights `w` from `off[o]`. */
   count: Uint8Array;

@@ -5,12 +5,11 @@ import { describeGoal, evaluateGoal } from '../core/goals';
 import { levels, type LevelDef } from '../core/levels';
 import { defaultParams, params as paramDefs, type GenParams } from '../core/params';
 import { DEFAULT_ART_K } from '../gen/artState';
-import { artView } from '../core/blueprint';
+import { artView, createBlueprint } from '../core/blueprint';
 import { Renderer } from '../core/render';
 import { ActionDriver } from '../core/replay';
 import { World } from '../core/world';
 import { Frontier } from '../gen/frontier';
-import { generate } from '../gen/generate';
 import { scan } from '../gen/scan';
 import type { Blueprint } from '../core/blueprint';
 import type { GoalSpec } from '../core/goals';
@@ -19,6 +18,7 @@ import { bodyCount } from '../sim/behaviors/rigid';
 import { aimEnd, aimTunables, chargeOf, drawAim, isLineAbility, lineColor } from '../sim/lineAbility';
 import { step } from '../sim/step';
 import { Fx } from './fx';
+import { generateAsync } from './genClient';
 import { arsenal } from './arsenal';
 import { button, displayScale, h, handscroll, panel, seal, startLoop, toCell } from './ui';
 
@@ -93,8 +93,27 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
   const frame = h('div', { class: 'frame' }, mount, canvas, hudTool, banner, stamp, rollLeft, rollLead);
   let tip = '';
 
+  /** Generation runs on a worker: until it answers, the old painting (or an empty scroll) stays. */
+  let pending = 0;
+  let painted: GenParams | null = null;
   function regenerate(): void {
-    bp = generate(level.seed, params, { features: level.featuresEnabled, setpieces: level.setpieces });
+    // "Try again" with the same sliders reuses the painting: no need to generate it again
+    if (painted && paramDefs.all().every((d) => painted![d.key] === params[d.key])) {
+      restart(bp);
+      return;
+    }
+    const want = { ...params };
+    const id = ++pending;
+    generateAsync(level.seed, want, { features: level.featuresEnabled, setpieces: level.setpieces }, renderer.scale).then((next) => {
+      if (id !== pending || stopped) return; // a newer repaint was asked for meanwhile
+      pending = 0;
+      painted = want;
+      restart(next);
+    });
+  }
+
+  function restart(next: Blueprint): void {
+    bp = next;
     world = new World(level.dims, level.seed, { ...params });
     frontier = new Frontier(bp);
     driver = new ActionDriver();
@@ -116,6 +135,7 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
     step(world);
   });
   let complete: ReturnType<typeof handscroll> | undefined;
+  restart(createBlueprint(level.seed, params, level.dims, level.setpieces)); // an empty scroll until the painting arrives
   regenerate();
 
   // ---- pointer input -> action driver ----
@@ -378,7 +398,7 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
         renderer.inCells((g) => drawAim(g, ability, aim, radius, chargeOf(world.tick - pressedTick)));
       }
       showInk();
-      if (frames++ % 10 === 0 && frontier.done) queueCheck();
+      if (frames++ % 10 === 0 && frontier.done && !pending) queueCheck();
       bar.setSpent(phase !== 'play');
       banner.hidden = phase !== 'failed';
       sealButton.toggleAttribute('disabled', phase !== 'play' || used === 0);
@@ -387,7 +407,9 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
         frame.style.setProperty('--p', String(frontier.x / level.dims.w));
       }
       frame.classList.toggle('ready', frontier.done);
-      status.textContent = !frontier.done
+      status.textContent = pending
+        ? 'Grinding the ink…'
+        : !frontier.done
         ? 'The landscape is painting itself…'
         : phase === 'settling'
           ? 'The ink is drying…'

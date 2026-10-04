@@ -88,8 +88,10 @@ export function countComponents(w: number, h: number, mask: Uint8Array): number 
 export function skyReach(world: World): Uint8Array {
   const open = new Uint8Array(256);
   for (let e = 0; e < 256; e++) {
-    const k = ELEMENTS[e]?.kind;
-    open[e] = k === 'empty' || k === 'gas' || k === 'projectile' ? 1 : 0;
+    const d = ELEMENTS[e];
+    const k = d?.kind;
+    // things hanging in the sky (clouds, the moon) do not wall anything in
+    open[e] = k === 'empty' || k === 'gas' || k === 'projectile' || (d?.anchored && !d.solidForScan) ? 1 : 0;
   }
   const { w, h, el, size } = world;
   const seen = new Uint8Array(size);
@@ -121,17 +123,25 @@ export function skyReach(world: World): Uint8Array {
  * boulders). A peak on land (a plateau, tagged 'plateau') or on anything else tracked (a hut) is
  * not a mountain and is dropped. Peaks on untracked terrain (painted in the sandbox) stay as they are.
  */
-export function peaksByMountain(world: World, heights: Int16Array, peaks: Peak[]): Peak[] {
+export function peaksByMountain(world: World, heights: Int16Array, peaks: Peak[], minProminence = 0): Peak[] {
   if (world.objects.size === 0) return peaks;
   const best = new Map<number, Peak>();
   const out: Peak[] = [];
-  for (const p of peaks) {
-    const id = mountainUnder(world, p.x, world.h - heights[p.x]);
+  for (const raw of peaks) {
+    const top = world.h - heights[raw.x];
+    const id = mountainUnder(world, raw.x, top);
     if (id < 0) continue;
     if (id === 0) {
-      out.push(p);
+      out.push(raw);
       continue;
     }
+    // A tracked mountain is measured from its own foot, not from the bottom of the page: the
+    // painting has no ground strip, and farther mountains stand higher up. A stump (or rubble that
+    // fell below the foot) lower than minProminence is no peak.
+    const foot = world.objects.get(id)!.bbox[3] + 1;
+    const h = Math.min(raw.h, foot - top);
+    if (h < Math.max(1, minProminence)) continue;
+    const p = { x: raw.x, h, prominence: Math.min(raw.prominence, h) };
     const prev = best.get(id);
     if (!prev || p.h > prev.h || (p.h === prev.h && p.prominence > prev.prominence)) best.set(id, p);
   }
@@ -168,7 +178,7 @@ export function scan(world: World, thresholds: ScanThresholds = DEFAULT_THRESHOL
     minProminence: thresholds.minProminence * k,
     waterfallMin: thresholds.waterfallMin * k,
   };
-  const peaks = peaksByMountain(world, heights, findPeaks(heights, scaled.minProminence));
+  const peaks = peaksByMountain(world, heights, findPeaks(heights, scaled.minProminence), scaled.minProminence);
   const ctx = { heights, peaks, thresholds: scaled, objects: indexObjects(world) };
   const counts: Record<string, number> = {};
   for (const m of metrics.all()) counts[m.name] = m.measure(world, ctx);

@@ -8,6 +8,7 @@ import { Renderer } from '../core/render';
 import { DEFAULT_ART_K } from '../gen/artState';
 import { ActionDriver, type ActionLog } from '../core/replay';
 import { World } from '../core/world';
+import { artView, type Blueprint } from '../core/blueprint';
 import { Frontier } from '../gen/frontier';
 import { generate } from '../gen/generate';
 import { aimEnd, chargeOf, drawAim, isLineAbility } from '../sim/lineAbility';
@@ -65,10 +66,16 @@ export function mountSandbox(root: HTMLElement): () => void {
   const status = h('div', { class: 'status' });
   const recStatus = h('div', { class: 'status' }, 'Not recording.');
 
+  /** The blueprint behind the current world (blueprint scene only): its art is drawn like in the levels. */
+  let bp: Blueprint | undefined;
+
   function buildScene(s: number, sc: Scene, p: GenParams): World {
     const w = new World(DEFAULT_DIMS, s, p);
-    if (sc === 'blueprint') new Frontier(generate(s, p)).revealAll(w);
-    else SCENES.find((x) => x.id === sc)?.build(w);
+    bp = undefined;
+    if (sc === 'blueprint') {
+      bp = generate(s, p);
+      new Frontier(bp).revealAll(w);
+    } else SCENES.find((x) => x.id === sc)?.build(w);
     return w;
   }
 
@@ -264,7 +271,7 @@ export function mountSandbox(root: HTMLElement): () => void {
   const stop = startLoop(
     clock,
     (dt) => {
-      renderer.draw(world, { cursor });
+      renderer.draw(world, { cursor, art: bp ? artView(bp) : undefined });
       renderer.inCells((g) => fx.draw(g));
       // skill-shot preview: drawn from live pointer input, so it shows instantly (even when paused)
       if (down && cursor && isLineAbility(tool.ability)) {

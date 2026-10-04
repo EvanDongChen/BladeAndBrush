@@ -515,9 +515,18 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
   for (const key of PHYSICS) {
     const def = paramDefs.get(key);
     if (!def) continue;
-    const fmt = (v: number) => (key === 'wind' ? (v === 0 ? 'calm' : `${v < 0 ? '←' : '→'} ${Math.abs(v).toFixed(2)}`) : String(v));
+    const fmt = (v: number) =>
+      key === 'wind'
+        ? v === 0
+          ? 'calm'
+          : `${v < 0 ? '←' : '→'} ${Math.abs(v).toFixed(2)}`
+        : v === 0
+          ? 'float'
+          : `${v < 0 ? '↑' : '↓'} ${Math.abs(v)}`;
     const out = h('output', {}, fmt(params[key]));
-    const input = h('input', { type: 'range', min: def.min, max: def.max, step: def.step, value: params[key], 'aria-label': def.label });
+    // gravity goes below zero here: 0 is weightless, negative turns it over so things fly up
+    const min = key === 'gravity' ? -6 : def.min;
+    const input = h('input', { type: 'range', min, max: def.max, step: def.step, value: params[key], 'aria-label': def.label });
     input.addEventListener('input', () => {
       const v = Number(input.value);
       params[key] = v;

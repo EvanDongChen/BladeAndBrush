@@ -110,19 +110,34 @@ export function windOf(world: World): number {
   return Math.max(-1, Math.min(1, world.params.wind ?? 0));
 }
 
+/** The gravity param: above 0 things fall, 0 is weightless (things float slowly up), below 0 they fly up. */
+export function gravityOf(world: World): number {
+  return world.params.gravity ?? 2;
+}
+
+/** Which way loose things fall: 1 down, -1 up (weightless or negative gravity). */
+export function fallDir(world: World): number {
+  return gravityOf(world) > 0 ? 1 : -1;
+}
+
 /**
- * Accelerating fall: vy grows by 1 per tick up to world.params.gravity, and the cell drops up to
- * vy cells through free space (or one cell through a lighter fluid). Returns true if it moved.
+ * Accelerating fall: vy grows by 1 per tick up to the strength of gravity, and the cell drops up
+ * to vy cells through free space (or one cell through a lighter fluid). Below zero gravity it
+ * "falls" upward; at zero it floats up one cell every few ticks and otherwise holds still.
+ * Returns true if it moved (or, when weightless, if it is drifting and should do nothing else).
  */
 export function fall(world: World, x: number, y: number): boolean {
   const i = y * world.w + x;
   const me = world.el[i];
-  const maxV = Math.max(1, world.params.gravity | 0);
+  const g = gravityOf(world);
+  const dir = g > 0 ? 1 : -1;
+  if (g === 0 && (world.tick + x) % 3 !== 0) return true; // weightless: hang in the air between drifts
+  const maxV = g === 0 ? 1 : Math.max(1, Math.abs(g) | 0);
   const v = Math.min(world.vy[i] + 1, maxV);
   let dist = 0;
   let mode = BLOCKED;
   for (let k = 1; k <= v; k++) {
-    const m = canSink(me, at(world, x, y + k));
+    const m = canSink(me, at(world, x, y + dir * k));
     if (m === FREE) {
       dist = k;
       mode = FREE;
@@ -138,20 +153,21 @@ export function fall(world: World, x: number, y: number): boolean {
     world.vy[i] = 0;
     return false;
   }
-  const j = moveCell(world, x, y, x, y + dist, mode);
+  const j = moveCell(world, x, y, x, y + dir * dist, mode);
   world.vy[j] = mode === SWAP ? 1 : v; // sinking through fluid is slow
   return true;
 }
 
-/** Slide one cell diagonally down, trying a random side first. Returns true if it moved. */
+/** Slide one cell diagonally down (up, when gravity is turned over), trying a random side first. Returns true if it moved. */
 export function slideDiagonal(world: World, x: number, y: number): boolean {
   const me = world.el[y * world.w + x];
+  const dy = fallDir(world);
   const first = world.rng.chance(0.5) ? 1 : -1;
   for (let s = 0; s < 2; s++) {
     const dx = s === 0 ? first : -first;
-    const m = canSink(me, at(world, x + dx, y + 1));
+    const m = canSink(me, at(world, x + dx, y + dy));
     if (m !== BLOCKED) {
-      moveCell(world, x, y, x + dx, y + 1, m);
+      moveCell(world, x, y, x + dx, y + dy, m);
       return true;
     }
   }

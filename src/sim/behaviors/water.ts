@@ -1,7 +1,7 @@
 import { registerBehavior } from '../../core/behaviors';
 import { El } from '../../core/elements';
 import type { World } from '../../core/world';
-import { at, BLOCKED, canSink, fall, FLAMMABILITY, FREE, K_STATIC, KIND, moveCell, REPLACEABLE, slideDiagonal, windOf } from '../physics';
+import { at, BLOCKED, canSink, fall, fallDir, FLAMMABILITY, FREE, K_STATIC, KIND, moveCell, REPLACEABLE, slideDiagonal, windOf } from '../physics';
 import { defineTunables } from '../tunables';
 
 export const waterTunables = defineTunables(
@@ -13,19 +13,41 @@ export const waterTunables = defineTunables(
   { dispersion: [1, 12, 1] },
 );
 
+/** Wind above the default breeze starts to push water around. */
+const BREEZE = 0.35;
+
 /**
  * Fall, else slide diagonally down, else flow sideways. The flow direction is kept in vx so a
  * stream keeps going one way instead of jittering. Sideways flow stops above a gap, so water
- * drops into grooves on its own.
+ * drops into grooves on its own. A strong wind blows falling drops sideways, drives the surface
+ * downwind (water piles up against the far bank) and, in a gale, whips spray off the top.
  */
 export function updateWater(world: World, x: number, y: number): void {
+  const wind = windOf(world);
+  const gust = Math.abs(wind) - BREEZE;
+  const down = fallDir(world);
+  const wx = wind > 0 ? 1 : -1;
+  if (gust > 0) {
+    const free = REPLACEABLE[at(world, x, y + down)] === 1;
+    // airborne: slant downwind as it falls
+    if (free && world.rng.chance(gust * 0.9) && REPLACEABLE[at(world, x + wx, y + down)]) {
+      moveCell(world, x, y, x + wx, y + down, FREE);
+      return;
+    }
+    // a gale lifts spray off an open surface
+    if (!free && gust > 0.35 && REPLACEABLE[at(world, x, y - down)] && world.rng.chance((gust - 0.35) * 0.25) && REPLACEABLE[at(world, x + wx, y - down)]) {
+      moveCell(world, x, y, x + wx, y - down, FREE);
+      return;
+    }
+  }
   if (fall(world, x, y)) return;
-  if (throughPlants(world, x, y)) return;
+  if (down > 0 && throughPlants(world, x, y)) return;
   if (slideDiagonal(world, x, y)) return;
 
   const i = y * world.w + x;
   let dir = world.vx[i];
-  if (dir === 0) dir = world.rng.chance(0.5 + 0.4 * windOf(world)) ? 1 : -1; // the wind pushes still water downwind
+  if (dir === 0) dir = world.rng.chance(0.5 + 0.4 * wind) ? 1 : -1; // the wind pushes still water downwind
+  if (gust > 0 && dir !== wx && world.rng.chance(Math.min(1, gust * 1.6))) dir = wx; // and drives it in a strong wind
 
   const reach = waterTunables.dispersion | 0;
   let dist = 0;
@@ -33,7 +55,7 @@ export function updateWater(world: World, x: number, y: number): void {
     const nx = x + dir * k;
     if (!REPLACEABLE[at(world, nx, y)]) break;
     dist = k;
-    if (canSink(El.WATER, at(world, nx, y + 1)) !== BLOCKED) break; // fall in here next tick
+    if (canSink(El.WATER, at(world, nx, y + down)) !== BLOCKED) break; // fall in here next tick
   }
   if (dist === 0) {
     world.vx[i] = -dir; // blocked: try the other way next tick

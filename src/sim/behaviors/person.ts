@@ -1,5 +1,5 @@
 import type { World } from '../../core/world';
-import { windOf } from '../physics';
+import { gravityOf, windOf } from '../physics';
 import { PERSON } from '../elements/person';
 import {
   canPose,
@@ -59,18 +59,46 @@ const STRIDE: Pixel[] = [...BODY, [-1, 1, LEG], [1, 1, LEG]];
 const TOGETHER: Pixel[] = [...BODY, [0, 1, LEG]];
 const IDLE = 2;
 
+/** Wind above the default breeze starts to shove villagers. */
+const BREEZE = 0.35;
+
 /**
- * Fall: one cell per tick at the default gravity, faster when gravity is turned up, and a
- * strong wind (stronger than the default breeze) blows a falling villager sideways.
+ * Fall: one cell per tick at the default gravity, faster when gravity is turned up. At zero
+ * gravity villagers float slowly up; below zero they fly up, faster the lower it goes.
  */
 function fallPerson(world: World, def: CreatureDef, c: Creature): void {
-  const steps = Math.max(1, Math.round((world.params.gravity ?? 2) / 2));
-  for (let k = 0; k < steps; k++) {
-    if (groundedAt(world, def, c.x, c.y, c.frame, c.face) || !relocate(world, def, c, 0, 1)) break;
+  const g = gravityOf(world);
+  if (g > 0) {
+    const steps = Math.max(1, Math.round(g / 2));
+    for (let k = 0; k < steps; k++) {
+      if (groundedAt(world, def, c.x, c.y, c.frame, c.face) || !relocate(world, def, c, 0, 1)) break;
+    }
+  } else if (g < 0) {
+    const steps = Math.max(1, Math.round(-g / 2));
+    for (let k = 0; k < steps; k++) if (!relocate(world, def, c, 0, -1)) break;
+  } else if (world.tick % 3 === 0) {
+    relocate(world, def, c, 0, -1);
   }
+  blow(world, def, c, true);
+}
+
+/**
+ * The wind shoves villagers downwind: up to a cell a tick in a gale, faster in the air than on
+ * the ground. On the ground they are pushed up small steps, and a gale now and then lifts them
+ * off their feet.
+ */
+function blow(world: World, def: CreatureDef, c: Creature, airborne: boolean): void {
   const wind = windOf(world);
-  const every = Math.round(6 - 5 * Math.abs(wind)); // 1 (gale) .. 6 (calm) ticks per sideways cell
-  if (Math.abs(wind) > 0.4 && world.tick % every === 0) relocate(world, def, c, wind > 0 ? 1 : -1, 0);
+  const gust = Math.abs(wind) - BREEZE;
+  if (gust <= 0) return;
+  const dx = wind > 0 ? 1 : -1;
+  const every = Math.max(1, Math.round((airborne ? 4 : 7) * (1 - gust / (1 - BREEZE))));
+  if (world.tick % every !== 0) return;
+  if (relocate(world, def, c, dx, 0)) {
+    if (!airborne && gust > 0.4 && world.tick % 5 === 0) relocate(world, def, c, 0, -1); // swept off their feet
+    return;
+  }
+  if (!airborne) relocate(world, def, c, dx, -1); // shoved up a step
 }
 
 /**
@@ -79,10 +107,11 @@ function fallPerson(world: World, def: CreatureDef, c: Creature): void {
  * nearby fire. life = (running ? 128 : 0) | timer (ticks left in the current walk or pause).
  */
 function think(world: World, c: Creature, def: CreatureDef): void {
-  if (!groundedAt(world, def, c.x, c.y, c.frame, c.face)) {
+  if (gravityOf(world) <= 0 || !groundedAt(world, def, c.x, c.y, c.frame, c.face)) {
     fallPerson(world, def, c);
     return;
   }
+  blow(world, def, c, false);
   const t = creatureTunables;
   const { rng } = world;
   let panic = (c.life & 128) !== 0;

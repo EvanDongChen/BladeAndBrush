@@ -1347,26 +1347,12 @@ input[type='number'] {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  padding: 4px 12px 5px 10px;
+  padding: 1px 2px;
   text-align: right;
   color: var(--ink);
-  background: rgba(246, 240, 225, 0.86);
-  border-right: 3px solid var(--silk);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
-  overflow: hidden;
-  transition: color 0.4s, border-color 0.4s;
-}
-
-/* the green wash sweeps in from the left once the goal is met */
-.verse::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(90deg, rgba(47, 125, 79, 0.28), rgba(47, 125, 79, 0.1));
-  transform-origin: left;
-  transform: scaleX(0);
-  transition: transform 0.8s var(--ease-scroll);
-  pointer-events: none;
+  /* a paper-coloured halo keeps the text readable over the painting without a box */
+  text-shadow: 0 0 3px rgba(246, 240, 225, 0.95), 0 0 6px rgba(246, 240, 225, 0.8), 0 0 10px rgba(246, 240, 225, 0.6);
+  transition: color 0.5s;
 }
 
 .verse-text {
@@ -1392,11 +1378,9 @@ input[type='number'] {
 
 /* progress along the bottom edge */
 .verse .goal-bar {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  align-self: stretch;
   height: 2px;
+  margin-top: 2px;
   background: var(--ink-faint);
 }
 
@@ -1410,11 +1394,6 @@ input[type='number'] {
 
 .verse.met {
   color: var(--verse-green);
-  border-right-color: var(--verse-green);
-}
-
-.verse.met::after {
-  transform: scaleX(1);
 }
 
 .verse.met .verse-text::before {

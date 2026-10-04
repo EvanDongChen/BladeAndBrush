@@ -18,7 +18,7 @@ import { Flag } from '../../core/constants';
 import { El } from '../../core/elements';
 import type { World } from '../../core/world';
 import { DEBRIS } from '../elements/debris';
-import { K_GAS, K_LIQUID, K_PROJECTILE, KIND, REPLACEABLE, RIGID } from '../physics';
+import { HANGING, K_GAS, K_LIQUID, K_PROJECTILE, KIND, REPLACEABLE, RIGID } from '../physics';
 import { defineTunables } from '../tunables';
 import { spawnDust } from './gas';
 
@@ -177,6 +177,8 @@ export function launchBody(
 let stack = new Int32Array(0);
 /** How far (cells) loose generated material looks for anchored material of its own object (Flag.CLING). */
 const CLING_REACH = 6;
+/** A piece of hanging material (the moon) smaller than this share (percent) of it is only a chip: it falls alone and does not count as splitting the rest. */
+const HANG_CHIP = 10;
 /** Per cell during detection: 0 = not free solid, 1 = free solid not yet visited, 2 = visited. */
 let cellState = new Uint8Array(0);
 
@@ -261,6 +263,26 @@ function detect(world: World, s: State): void {
         changed = true;
       }
     }
+  }
+
+  // 1b. hanging material (the moon) stays up while it is one piece. Cut into two or more real pieces,
+  //     all of them come loose and fall; a chip knocked off the edge just falls by itself
+  const hangingParts = new Map<number, number[][]>();
+  for (let i = 0; i < size; i++) {
+    if (cell[i] !== 1 || !HANGING[el[i]]) continue;
+    const part: number[] = [];
+    flood(i, part);
+    const list = hangingParts.get(obj[i]);
+    if (list) list.push(part);
+    else hangingParts.set(obj[i], [part]);
+  }
+  for (const parts of hangingParts.values()) {
+    if (parts.length < 2) continue;
+    let total = 0;
+    for (const part of parts) total += part.length;
+    const real = parts.filter((part) => part.length * 100 >= total * HANG_CHIP);
+    const keep = real.length === 1 ? real[0] : null;
+    for (const part of parts) if (part !== keep) for (const i of part) cell[i] = 1;
   }
 
   // 2. every other solid component becomes a falling body

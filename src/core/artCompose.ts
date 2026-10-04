@@ -25,7 +25,12 @@ export interface PreparedArt {
   k: number;
   view: ArtView;
   initial: Uint32Array;
+  /** Per cell, a bit per plane whose art spills onto this cell although the plane never had a cell here (outlines, soft edges). */
+  spill: Uint16Array;
 }
+
+/** How far (cells) from a cell a plane's own material must still stand for that plane's spill art to show. */
+const SPILL_REACH = 2;
 
 const prepared = new WeakMap<ArtView['art'], PreparedArt>();
 
@@ -45,9 +50,50 @@ function pixel(view: ArtView, p: number, paper: boolean, from: number, spillOnly
   return acc;
 }
 
-/** Use an `initial` composite computed elsewhere (a worker) for this view. */
-export function adoptPrepared(view: ArtView, initial: Uint32Array): void {
-  prepared.set(view.art, { k: view.art.k, view, initial });
+/**
+ * The picture of a cell that is broken through everything: the background, plus the art of planes
+ * that spill onto it (outlines and soft edges, `mask` says which). A plane's spill only shows while
+ * some of that plane's own material still stands within SPILL_REACH cells; once the tree or hut it
+ * outlines is gone (burnt, cut away) its outline goes with it instead of hanging in the air.
+ */
+function spillPixel(view: ArtView, p: number, mask: number): number {
+  const { art } = view;
+  let acc = over(art.bg[p], 0);
+  for (let q = art.planes.length - 1; q >= 0 && q < 16; q--) {
+    if (!(mask & (1 << q))) continue;
+    acc = over(art.planes[q][p], acc);
+  }
+  return acc;
+}
+
+/** The planes of `mask` whose own material still stands near (cx, cy) (see spillPixel). */
+function standingMask(view: ArtView, mask: number, cx: number, cy: number, worldEl: Uint8Array, worldPlane: Uint8Array): number {
+  const { planes, w, h } = view;
+  let out = 0;
+  for (let q = 0; q < planes.length && q < 16; q++) {
+    if (mask & (1 << q) && standing(planes[q].el, q, cx, cy, w, h, worldEl, worldPlane)) out |= 1 << q;
+  }
+  return out;
+}
+
+/** Does any cell within SPILL_REACH of (cx, cy) still hold plane q's own material, as generated? */
+function standing(planeEl: Uint8Array, q: number, cx: number, cy: number, w: number, h: number, worldEl: Uint8Array, worldPlane: Uint8Array): boolean {
+  const y0 = Math.max(0, cy - SPILL_REACH);
+  const y1 = Math.min(h - 1, cy + SPILL_REACH);
+  const x0 = Math.max(0, cx - SPILL_REACH);
+  const x1 = Math.min(w - 1, cx + SPILL_REACH);
+  for (let y = y0; y <= y1; y++) {
+    for (let x = x0; x <= x1; x++) {
+      const j = y * w + x;
+      if (planeEl[j] !== El.EMPTY && worldEl[j] === planeEl[j] && worldPlane[j] === q) return true;
+    }
+  }
+  return false;
+}
+
+/** Use a composite (and its spill masks) computed elsewhere (a worker) for this view. */
+export function adoptPrepared(view: ArtView, initial: Uint32Array, spill: Uint16Array): void {
+  prepared.set(view.art, { k: view.art.k, view, initial, spill });
 }
 
 /** Precompute (once per art, cached) the as-generated picture. */
@@ -58,18 +104,24 @@ export function prepareArt(view: ArtView): PreparedArt {
   const k = art.k;
   const aw = w * k;
   const initial = new Uint32Array(aw * h * k);
+  const spill = new Uint16Array(w * h);
   for (let cy = 0; cy < h; cy++) {
     for (let cx = 0; cx < w; cx++) {
       const cell = cy * w + cx;
       const solid = view.el[cell] !== El.EMPTY;
       const from = solid ? (view.plane[cell] === NO_PLANE ? 0 : view.plane[cell]) : 0;
+      let mask = 0;
       for (let yy = 0; yy < k; yy++) {
         let p = (cy * k + yy) * aw + cx * k;
-        for (let xx = 0; xx < k; xx++, p++) initial[p] = pixel(view, p, solid, from, false, cell);
+        for (let xx = 0; xx < k; xx++, p++) {
+          initial[p] = pixel(view, p, solid, from, false, cell);
+          for (let q = 0; q < art.planes.length && q < 16; q++) if (view.planes[q].el[cell] === El.EMPTY && art.planes[q][p] >>> 24 !== 0) mask |= 1 << q;
+        }
       }
+      spill[cell] = mask;
     }
   }
-  prep = { k, view, initial };
+  prep = { k, view, initial, spill };
   prepared.set(art, prep);
   return prep;
 }
@@ -83,7 +135,8 @@ export function prepareArt(view: ArtView): PreparedArt {
  * - world cell EMPTY (everything in front of the background is gone): just the background
  * - anything else (water, fire, ash... drawn by the cells layer): transparent
  *
- * Only the cells in [x0, x1) x [y0, y1) are written (default: all of them).
+ * Only the cells in [x0, x1) x [y0, y1) are written (default: all of them). A cell's picture
+ * depends on the cells within SPILL_REACH of it (ArtFrame's REACH must cover that).
  */
 export function compose(
   out: Uint32Array,
@@ -96,7 +149,7 @@ export function compose(
   x1 = prep.view.w,
   y1 = prep.view.h,
 ): void {
-  const { k, view, initial } = prep;
+  const { k, view, initial, spill } = prep;
   const { w } = view;
   const aw = w * k;
   const fx = Math.max(0, Math.min(w, frontierX));
@@ -107,16 +160,18 @@ export function compose(
       const we = worldEl[i];
       if (cx >= fx) {
         fill(out, base, aw, k, 0);
-      } else if (we === view.el[i] && worldPlane[i] === view.plane[i]) {
+      } else if (we === view.el[i] && worldPlane[i] === view.plane[i] && (we !== El.EMPTY || spill[i] === 0)) {
+        // (sky that only holds some plane's outline is not 'untouched': that outline needs its object, see spillPixel)
         for (let yy = 0; yy < k; yy++) {
           const row = base + yy * aw;
           for (let xx = 0; xx < k; xx++) out[row + xx] = initial[row + xx];
         }
       } else if (we === El.EMPTY) {
-        // broken through everything: the background, plus soft edges of planes that never had a cell here
+        // broken through everything: the background, plus the outlines and soft edges of planes that never had a cell here (while that plane still stands nearby)
+        const mask = spill[i] === 0 ? 0 : standingMask(view, spill[i], cx, cy, worldEl, worldPlane);
         for (let yy = 0; yy < k; yy++) {
           const row = base + yy * aw;
-          for (let xx = 0; xx < k; xx++) out[row + xx] = pixel(view, row + xx, false, 0, true, i);
+          for (let xx = 0; xx < k; xx++) out[row + xx] = spillPixel(view, row + xx, mask);
         }
       } else {
         const q = worldPlane[i];

@@ -23,7 +23,9 @@ self.onmessage = (e: MessageEvent<GenRequest>) => {
   const bp = generate(seed, params, opts);
   const full = artView(bp);
   const view = full && k < full.art.k ? resampleArt(full, k) : full;
-  const initial = view ? prepareArt(view).initial : null;
+  const prep = view ? prepareArt(view) : null;
+  const initial = prep ? prep.initial : null;
+  const spill = prep ? prep.spill : null;
   const buffers = new Set<ArrayBuffer>();
   const add = (v: unknown) => {
     if (ArrayBuffer.isView(v)) buffers.add(v.buffer as ArrayBuffer);
@@ -33,5 +35,6 @@ self.onmessage = (e: MessageEvent<GenRequest>) => {
   add(bp);
   if (view && view !== full) add(view.art);
   if (initial) buffers.add(initial.buffer as ArrayBuffer);
-  (self as unknown as Worker).postMessage({ id, bp, art: view && view !== full ? view.art : null, initial }, [...buffers]);
+  if (spill) buffers.add(spill.buffer as ArrayBuffer);
+  (self as unknown as Worker).postMessage({ id, bp, art: view && view !== full ? view.art : null, initial, spill }, [...buffers]);
 };

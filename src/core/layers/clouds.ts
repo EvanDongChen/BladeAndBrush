@@ -8,6 +8,17 @@ function rand(seed: number, k: number): number {
   return ((n ^ (n >>> 16)) >>> 0) / 4294967296;
 }
 
+/**
+ * The ink the far ridges are drawn with (gen/features/farRidges.ts), so a cloud sits in the same
+ * picture as the mountains instead of on top of it. Duplicated rather than imported: core/ may not
+ * import from gen/. `lift` washes it out for the fainter trailing strokes.
+ */
+const RIDGE: [number, number, number] = [118, 122, 126];
+
+function ridge(alpha: number, lift = 0): string {
+  return `rgba(${RIDGE[0] + lift}, ${RIDGE[1] + lift}, ${RIDGE[2] + lift}, ${alpha})`;
+}
+
 interface Lobe {
   x: number;
   y: number;
@@ -17,9 +28,10 @@ interface Lobe {
 }
 
 /**
- * The cloud's billows: big lobes along the top and smaller ones along a flat base. Each lobe is
- * as wide as the gap between lobe centres needs (so neighbours overlap however long the cloud is)
- * and as tall as the cloud's height gives.
+ * The cloud's billows: one row of big lobes, each as wide as the gap between lobe centres needs (so
+ * neighbours overlap however long the cloud is) and as tall as the cloud's height gives. There is no
+ * second row of small lobes underneath: a row of them read as a row of separate circles hanging off
+ * the bottom. The underside is a flat line instead, which `baseOf` and `drawCloud` add.
  */
 export function lobesOf(c: Cloud, cx: number): Lobe[] {
   const out: Lobe[] = [];
@@ -31,55 +43,111 @@ export function lobesOf(c: Cloud, cx: number): Lobe[] {
     const rx = Math.max(ry * 0.9, gap * 0.78 * (0.9 + 0.25 * rand(c.seed, 40 + k)));
     out.push({ x: cx + (t - 0.5) * c.hw * 1.55, y: c.y + c.hh * 0.35 - ry * 0.85, rx, ry });
   }
-  const m = n + 2;
-  const gap2 = (c.hw * 1.95) / m;
-  for (let k = 0; k < m; k++) {
-    const t = (k + 0.5) / m;
-    const ry = c.hh * (0.38 + 0.22 * rand(c.seed, 30 + k));
-    out.push({ x: cx + (t - 0.5) * c.hw * 1.95, y: c.y + c.hh * 0.45 - ry * 0.75, rx: Math.max(ry * 1.1, gap2 * 0.85), ry });
-  }
   return out;
 }
 
 /**
+ * Where the cloud stops billowing and starts being flat: a base line just above the lowest billow,
+ * and the width of the cloud where it cuts. `top` is a bound for filling down from. An ink painter
+ * closes a cumulus with one line along the bottom, not with more lobes.
+ */
+export function baseOf(c: Cloud, cx: number, lobes: Lobe[]): { y: number; x0: number; x1: number; top: number } {
+  let high = Infinity;
+  let low = -Infinity;
+  for (const l of lobes) {
+    if (l.y - l.ry < high) high = l.y - l.ry;
+    if (l.y + l.ry > low) low = l.y + l.ry;
+  }
+  const y = low - (low - high) * 0.12;
+  let x0 = Infinity;
+  let x1 = -Infinity;
+  for (const l of lobes) {
+    const d = (y - l.y) / l.ry; // where the base line crosses this lobe, if it does
+    if (d <= -1 || d >= 1) continue;
+    const half = l.rx * Math.sqrt(1 - d * d);
+    if (l.x - half < x0) x0 = l.x - half;
+    if (l.x + half > x1) x1 = l.x + half;
+  }
+  if (!Number.isFinite(x0) || !Number.isFinite(x1)) return { y, x0: cx - c.hw, x1: cx + c.hw, top: high - c.hh };
+  return { y, x0, x1, top: high - c.hh };
+}
+
+/**
+ * A few sparse wavy horizontal strokes across the lower half of the mass, hatched the way flat land
+ * and water are drawn elsewhere in the art: a few short lines that thin out, never a fill. Already
+ * clipped to the silhouette by the caller, so none of them can cross the outline.
+ */
+function hatchCloud(g: CanvasRenderingContext2D, c: Cloud, base: { y: number; x0: number; x1: number; top: number }, wet: number): void {
+  const span = base.x1 - base.x0;
+  g.strokeStyle = ridge(0.14 + 0.1 * wet, 10);
+  g.lineCap = 'round';
+  for (let k = 0; k < 4; k++) {
+    const len = span * (0.18 + 0.3 * rand(c.seed, 200 + k));
+    const x0 = base.x0 + (span - len) * rand(c.seed, 210 + k);
+    const y = base.y - (base.y - base.top) * (0.12 + 0.45 * rand(c.seed, 220 + k));
+    const amp = c.hh * 0.07 * (0.5 + rand(c.seed, 230 + k));
+    const phase = rand(c.seed, 240 + k) * 6.283;
+    g.lineWidth = 0.2 + 0.2 * rand(c.seed, 250 + k);
+    g.beginPath();
+    for (let i = 0; i <= 8; i++) {
+      const t = i / 8;
+      const px = x0 + len * t;
+      const py = y + amp * Math.sin(t * 6.283 + phase);
+      if (i === 0) g.moveTo(px, py);
+      else g.lineTo(px, py);
+    }
+    g.stroke();
+  }
+}
+
+/**
  * One cloud as an ink painter draws it (like a brush drawing of billowing cumulus): big rounded
- * lobes joined into one scalloped silhouette, an ink outline of varying weight along the OUTSIDE of
- * the lobes only (where they overlap there is no line, just a cusp), soft grey wash layered under
- * the lobes, and a few ragged strokes trailing out along the flat base. Greys as it fills with water.
+ * lobes joined into one scalloped silhouette that is cut off flat along a base line, an ink outline
+ * of varying weight along the OUTSIDE of the lobes only (where they overlap there is no line, just a
+ * cusp), the base itself drawn as a line rather than left as lobes, a white crown shading to grey only
+ * near the base, a few sparse wavy strokes hatched across the lower half the way flat land
+ * and water are drawn elsewhere, and a few thin lines trailing out past the ends. Every stroke is in
+ * the ridges' ink, so the cloud sits in the picture rather than on top of it. The paper tone itself
+ * greys as the cloud fills with water.
  */
 function drawCloud(g: CanvasRenderingContext2D, c: Cloud, ox: number): void {
   const wet = Math.min(1, c.water / Math.max(1, cloudCapacity(c) * 0.5));
   const cx = c.x + ox;
   const lobes = lobesOf(c, cx);
-  const baseY = c.y + c.hh * 0.45;
+  const base = baseOf(c, cx, lobes);
   const paper = [248 - 80 * wet, 245 - 78 * wet, 234 - 70 * wet].map(Math.round);
 
-  // the silhouette: every lobe, filled as one shape
+  // the silhouette: the lobes as one shape, trimmed flat along the base line so nothing hangs below it
   g.save();
   g.beginPath();
   for (const l of lobes) {
     g.moveTo(l.x + l.rx, l.y);
     g.ellipse(l.x, l.y, l.rx, l.ry, 0, 0, Math.PI * 2);
   }
+  g.clip(); // the paper, the shading and the hatching all stop at the lobes, and at the base line
+  const boxX = base.x0 - c.hw;
+  const boxY = base.top;
+  const boxW = base.x1 - base.x0 + 2 * c.hw;
+  const boxH = base.y - base.top;
   g.fillStyle = `rgba(${paper[0]}, ${paper[1]}, ${paper[2]}, 0.97)`;
-  g.fill();
-  // soft grey wash, layered (alpha stacks where lobes overlap), kept inside the silhouette
-  g.clip();
-  for (const l of lobes) {
-    g.beginPath();
-    g.ellipse(l.x + l.rx * 0.12, l.y + l.ry * 0.42, l.rx * 0.95, l.ry * 0.6, 0, 0, Math.PI * 2);
-    g.fillStyle = `rgba(112, 116, 126, ${0.08 + 0.07 * wet})`;
-    g.fill();
-  }
-  g.beginPath();
-  g.ellipse(cx, baseY, c.hw * 0.95, c.hh * 0.5, 0, 0, Math.PI * 2);
-  g.fillStyle = `rgba(112, 116, 126, ${0.1 + 0.08 * wet})`;
-  g.fill();
+  g.fillRect(boxX, boxY, boxW, boxH);
+  // Lit from above: the crown stays plainly white and the grey is held back for the base, where it
+  // reads as the cloud's own shadow. The ramp is squeezed into the bottom of the mass so it does not
+  // look like a gradient laid over the whole shape.
+  const deep = 0.6 + 0.12 * wet;
+  const shade = g.createLinearGradient(0, base.top, 0, base.y);
+  shade.addColorStop(0, ridge(0));
+  shade.addColorStop(0.6, ridge(0));
+  shade.addColorStop(0.85, ridge(deep * 0.5));
+  shade.addColorStop(1, ridge(deep));
+  g.fillStyle = shade;
+  g.fillRect(boxX, boxY, boxW, boxH);
+  hatchCloud(g, c, base, wet);
   g.restore();
 
-  // the outline: only the arcs of each lobe that are not inside another, and not the underside
+  // the outline: only the arcs of each lobe that are not inside another, and none under the base line
   g.lineCap = 'round';
-  g.strokeStyle = `rgba(52, 52, 56, ${0.85 - 0.15 * wet})`;
+  g.strokeStyle = ridge(0.8 - 0.12 * wet);
   let seg = 0;
   for (let li = 0; li < lobes.length; li++) {
     const l = lobes[li];
@@ -88,7 +156,7 @@ function drawCloud(g: CanvasRenderingContext2D, c: Cloud, ox: number): void {
       const x = l.x + Math.cos(a) * l.rx;
       const y = l.y + Math.sin(a) * l.ry;
       const inside = lobes.some((o, oi) => oi !== li && ((x - o.x) / o.rx) ** 2 + ((y - o.y) / o.ry) ** 2 < 0.94);
-      if (inside || y > baseY - c.hh * 0.05) {
+      if (inside || y > base.y) {
         prev = null;
         continue;
       }
@@ -103,17 +171,25 @@ function drawCloud(g: CanvasRenderingContext2D, c: Cloud, ox: number): void {
     }
   }
 
-  // ragged strokes along the flat base, trailing out past the ends
-  g.strokeStyle = `rgba(70, 70, 76, ${0.5 + 0.2 * wet})`;
-  for (let k = 0; k < 4; k++) {
+  // the base: the bottom is drawn, not left as lobes. A ragged line closes the billows off, and
+  // thinner lines carry on past each end.
+  const span = base.x1 - base.x0;
+  for (let s = 0; s < 6; s++) {
+    g.lineWidth = 0.35 + 0.45 * rand(c.seed, 140 + s);
+    g.beginPath();
+    g.moveTo(base.x0 + (span * s) / 6, base.y + c.hh * 0.04 * (rand(c.seed, 160 + s) - 0.5));
+    g.lineTo(base.x0 + (span * (s + 1)) / 6, base.y + c.hh * 0.04 * (rand(c.seed, 170 + s) - 0.5));
+    g.stroke();
+  }
+  g.strokeStyle = ridge(0.45 + 0.2 * wet, 26);
+  for (let k = 0; k < 3; k++) {
     const dir = k % 2 === 0 ? -1 : 1;
-    const x0 = cx + dir * c.hw * (0.2 + 0.2 * rand(c.seed, 60 + k));
-    const x1 = cx + dir * c.hw * (1.0 + 0.3 * rand(c.seed, 70 + k));
-    const y = baseY + c.hh * (0.05 + 0.12 * k);
-    g.lineWidth = 0.3 + 0.2 * rand(c.seed, 80 + k);
+    const x0 = dir < 0 ? base.x0 : base.x1;
+    const y = base.y + c.hh * (0.03 + 0.11 * k);
+    g.lineWidth = 0.25 + 0.2 * rand(c.seed, 80 + k);
     g.beginPath();
     g.moveTo(x0, y);
-    g.quadraticCurveTo((x0 + x1) / 2, y + c.hh * 0.12 * dir, x1, y - c.hh * 0.05);
+    g.lineTo(x0 + dir * c.hw * (0.2 + 0.35 * rand(c.seed, 60 + k)), y - c.hh * 0.04);
     g.stroke();
   }
 }

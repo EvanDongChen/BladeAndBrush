@@ -53,6 +53,7 @@ Every file in these folders is auto-imported by `src/pages/bootstrap.ts` (`impor
 | brush hooks for an element | its element file | `registerPaintAux(el, fn)` / `registerSpawner(el, fn, spacing)` from `sim/spawn` |
 | param (slider) | one line in `src/core/params.ts` | `registerParam({ key, label, min, max, step, default })` |
 | audio and FX | `src/audio/` | `world.events.on('cut', ...)` |
+| music voice, effect or painting sound | `src/audio/synth.ts`, `song.ts` | see Audio below |
 
 Registries throw on duplicate keys. Kill switches are in `src/core/config.ts`: `flags` for anything that names a `flag`, and `featureToggles` for generator features.
 
@@ -68,3 +69,17 @@ Registries throw on duplicate keys. Kill switches are in `src/core/config.ts`: `
 - Creatures are cells: one anchor cell holds the state (vx = facing, vy = frame, owner = variant, life = AI byte) and every other cell points back at it through vx/vy. A creature that loses a cell dies (burns if the missing cell is burning, otherwise bursts into SPLAT ink). They only move through empty space and gas. See the header of `src/sim/creatures.ts`.
 - Per-fuel burn behavior (burn life, ash chance, spark rate) lives in `src/sim/behaviors/fire.ts`; add a fuel there when you add a flammable element that should burn differently from wood.
 - Tests target interfaces and determinism hashes, not internals. `tests/discovery.test.ts` writes temporary `zz_test_dummy.ts` files into `src/` and deletes them afterwards. Test files run one at a time for that reason.
+
+## Audio
+
+`src/audio/` imports only `core`. It reads the World and never changes it.
+
+- `profile.ts` turns any grid (a World, or a Blueprint before it is revealed) into a `Landscape`: surface height in 32 slices, peaks, dips, and how much water, fire, trees, birds and people there are.
+- `theory.ts` has the five pentatonic modes (宮商角徵羽). The painting picks the mode (water gives 羽, fire 徵, rugged 商, tall 角, else 宮) and the seed picks the tonic.
+- `song.ts` is the painting's own song, composed from the Blueprint when it is generated: an intro, one beat per slice across the scroll, then a cadence home (about 35 s). The mode picks the lead instrument (the seed chooses between two), and what the generator placed plays where it stands (village → woodblock, birds → dizi trill, moon → guqin harmonics, spring → falling guzheng sweep, trees → light plucks). Map a new stroke kind to a sound in its per-slice block.
+- `composer.ts` is the endless version that follows the live World after the song ends. Height sets pitch, peaks get a dizi note, dips a low guqin note, steep slopes a glide. Both composers are pure and deterministic, so test them in `tests/audio-*.test.ts`.
+- `strings.ts` renders plucked strings (guzheng, pipa, guqin) by Karplus-Strong into Float32Arrays; pure and testable.
+- `synth.ts` holds the voices: the sampled strings (with slide, 按音 bend and vibrato on `detune`), guqin harmonics, dizi, erhu, chime, woodblock, drum, gong, and the effect sounds. Add a voice to `Voice` in `composer.ts`, its seat in `PAN` in `engine.ts`, and a case in `playNote`.
+- `engine.ts` owns the AudioContext. `audio.attach(world, bp)` composes the new painting's song and plays it from the start (or from the first gesture), then hands over to the endless composer, which re-reads the world every two beats. It turns `cut`, `lineFire`, `impact`, `ignite`, `splash`, `levelWin` and `levelFail` events into sounds. Pages call `audio.attach(world, bp)` whenever they generate a new painting and `audio.detach()` on cleanup, and add `soundToggle()` from `ui.ts` to the header. `audio.playhead()` gives where the music is on the scroll (0..1) for drawing.
+- Browsers block sound until a gesture, so call `audio.armOnGesture()` once per page. Mute is saved under `bb-sound` in localStorage.
+- Every file in `src/audio/` is auto-imported by `bootstrap.ts`, so nothing there may run Web Audio code at import time.

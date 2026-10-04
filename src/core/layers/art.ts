@@ -2,11 +2,15 @@ import { ArtFrame } from '../artFrame';
 import { resampleArt } from '../artResample';
 import { registerLayer } from '../render';
 
-let off: HTMLCanvasElement | null = null;
-let offG: CanvasRenderingContext2D | null = null;
-let image: ImageData | null = null;
-let px: Uint32Array | null = null;
-const frame = new ArtFrame();
+interface Surface {
+  off: HTMLCanvasElement;
+  offG: CanvasRenderingContext2D;
+  image: ImageData;
+  px: Uint32Array;
+  frame: ArtFrame;
+}
+/** Per destination canvas (a page can have more than one renderer): its buffer and its frame state. */
+const surfaces = new WeakMap<CanvasRenderingContext2D, Surface>();
 
 /**
  * The ink layer (still named `art`): everything drawn at art resolution, in one buffer. First the
@@ -26,16 +30,18 @@ registerLayer({
     const k = art ? art.art.k : scale;
     const aw = world.w * k;
     const ah = world.h * k;
-    if (!off || off.width !== aw || off.height !== ah) {
-      off = document.createElement('canvas');
+    let sf = surfaces.get(g);
+    if (!sf || sf.off.width !== aw || sf.off.height !== ah) {
+      const off = document.createElement('canvas');
       off.width = aw;
       off.height = ah;
-      offG = off.getContext('2d');
+      const offG = off.getContext('2d');
       if (!offG) return;
-      image = offG.createImageData(aw, ah);
-      px = new Uint32Array(image.data.buffer);
+      const image = offG.createImageData(aw, ah);
+      sf = { off, offG, image, px: new Uint32Array(image.data.buffer), frame: new ArtFrame() };
+      surfaces.set(g, sf);
     }
-    if (!offG || !image || !px) return;
+    const { off, offG, image, px, frame } = sf;
     const rects = frame.update(px, world, art, frontierX ?? world.w, k, shaded && k === scale);
     for (let r = 0; r < frame.rectCount; r++) {
       const { x, y, w, h } = rects[r];

@@ -19,8 +19,8 @@ export function generateAsync(seed: number, params: GenParams, opts: GenerateOpt
   if (!failed && !worker) {
     try {
       worker = new Worker(new URL('./genWorker.ts', import.meta.url), { type: 'module' });
-      worker.onmessage = (e: MessageEvent<{ id: number; bp: Blueprint; art: ArtBuffers | null; initial: Uint32Array | null }>) => {
-        const { id, bp, art, initial } = e.data;
+      worker.onmessage = (e: MessageEvent<{ id: number; bp: Blueprint; art: ArtBuffers | null; initial: Uint32Array | null; spill: Uint16Array | null }>) => {
+        const { id, bp, art, initial, spill } = e.data;
         const w = waiting.get(id);
         if (!w) return;
         waiting.delete(id);
@@ -28,7 +28,7 @@ export function generateAsync(seed: number, params: GenParams, opts: GenerateOpt
         if (full) {
           const view = art ? { ...full, art } : full;
           if (art) adoptResampled(full.art, view);
-          if (initial) adoptPrepared(view, initial);
+          if (initial && spill) adoptPrepared(view, initial, spill);
         }
         w.resolve(bp);
       };

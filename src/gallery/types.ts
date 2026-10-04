@@ -14,8 +14,8 @@ export interface GalleryEntry {
   actionLog: ActionLog;
   /** PNG data URL of the final grid. */
   png: string;
-  /** Goal outcome at submit time. */
-  result: { pass: boolean; progress: number };
+  /** Goal outcome at submit time, with how many strokes (ability uses) the player took of the level's budget. */
+  result: { pass: boolean; progress: number; strokes?: number; budget?: number };
   /** Scanner output at submit time, if available. */
   scan: Record<string, unknown> | null;
   /** Deterministic fingerprint of the final grid (PLAN.md section 9). */

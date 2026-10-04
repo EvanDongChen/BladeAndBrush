@@ -13,8 +13,11 @@ import { button, h } from './ui';
  * shape behind. A legend (top right) names the marks, and the readout under the graph says what
  * the thing under the pointer does, so the panel needs no instructions.
  *
- * - Drag the red line down to grow every mountain under it (mountain height), up to shrink them.
+ * - The Height slider beside the graph raises (up) or lowers (down) every mountain at once
+ *   (mountain height). The red line stays put: it is the bar a peak must clear to be tall.
  * - Drag a mountain up or down to change only that one's height; double-click it to undo that.
+ *   Mountains that do not count (hidden behind a taller one, or too low) have a dashed outline and
+ *   can be dragged too: shrinking a front mountain may uncover a taller one behind it.
  * - The ruler in the top-left corner is the least gap between mountain groups (spacing): drag its
  *   right end. Spacing decides which mountains exist, so it drops per-mountain height edits.
  *   Ticks along the bottom mark the group centres.
@@ -58,6 +61,28 @@ export function noiseGraph(opts: {
   const canvas = h('canvas', { class: 'noise-canvas' });
   canvas.style.aspectRatio = `${dims.w} / ${dims.h}`;
   const readout = h('p', { class: 'home-note noise-readout' });
+  // every mountain's height: a plain vertical slider, up = taller
+  const heightInput = h('input', {
+    type: 'range',
+    class: 'noise-height-input',
+    min: mhMin,
+    max: mhMax,
+    step: 0.01,
+    value: opts.params.mountainHeight,
+    'aria-label': 'Height of every mountain',
+    disabled: lockH,
+  });
+  heightInput.addEventListener('input', () => {
+    pending = { ...pending, mh: Number(heightInput.value) };
+    recompute();
+  });
+  const heightCol = h(
+    'label',
+    { class: 'noise-height', title: lockH ? 'This level fixes the mountain height' : 'Every mountain: up for taller, down for lower' },
+    h('span', { class: 'noise-height-end' }, 'Taller'),
+    heightInput,
+    h('span', { class: 'noise-height-end' }, 'Lower'),
+  );
   const redrawBtn = button('Redraw', () => redraw());
   const revertBtn = button('Undo changes', () => {
     pending = { ...drawn, heights: { ...drawn.heights } };
@@ -70,7 +95,7 @@ export function noiseGraph(opts: {
   const node = h(
     'div',
     { class: 'noise-wrap' },
-    canvas,
+    h('div', { class: 'noise-graph-row' }, heightCol, canvas),
     readout,
     h('div', { class: 'row' }, redrawBtn, revertBtn, ...(lockH ? [] : [resetBtn])),
   );
@@ -84,22 +109,25 @@ export function noiseGraph(opts: {
   let drawn: Edits = { mh: opts.params.mountainHeight, sp: opts.params.spacing, heights: {} };
   let pending: Edits = { ...drawn, heights: {} };
   let sky: Skyline = { w: dims.w, h: dims.h, floorY: dims.h, mountains: [], tallRise: dims.h, groups: [], minApart: 0, cellsPerUnit: 1 };
-  let hover: { kind: 'line' } | { kind: 'gap' } | { kind: 'mountain'; m: SkyMountain } | null = null;
+  let hover: { kind: 'gap' } | { kind: 'mountain'; m: SkyMountain } | null = null;
   /** Height edits set aside by a spacing drag, restored if the drag ends where it began. */
   let shelved: Record<number, number> | null = null;
 
   type Drag =
-    | { kind: 'line'; y0: number; mh0: number }
     | { kind: 'gap'; anchor: number }
     | { kind: 'mountain'; index: number; y0: number; scale0: number; rise0: number }
     | null;
   let drag: Drag = null;
-  /** Pointer y during a line drag, graph px (the guide line). */
-  let guideY = 0;
 
   // Graph space is "rise": cells above a mountain's own foot, drawn up from the bottom edge.
   /** Graph y (cells, 0 at the top) of a silhouette top on mountain m. */
   const gy = (m: SkyMountain, top: number) => sky.h - Math.max(0, m.foot - top);
+  /**
+   * Does this mountain get its own outline (and can be grabbed)? Every one but the plateaus: those
+   * that count are solid, and those that do not (hidden behind a taller one in front, or too low) are
+   * dashed, so a mountain waiting behind another is visible before shrinking the front one uncovers it.
+   */
+  const shown = (m: SkyMountain) => m.kind !== 'flat';
   /** Graph y of the tall-peak bar. */
   const tallY = () => sky.h - sky.tallRise;
 
@@ -129,15 +157,15 @@ export function noiseGraph(opts: {
     const dirty = !same(pending, drawn);
     let text = `Height ${pending.mh.toFixed(2)} · spacing ${pending.sp.toFixed(2)} · ${sky.groups.length} group${sky.groups.length === 1 ? '' : 's'} · ${tall} tall peak${tall === 1 ? '' : 's'}, ${peaks.length - tall} lesser`;
     if (edited) text += ` · ${edited} mountain${edited === 1 ? '' : 's'} resized`;
-    if (hover?.kind === 'line') text = 'Red line: peaks above it are tall. Drag down to raise every mountain, up to lower them';
-    else if (hover?.kind === 'gap') text = `Min gap between mountain groups (spacing ${pending.sp.toFixed(2)}): drag to spread them out or bring them closer`;
+    if (hover?.kind === 'gap') text = `Min gap between mountain groups (spacing ${pending.sp.toFixed(2)}): drag to spread them out or bring them closer`;
     else if (hover?.kind === 'mountain') {
       const s = pending.heights[hover.m.index] ?? 1;
-      const kind = hover.m.peak ? (hover.m.peak.tall ? 'tall peak' : 'lesser peak') : hover.m.kind === 'flat' ? 'plateau, not a peak' : 'summit hidden behind a taller mountain, not counted';
+      const kind = hover.m.peak ? (hover.m.peak.tall ? 'tall peak' : 'lesser peak') : 'not counted (hidden behind a taller one, or too low)';
       text = `This mountain: ${kind}${s === 1 ? '' : `, ×${s.toFixed(2)}`} · drag up or down to resize it${s === 1 ? '' : ', double-click to put it back'}`;
     }
     if (dirty) text += ' · not painted yet';
     readout.textContent = text;
+    heightInput.value = String(pending.mh);
     redrawBtn.classList.toggle('on', dirty);
     redrawBtn.textContent = dirty ? 'Redraw ●' : 'Redraw';
     revertBtn.disabled = !dirty;
@@ -163,11 +191,11 @@ export function noiseGraph(opts: {
       for (let j = 0; j < m.tops.length; j++) g.lineTo((m.x0 + j) * sx, gy(m, m.tops[j]) * sy);
       g.lineTo((m.x0 + m.tops.length - 1) * sx, ht);
     };
-    // Mountains that do not count (summit hidden in the painting, or a plateau): one faint merged
-    // shape behind, no outlines, so they never read as peaks. Far ridges (never scanned) are left out.
+    // Plateaus (flat land, never a peak): one faint merged shape behind, no outlines. Far ridges
+    // (never scanned) are left out.
     const rest = new Float32Array(Math.ceil(sky.w)).fill(sky.h);
     for (const m of sky.mountains) {
-      if (m.depth === 'far' || m.peak) continue;
+      if (m.depth === 'far' || shown(m)) continue;
       for (let j = 0; j < m.tops.length; j++) {
         const x = m.x0 + j;
         if (x >= 0 && x < rest.length) rest[x] = Math.min(rest[x], gy(m, m.tops[j]));
@@ -180,39 +208,35 @@ export function noiseGraph(opts: {
     g.closePath();
     g.fillStyle = 'rgba(120, 112, 100, 0.16)';
     g.fill();
-    // The mountains that count, back to front, each with its dot.
-    for (const m of sky.mountains) {
-      if (m.depth === 'far' || !m.peak) continue;
-      const hot = hover?.kind === 'mountain' && hover.m.index === m.index;
+    // Every other mountain: first, faintly, the ones that do not count (hidden behind a taller one,
+    // or too low), dashed; then on top, back to front, the ones that do, solid (with their dots).
+    // The one under the pointer is drawn last, so a mountain being dragged is never lost.
+    const hotIndex = hover?.kind === 'mountain' ? hover.m.index : -1;
+    const paint = (m: SkyMountain) => {
+      const hot = m.index === hotIndex;
       const edited = pending.heights[m.index] !== undefined;
       outline(m);
-      g.fillStyle = hot ? '#efe5cf' : '#f6f0e2';
+      g.fillStyle = hot ? '#efe5cf' : m.peak ? '#f6f0e2' : 'rgba(246, 240, 226, 0.55)';
       g.fill();
-      g.strokeStyle = hot || edited ? '#8a2a1e' : '#2e2b28';
+      g.strokeStyle = hot || edited ? '#8a2a1e' : m.peak ? '#2e2b28' : '#8f877d';
       g.lineWidth = hot ? 2 : 1;
+      if (!m.peak) g.setLineDash([4, 3]);
       g.stroke();
-    }
+      g.setLineDash([]);
+    };
+    const own = sky.mountains.filter((m) => m.depth !== 'far' && shown(m) && m.index !== hotIndex);
+    for (const m of own) if (!m.peak) paint(m);
+    for (const m of own) if (m.peak) paint(m);
+    const hotM = sky.mountains.find((m) => m.index === hotIndex);
+    if (hotM) paint(hotM);
 
-    // The tall-peak bar.
-    const lineHot = !lockH && (hover?.kind === 'line' || drag?.kind === 'line');
+    // The tall-peak bar: a fixed reference, a peak above it is tall.
     g.beginPath();
     g.moveTo(0, tallY() * sy);
     g.lineTo(w, tallY() * sy);
     g.strokeStyle = '#b22222';
-    g.lineWidth = lineHot ? 3 : 2;
-    if (lockH) g.setLineDash([5, 4]);
+    g.lineWidth = 2;
     g.stroke();
-    g.setLineDash([]);
-    if (drag?.kind === 'line') {
-      g.beginPath();
-      g.moveTo(0, guideY);
-      g.lineTo(w, guideY);
-      g.strokeStyle = 'rgba(178, 34, 34, 0.45)';
-      g.lineWidth = 1;
-      g.setLineDash([3, 3]);
-      g.stroke();
-      g.setLineDash([]);
-    }
 
     // Spacing: a tick under every group centre, and the ruler (least gap between groups).
     g.strokeStyle = '#6b645c';
@@ -292,7 +316,18 @@ export function noiseGraph(opts: {
         g.lineWidth = 2;
         g.stroke();
       }],
-      ['not a peak', (x, y) => {
+      ['not counted', (x, y) => {
+        g.beginPath();
+        g.moveTo(x - 6, y + 4);
+        g.lineTo(x, y - 4);
+        g.lineTo(x + 6, y + 4);
+        g.strokeStyle = '#8f877d';
+        g.lineWidth = 1;
+        g.setLineDash([3, 2]);
+        g.stroke();
+        g.setLineDash([]);
+      }],
+      ['flat land', (x, y) => {
         g.fillStyle = 'rgba(120, 112, 100, 0.3)';
         g.fillRect(x - 6, y - 4, 12, 8);
       }],
@@ -328,7 +363,7 @@ export function noiseGraph(opts: {
     };
   };
 
-  /** What the pointer is over: the ruler's handle, the red line, then the front-most mountain under it. */
+  /** What the pointer is over: the ruler's handle, then the front-most mountain under it. */
   const pick = (e: MouseEvent): typeof hover => {
     const p = at(e);
     const r = canvas.getBoundingClientRect();
@@ -336,10 +371,9 @@ export function noiseGraph(opts: {
     if (!lockS && Math.abs(p.x - ruler().b) * pxPerCellX <= LINE_GRAB + 2 && Math.abs(RULER_Y - p.py) <= LINE_GRAB + 2)
       return { kind: 'gap' };
     if (lockH) return null;
-    if (Math.abs(p.y - tallY()) * p.perCell <= LINE_GRAB) return { kind: 'line' };
     for (let i = sky.mountains.length - 1; i >= 0; i--) {
       const m = sky.mountains[i];
-      if (m.depth === 'far' || !m.peak) continue; // only the mountains that count can be grabbed
+      if (m.depth === 'far' || !shown(m)) continue; // only the mountains that count (or that you resized) can be grabbed
       const t = m.tops[Math.round(p.x) - m.x0];
       // Inside the silhouette, or a few px above its top so short ones are easy to grab.
       if (t !== undefined && t < m.base && p.y >= gy(m, t) - 6 / p.perCell) return { kind: 'mountain', m };
@@ -358,13 +392,7 @@ export function noiseGraph(opts: {
       return;
     }
     const p = at(e);
-    if (drag.kind === 'line') {
-      // Mountains as tall as the pointer end up at the bar: every height scales by
-      // (rise at the start) / (rise at the pointer).
-      guideY = p.py;
-      const mh = (drag.mh0 * Math.max(1, sky.h - drag.y0)) / Math.max(1, sky.h - p.y);
-      pending = { ...pending, mh: Math.round(Math.min(mhMax, Math.max(mhMin, mh)) * 100) / 100 };
-    } else if (drag.kind === 'gap') {
+    if (drag.kind === 'gap') {
       // The handle sits at anchor + minApart: the gap the pointer shows becomes the spacing.
       const sp = Math.round(spacingForApart((p.x - drag.anchor) / sky.cellsPerUnit) * 100) / 100;
       // Spacing decides which mountains exist, so height edits (keyed by mountain) are set aside;
@@ -392,9 +420,6 @@ export function noiseGraph(opts: {
     if (target.kind === 'gap') {
       drag = { kind: 'gap', anchor: ruler().a };
       if (Object.keys(pending.heights).length) shelved = { ...pending.heights };
-    } else if (target.kind === 'line') {
-      drag = { kind: 'line', y0: p.y, mh0: pending.mh };
-      guideY = p.py;
     } else {
       const m = target.m;
       drag = { kind: 'mountain', index: m.index, y0: p.y, scale0: pending.heights[m.index] ?? 1, rise0: Math.max(1, m.foot - m.peakY) };

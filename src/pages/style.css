@@ -1492,30 +1492,68 @@ input[type='number'] {
   to { opacity: 0; transform: scale(1.5); }
 }
 
-/* ---------- Level page: the scroll unrolls with the landscape ---------- */
+/* ---------- Level page: the scroll, mounted on silk, unrolls with the landscape ---------- */
+
+.stage {
+  padding: 6px 0 4px;
+}
 
 .frame {
   --p: 0; /* how much of the painting has been drawn, 0 to 1 (set from the reveal frontier) */
-  --edge: calc(8px + (100% - 16px) * var(--p)); /* x of the leading roller; 8px is the silk border */
+  --edge: calc(3px + (100% - 6px) * var(--p)); /* x of the leading roller */
+  --mount: 24px; /* silk above and below the painting */
+  display: flow-root; /* keep the canvas margins (the silk) inside the frame */
+  isolation: isolate;
+}
+
+/* the scroll's shadow on the page, as wide as the paper unrolled so far (a filter over the live canvas would be slow) */
+.frame::after {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  top: 6px;
+  bottom: 0;
+  left: 0;
+  width: var(--edge);
+  box-shadow: 0 14px 14px -4px rgba(46, 30, 14, 0.4);
+  pointer-events: none;
+}
+
+/* silk mounting: deep green brocade with a faint cloud lattice and a gold inner line */
+.mount {
+  position: absolute;
+  inset: 0;
+  clip-path: inset(0 calc(100% - var(--edge)) 0 0);
+  background:
+    radial-gradient(circle at 50% 50%, rgba(233, 201, 138, 0.14) 0 2px, transparent 2.5px) 0 0 / 22px 22px,
+    linear-gradient(180deg, #3d5c54, #2c4540 50%, #3d5c54);
+  box-shadow: inset 0 0 0 1px rgba(233, 201, 138, 0.55), inset 0 0 0 4px rgba(20, 34, 30, 0.35);
 }
 
 /* the paper only exists up to the leading roller */
 .frame canvas.grid {
+  position: relative;
+  z-index: 1;
+  margin: var(--mount) 0;
+  border: 3px solid var(--silk-dark);
+  outline: none;
   animation: none;
   clip-path: inset(0 calc(100% - var(--edge)) 0 0);
 }
 
 .roll {
   position: absolute;
-  top: -9px;
-  bottom: -9px;
-  left: 8px;
-  z-index: 2;
-  width: 18px;
+  top: -8px;
+  bottom: -8px;
+  left: 3px;
+  z-index: 3;
+  width: 20px;
   transform: translateX(-50%);
-  border-radius: 9px;
-  background: linear-gradient(90deg, var(--wood-1), var(--wood-3) 32%, var(--wood-2) 58%, var(--wood-1));
-  box-shadow: 1px 0 0 rgba(0, 0, 0, 0.35), 3px 4px 8px rgba(0, 0, 0, 0.3);
+  border-radius: 10px;
+  background:
+    linear-gradient(90deg, rgba(255, 235, 200, 0) 18%, rgba(255, 235, 200, 0.45) 30%, rgba(255, 235, 200, 0) 44%),
+    linear-gradient(90deg, #3a2312, #8a5a33 28%, #c08a57 42%, #8a5a33 62%, #3a2312);
+  box-shadow: 0 0 0 1px rgba(30, 16, 6, 0.55), 3px 3px 8px rgba(0, 0, 0, 0.35);
   pointer-events: none;
 }
 
@@ -1523,43 +1561,65 @@ input[type='number'] {
   left: var(--edge);
 }
 
-/* end knobs */
+/* gilded end knobs */
 .roll::before,
 .roll::after {
   content: '';
   position: absolute;
   left: 50%;
-  width: 26px;
-  height: 7px;
+  width: 30px;
+  height: 9px;
   transform: translateX(-50%);
-  border-radius: 3px;
-  background: linear-gradient(180deg, var(--wood-3), var(--wood-1));
+  border-radius: 5px;
+  background: linear-gradient(90deg, #7a5a1e, #e9c98a 40%, #b8923f 60%, #6a4c18);
+  box-shadow: 0 0 0 1px rgba(30, 16, 6, 0.5);
 }
 
 .roll::before {
-  top: -5px;
+  top: -6px;
 }
 
 .roll::after {
-  bottom: -5px;
+  bottom: -6px;
 }
 
 /* the paper curls into the leading roller: a soft shadow on its left side */
-.stage .frame::before {
+.frame::before {
   content: '';
   position: absolute;
-  top: 8px;
-  bottom: 8px;
-  left: calc(var(--edge) - 34px);
-  width: 26px;
-  z-index: 1;
-  background: linear-gradient(90deg, transparent, rgba(70, 45, 20, 0.3));
+  top: var(--mount);
+  bottom: var(--mount);
+  left: calc(var(--edge) - 40px);
+  width: 32px;
+  z-index: 2;
+  background: linear-gradient(90deg, transparent, rgba(60, 38, 16, 0.34));
   pointer-events: none;
+}
+
+/* goals, blade chip and banner sit on the painting, below the top silk */
+.frame .hud-tool {
+  top: calc(var(--mount) + 10px);
+  left: 18px;
+}
+
+.frame .inscription {
+  top: calc(var(--mount) + 10px);
+  right: 18px;
+}
+
+.frame .hud-banner {
+  inset: var(--mount) 3px;
+  z-index: 2;
+}
+
+.frame .stamp {
+  z-index: 2;
 }
 
 /* goals and the blade chip appear once the landscape has finished drawing */
 .frame .hud-tool,
 .frame .inscription {
+  z-index: 2;
   transition: opacity 0.7s 0.2s, transform 0.7s 0.2s;
 }
 
@@ -1567,4 +1627,20 @@ input[type='number'] {
 .frame:not(.ready) .inscription {
   opacity: 0;
   transform: translateY(-8px);
+}
+
+/* goals that are plain descriptions (no poem line) read as ordinary text */
+.verse.plain .verse-text {
+  font: 600 13px var(--font-serif);
+  letter-spacing: 0.02em;
+}
+
+.status {
+  padding: 0 4px;
+  margin-top: 12px;
+}
+
+/* five abilities fit on one row */
+.arsenal {
+  grid-template-columns: repeat(auto-fit, minmax(70px, 1fr));
 }

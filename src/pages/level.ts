@@ -66,7 +66,8 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
   // the red seal pressed onto the painting when the poem is complete
   const stamp = h('div', { class: 'stamp', 'aria-hidden': 'true' }, seal('完成', 'stamp-seal'));
   let winTimer = 0;
-  const frame = h('div', { class: 'frame' }, canvas, hudTool, banner, stamp, rollLeft, rollLead);
+  const mount = h('span', { class: 'mount', 'aria-hidden': 'true' }); // the silk the painting is mounted on
+  const frame = h('div', { class: 'frame' }, mount, canvas, hudTool, banner, stamp, rollLeft, rollLead);
   let tip = '';
 
   function regenerate(): void {
@@ -156,7 +157,7 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
     const line = level.poem[i];
     const row = h(
       'li',
-      { class: 'verse', title: goal ? describeGoal(goal) : undefined },
+      { class: line === undefined ? 'verse plain' : 'verse', title: goal ? describeGoal(goal) : undefined },
       h('span', { class: 'verse-text' }, line ?? describeGoal(goal)),
       line !== undefined && goal ? h('span', { class: 'verse-goal' }, describeGoal(goal)) : '',
       goal ? h('span', { class: 'goal-bar' }, h('span', { class: 'goal-fill' })) : '',
@@ -201,16 +202,17 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
 
   function checkGoals(): void {
     const result = scan(world);
+    const started = changed();
     let all = true;
     for (const v of verses) {
       if (!v.goal) continue;
       const { pass, progress } = evaluateGoal(result, v.goal);
       all &&= pass;
-      v.row.classList.toggle('met', pass);
+      v.row.classList.toggle('met', pass && started); // a fresh painting that already matches does not light up
       v.row.style.setProperty('--p', `${Math.round(progress * 100)}%`);
     }
-    for (const v of verses) if (!v.goal) v.row.classList.toggle('met', all);
-    if (all && changed() && !won) {
+    for (const v of verses) if (!v.goal) v.row.classList.toggle('met', all && started);
+    if (all && started && !won) {
       won = true;
       stamp.classList.add('on'); // the seal lands first, then the scroll unrolls
       winTimer = window.setTimeout(() => {

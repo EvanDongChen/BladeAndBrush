@@ -69,6 +69,12 @@ export interface StrokeInfo {
   kind: 'mountain' | 'tree' | 'rock';
   bbox: [x0: number, y0: number, x1: number, y1: number];
   anchor: [x: number, y: number];
+  /**
+   * The object this belongs to: a tree, boulder or hut points at the mountain or land it stands on,
+   * so a cut, slash or burn can treat a mountain and everything on it as one thing. Cells keep
+   * their own owner ids (trees are still counted by owner); this is the grouping on top.
+   */
+  group?: number;
 }
 
 /** RGBA art at k x grid resolution, packed little-endian like rgba(). Row width is w * k. */

@@ -24,6 +24,8 @@ interface Spot {
   face: boolean;
   /** The terrain plane the tree stands on; its objects plane is the one in front of it. */
   plane: number;
+  /** Registry id of the mountain / land / ground it stands on (its group). */
+  host: number;
 }
 
 /**
@@ -84,7 +86,7 @@ registerFeature({
         const y = tops[j];
         if (y >= base || !exposed(m.plane, x, y, m.id) || !keep(x, m.id * 7.3)) continue;
         const f = (base - y) / span;
-        spots.push({ x, y, depth: m.depth, f, zone: zoneOf(f), line, face: false, plane: m.plane });
+        spots.push({ x, y, depth: m.depth, f, zone: zoneOf(f), line, face: false, plane: m.plane, host: m.id });
       }
       // Ridge lines across the face: sparser, wherever this mountain's rock is.
       const grid = planes[m.plane].grid;
@@ -98,7 +100,7 @@ registerFeature({
           const here = cellAt(x, y + K * 0.5);
           if (here < 0 || grid.owner[here] !== m.id || grid.el[here] !== El.ROCK || !keepFace(x, m.id * 3.1 + l * 17)) continue;
           const f = (base - y) / span;
-          spots.push({ x, y, depth: m.depth, f, zone: zoneOf(f), line, face: true, plane: m.plane });
+          spots.push({ x, y, depth: m.depth, f, zone: zoneOf(f), line, face: true, plane: m.plane, host: m.id });
         }
       }
     }
@@ -112,7 +114,7 @@ registerFeature({
         let y = yMin;
         while (y < u.artH && nearBuf.own[y * u.artW + x] !== bank.id) y++;
         if (y < u.artH && exposed(PLANE.NEAR, x, y, bank.id) && keepGround(x))
-          spots.push({ x, y, depth: 'near', f: 0, zone: 'tall', line, face: false, plane: PLANE.NEAR });
+          spots.push({ x, y, depth: 'near', f: 0, zone: 'tall', line, face: false, plane: PLANE.NEAR, host: bank.id });
       }
     }
 
@@ -129,7 +131,7 @@ registerFeature({
       if (prev && Math.abs(s.x - prev[0]) < 0.35 * Math.min(size, prev[1])) continue;
       last.set(s.line, [s.x, size]);
       const objects = planes[s.plane - 1]; // PLANE.NEAR_OBJ / MID_OBJ sit right in front of their terrain
-      const id = newStroke({ kind: 'tree', bbox: [0, 0, 0, 0], anchor: [Math.floor(s.x / K), Math.floor(s.y / K)] });
+      const id = newStroke({ kind: 'tree', bbox: [0, 0, 0, 0], anchor: [Math.floor(s.x / K), Math.floor(s.y / K)], group: s.host });
       const box = getSpecies(s.zone).grow({ paint: objects.paint, x: s.x, y: s.y + K * 0.5, size, owner: id, rng, noise, ink: INK[s.depth], k: K });
       const cells = rasterizeCoverage(
         bp,

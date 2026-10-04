@@ -1,27 +1,34 @@
 import { El, rgba } from '../../core/elements';
 import { registerFeature } from '../../core/features';
+import type { Noise } from '../../core/noise';
+import type { Rng } from '../../core/rng';
 import { artOf, PLANE } from '../artState';
 import { recordMountain } from '../mountainStore';
-import { inkWash } from '../paint/shaders';
-import { planOf, type Placement } from '../plan';
+import type { Painter, Shader } from '../paint/painter';
+import { ink, inkStroke } from '../paint/strokes';
+import { planOf } from '../plan';
 import { rasterizeCoverage } from '../raster';
 import { getShape, type Profile } from '../shapes';
+import type { Units } from '../units';
 
-/** Ink per depth: nearer is darker and more strongly lined. */
+type RGB = [number, number, number];
+
+/** Ink per depth row: farther rows are paler (atmosphere). */
 const TONE = {
-  near: { ink: [70, 68, 64] as [number, number, number], fill: 0.03, outline: 120, texture: 0.32, ripple: 110 },
-  mid: { ink: [110, 110, 106] as [number, number, number], fill: 0.07, outline: 80, texture: 0.22, ripple: 80 },
+  near: { ink: [96, 96, 94] as RGB, wash: 0.05, ridge: 0.16, line: 1, ripple: 0.45 },
+  mid: { ink: [128, 128, 126] as RGB, wash: 0.04, ridge: 0.11, line: 0.7, ripple: 0.3 },
 };
+type Tone = (typeof TONE)['near'];
 /** Paper-white: the occluder that hides whatever stands behind a mountain. */
-const WHITE: [number, number, number] = [238, 231, 214];
+const PAPER: RGB = [241, 235, 220];
 
 /**
- * Planned mountains (gen/plan.ts), drawn back to front by the y of their foot, the way a raised
- * view is built: each has a white fill that hides what is behind it, a faint outline, hundreds of
- * short texture strokes along its inner contours and a few foot strokes; water ripples go behind
- * everything at its foot. Cells follow the art's coverage. Mountains far back (foot above
- * DEPTH.split) go in the mid plane and the rest in the near plane, so cutting a near mountain can
- * expose the one behind it; within a plane the nearer one wins.
+ * Planned mountains (gen/plan.ts), drawn back to front by the y of their foot. Each one, in order:
+ * water ripples behind everything, a paper-white occluder with a light wash (our ink style: a
+ * little tone toward the ridge and on the shaded right side), a faint broken outline, foot skirts,
+ * a sweep of short texture strokes across its nested layers, and sometimes broad shading strokes.
+ * ROCK cells follow the occluder's coverage. Mountains far back go in the mid plane, the rest in
+ * the near plane, so cutting a near one exposes the one behind; within a plane the nearer wins.
  */
 registerFeature({
   name: 'mountains',
@@ -37,106 +44,41 @@ registerFeature({
     const cell = (v: number) => Math.floor(v / K);
     const ids: number[] = [];
 
-    for (const p of placements) paintMountain(p);
-    pruneHidden(ids);
-
-    function paintMountain(p: Placement): void {
+    for (const p of placements) {
       const tone = p.depth === 'mid' ? TONE.mid : TONE.near;
-      const plane = planes[p.depth === 'mid' ? PLANE.MID : PLANE.NEAR];
+      const planeIdx = p.depth === 'mid' ? PLANE.MID : PLANE.NEAR;
+      const plane = planes[planeIdx];
       const base = u.toArt(p.y);
       const pr = getShape(p.kind).build(p, { u, params, base });
-      if (pr.tops.length === 0) return;
+      if (pr.tops.length === 0 || !pr.grid) continue;
       const id = newStroke({ kind: 'mountain', bbox: [0, 0, 0, 0], anchor: [cell(pr.peakX), cell(pr.peakY)] });
       ids.push(id);
 
-      // water ripples at the foot, behind everything (only visible in open paper)
-      ripples(pr, base, tone.ripple);
+      ripples(bgPaint, pr, base, tone, rng, noise, u);
 
-      // white occluder with a hint of ink toward the ridge; a short skirt below the foot
-      const shader = inkWash({ ink: tone.ink, paper: WHITE, base: tone.fill, edge: 0.22, edgeWidth: K * 2, speckle: 0.05, noise });
-      const tops = pr.tops.map((t) => (t < base ? t : u.artH));
-      plane.paint.fillColumns(pr.x0, tops, base + u.toArt(6), shader, id);
-
-      texture(plane.paint, pr, base, tone);
-      // outline along the silhouette
-      const outline: [number, number][] = [];
-      for (let j = 0; j < tops.length; j += 2) if (tops[j] < base) outline.push([pr.x0 + j, tops[j]]);
-      plane.paint.stroke(outline, { width: u.toArt(1.3), color: rgba(...tone.ink, tone.outline), noise: 0.8, taper: 0.3 }, noise);
-      foot(plane.paint, pr, base, tone);
-
-      rasterizeCoverage(bp, plane.buf, K, id, El.ROCK, plane.grid, [cell(pr.x0), cell(pr.peakY), cell(pr.x0 + tops.length), cell(base + u.toArt(6)) + 1], true);
-      recordMountain(bp, { id, depth: p.depth, plane: p.depth === 'mid' ? PLANE.MID : PLANE.NEAR, profile: pr });
-    }
-
-    /** Height of contour `l` (0 = silhouette, 1.. = inner layers, fractional = between) at column j. */
-    function contourAt(pr: Profile, l: number, j: number): number {
-      const lines = [pr.tops, ...pr.layers];
-      const a = Math.min(lines.length - 1, Math.floor(l));
-      const b = Math.min(lines.length - 1, a + 1);
-      const f = l - a;
-      return lines[a][j] * (1 - f) + lines[b][j] * f;
-    }
-
-    /** Many short faint strokes along the inner contours, mostly on the left and right thirds. */
-    function texture(paint: (typeof planes)[number]['paint'], pr: Profile, base: number, tone: (typeof TONE)['near']): void {
+      // occluder: down to the foot, plus a shallow wedge below its middle so it hides what is behind
       const n = pr.tops.length;
-      const count = Math.round((n / u.toArt(100)) * (14 + 5 * rugged));
-      const depthLines = pr.layers.length;
-      for (let i = 0; i < count; i++) {
-        const l = (i / count) * depthLines;
-        const side = rng.chance(0.5) ? rng.range(0, 1 / 3) : rng.range(2 / 3, 1);
-        const mid = Math.floor(side * n);
-        const half = Math.floor(rng.next() * n * 0.12);
-        const path: [number, number][] = [];
-        const wobble = u.toArt(2 + 6 * (l / Math.max(1, depthLines)));
-        for (let j = Math.max(0, mid - half); j < Math.min(n, mid + half); j += 3) {
-          const y = contourAt(pr, l, j);
-          if (!(y < base - K)) continue;
-          path.push([pr.x0 + j, y + wobble * (noise.n2(j / 20, l * 3.7) - 0.5)]);
-        }
-        if (path.length < 2) continue;
-        paint.stroke(path, { width: u.toArt(0.7), color: rgba(...tone.ink, Math.round(255 * tone.texture * rng.next())), noise: 0.5 }, noise);
-      }
-    }
+      const bottoms = new Float32Array(n);
+      for (let j = 0; j < n; j++) bottoms[j] = base + u.toArt(22) * (1 - Math.abs((2 * j) / Math.max(1, n - 1) - 1));
+      const cx = pr.x0 + n / 2;
+      plane.paint.fillColumns(pr.x0, pr.tops, bottoms, washShader(tone, cx, n / 2, K), id);
 
-    /** A few strokes hugging the foot on both sides, so the mountain sits on the land. */
-    function foot(paint: (typeof planes)[number]['paint'], pr: Profile, base: number, tone: (typeof TONE)['near']): void {
-      const n = pr.tops.length;
-      for (const side of [0, 1]) {
-        const strokes = 2 + rng.int(3);
-        for (let s = 0; s < strokes; s++) {
-          const len = Math.floor(n * rng.range(0.12, 0.3));
-          const start = side === 0 ? Math.floor(rng.range(0, 0.08) * n) : n - len - Math.floor(rng.range(0, 0.08) * n);
-          const dy = -u.toArt(rng.range(1, 10));
-          const path: [number, number][] = [];
-          for (let j = start; j < start + len; j += 4) path.push([pr.x0 + j, base + dy + u.toArt(3) * (noise.n1(j / 30 + s) - 0.5)]);
-          if (path.length > 1) paint.stroke(path, { width: u.toArt(0.8), color: rgba(...tone.ink, 70 + rng.int(60)), noise: 0.5 }, noise);
-        }
-      }
-    }
+      feet(plane.paint, pr, tone, rng, noise, u);
+      texture(plane.paint, pr, tone, rugged, rng, noise, u);
+      inkStroke(plane.paint, pr.grid[0], noise, { wid: u.toArt(2.2), color: ink(0.3 * tone.line, tone.ink), noi: 1, salt: id * 1.7 });
 
-    /** Short wavy ripple strokes around the foot, in the background plane (behind everything). */
-    function ripples(pr: Profile, base: number, alpha: number): void {
-      const cx = pr.x0 + pr.tops.length / 2;
-      const len = pr.tops.length * 0.9;
-      let yk = 0;
-      for (let r = 0; r < 8; r++) {
-        yk += u.toArt(rng.range(1, 5));
-        const half = len * rng.range(0.25, 0.5);
-        const xs = cx + rng.range(-0.5, 0.5) * len * 0.25;
-        const path: [number, number][] = [];
-        for (let j = -half; j < half; j += 5) path.push([xs + j, base + yk + u.toArt(1.5) * Math.sin(j * 0.15) * (noise.n1(j * 0.05) * 2)]);
-        if (path.length > 1) bgPaint.stroke(path, { width: u.toArt(0.6), color: rgba(100, 100, 100, Math.round(alpha * rng.range(0.4, 1))), noise: 0.4 }, noise);
-      }
+      let maxBottom = 0;
+      for (const b of bottoms) if (b > maxBottom) maxBottom = b;
+      rasterizeCoverage(bp, plane.buf, K, id, El.ROCK, plane.grid, [cell(pr.x0) - 1, cell(pr.peakY) - 1, cell(pr.x0 + n) + 1, cell(maxBottom) + 1], true);
+      recordMountain(bp, { id, depth: p.depth, plane: planeIdx, profile: pr });
     }
+    pruneHidden();
 
     /** Mountains in the same plane may hide each other completely: drop those, and fit bboxes to what is left. */
-    function pruneHidden(owned: number[]): void {
-      const near = planes[PLANE.NEAR].grid;
-      const mid = planes[PLANE.MID].grid;
+    function pruneHidden(): void {
       const boxes = new Map<number, [number, number, number, number]>();
-      const mine = new Set(owned);
-      for (const g of [near, mid]) {
+      const mine = new Set(ids);
+      for (const g of [planes[PLANE.NEAR].grid, planes[PLANE.MID].grid]) {
         for (let i = 0; i < g.owner.length; i++) {
           const o = g.owner[i];
           if (!mine.has(o)) continue;
@@ -152,7 +94,7 @@ registerFeature({
           }
         }
       }
-      for (const id of owned) {
+      for (const id of ids) {
         const b = boxes.get(id);
         const info = bp.registry.strokes.get(id);
         if (!b) bp.registry.strokes.delete(id);
@@ -161,3 +103,103 @@ registerFeature({
     }
   },
 });
+
+/** Paper-white with a light ink wash: a little tone under the ridge and on the right (shaded) side. */
+function washShader(tone: Tone, cx: number, halfW: number, K: number): Shader {
+  const [pr, pg, pb] = PAPER;
+  const [ir, ig, ib] = tone.ink;
+  const ridgeW = K * 10;
+  return (x, _y, dTop) => {
+    let a = tone.wash + tone.ridge * Math.exp(-dTop / ridgeW);
+    const side = (x - cx) / halfW;
+    if (side > 0) a += 0.05 * side;
+    a = a < 0 ? 0 : a > 1 ? 1 : a;
+    return rgba((pr + (ir - pr) * a + 0.5) | 0, (pg + (ig - pg) * a + 0.5) | 0, (pb + (ib - pb) * a + 0.5) | 0);
+  };
+}
+
+/**
+ * Texture: many short faint strokes, swept from the outer layers to the inner ones. Each picks a
+ * centre on the left or right third of the mountain and follows the (interpolated) layer there,
+ * wobbling more on the outer layers. Some mountains also get broad, very faint shading strokes.
+ */
+function texture(paint: Painter, pr: Profile, tone: Tone, rugged: number, rng: Rng, noise: Noise, u: Units): void {
+  const G = pr.grid!;
+  const L = G.length;
+  const N = G[0].length;
+  const size = Math.min(1.6, Math.max(0.5, pr.tops.length / u.toArt(500)));
+  const count = Math.round((90 + 16 * rugged) * size);
+  const shade = rng.chance(0.2);
+  for (let i = 0; i < count; i++) {
+    const layer = (i / count) * (L - 1);
+    const lo = Math.floor(layer);
+    const hi = Math.min(L - 1, lo + 1);
+    const f = layer - lo;
+    const side = rng.chance(0.5) ? rng.next() / 3 : 2 / 3 + rng.next() / 3;
+    const mid = Math.floor(side * N);
+    const half = Math.floor(rng.next() * N * 0.2);
+    const a = Math.max(0, mid - half);
+    const b = Math.min(N, mid + half);
+    if (b - a < 2) continue;
+    const amp = u.toArt(26 / (layer + 1));
+    const pts: [number, number][] = [];
+    for (let j = a; j < b; j++) {
+      const x = G[lo][j][0] * (1 - f) + G[hi][j][0] * f;
+      const y = G[lo][j][1] * (1 - f) + G[hi][j][1] * f;
+      pts.push([x + amp * (noise.n2(x * 0.05, j * 0.5) - 0.5), y + amp * (noise.n2(y * 0.05 + 40, j * 0.5) - 0.5)]);
+    }
+    if (shade && i % 2 === 0) {
+      inkStroke(paint, pts, noise, { wid: u.toArt(5), color: ink(0.08 * tone.line, tone.ink), noi: 0.5, salt: i });
+    } else {
+      inkStroke(paint, pts, noise, { wid: u.toArt(1.3), color: ink(rng.next() * 0.3 * tone.line, tone.ink), noi: 0.5, salt: i });
+    }
+  }
+}
+
+/**
+ * Feet: small paper-white skirts flaring out where successive layers meet the ground on each side,
+ * edged with a faint stroke, so the mountain sits on the land instead of floating.
+ */
+function feet(paint: Painter, pr: Profile, tone: Tone, rng: Rng, noise: Noise, u: Units): void {
+  const G = pr.grid!;
+  const L = G.length;
+  const N = G[0].length;
+  const fill = rgba(PAPER[0], PAPER[1], PAPER[2]);
+  const m = Math.min(Math.floor(N / 8), 8);
+  for (let i = 0; i < L - 1; ) {
+    const ni = Math.min(L - 1, i + 1 + rng.int(2));
+    for (const side of [0, 1]) {
+      const at = (row: [number, number][], k: number) => row[side === 0 ? k : N - 1 - k];
+      const edge: [number, number][] = [];
+      for (let k = m - 1; k >= 0; k--) {
+        const [x, y] = at(G[i], k);
+        edge.push([x + (side === 0 ? 1 : -1) * u.toArt(8) * noise.n2(k * 0.1, i), y]);
+      }
+      const [ax, ay] = at(G[i], 0);
+      const [bx, by] = at(G[ni], 0);
+      for (let s = 0; s <= 8; s++) {
+        const t = s / 8;
+        const bump = -1.6 * (t - 1) * Math.pow(t, 0.2); // swells out then settles
+        edge.push([ax + (bx - ax) * t, ay + (by - ay) * t + u.toArt(4) * bump + u.toArt(3) * noise.n2(i, s * 0.3)]);
+      }
+      paint.fillPolygon(edge, fill);
+      inkStroke(paint, edge, noise, { wid: u.toArt(0.9), color: ink((0.1 + rng.next() * 0.1) * tone.line, tone.ink), noi: 0.5, salt: i * 3 + side });
+    }
+    i = ni;
+  }
+}
+
+/** Short wavy ripple strokes under the foot, in the background plane (behind everything). */
+function ripples(paint: Painter, pr: Profile, base: number, tone: Tone, rng: Rng, noise: Noise, u: Units): void {
+  const cx = pr.x0 + pr.tops.length / 2;
+  const len = pr.tops.length;
+  let yk = -u.toArt(12);
+  for (let r = 0; r < 10; r++) {
+    yk += u.toArt(rng.range(0.5, 5));
+    const half = len * rng.range(0.25, 0.5);
+    const xk = rng.range(-0.5, 0.5) * len * 0.12;
+    const pts: [number, number][] = [];
+    for (let x = -half; x < half; x += u.toArt(5)) pts.push([cx + xk + x, base + yk + u.toArt(2) * Math.sin(x * 0.12) * noise.n1(x * 0.04 + r)]);
+    if (pts.length > 1) inkStroke(paint, pts, noise, { wid: u.toArt(0.9), color: ink((0.3 + rng.next() * 0.3) * tone.ripple), noi: 0.5, salt: r });
+  }
+}

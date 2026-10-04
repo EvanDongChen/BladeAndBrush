@@ -1,5 +1,5 @@
-import { mountainProfile } from './profile';
+import { layeredMountain } from './layered';
 import { registerShape } from './registry';
 
-/** A pointed mountain: the default shan-shui peak. */
-registerShape({ name: 'peak', build: (p, ctx) => mountainProfile(p, ctx) });
+/** A shan-shui mountain: nested contour layers under a rounded, noise-shaped silhouette. */
+registerShape({ name: 'peak', build: (p, ctx) => layeredMountain(p, ctx) });

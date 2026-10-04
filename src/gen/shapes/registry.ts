@@ -14,6 +14,13 @@ export interface Profile {
   base: number;
   peakX: number;
   peakY: number;
+  /**
+   * Layered shapes only: the full contour grid, art px, layer 0 = silhouette, then nested layers
+   * inward. Each layer runs left to right. Texture strokes, foot skirts and trees use it.
+   */
+  grid?: [number, number][][];
+  /** Flat-topped shapes: the plateau's top edge (art px, left to right), if any. */
+  plateau?: [number, number][];
 }
 
 export interface ShapeCtx {

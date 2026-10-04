@@ -420,7 +420,7 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
               : tip;
       fx.endFrame(canvas, dt);
     },
-    () => fx.shouldAdvance(),
+    () => !pending && fx.shouldAdvance(), // hold the scroll rolled up until the painting has arrived
   );
   const onKey = (e: KeyboardEvent) => {
     if (e.ctrlKey || e.metaKey || e.altKey) return;

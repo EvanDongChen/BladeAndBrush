@@ -5,7 +5,8 @@ import { mountainsOf } from '../mountainStore';
 import type { Depth } from '../plan';
 import { rasterizeCoverage } from '../raster';
 import { getSpecies } from '../species';
-import { groundTop } from './ground';
+import { DEPTH } from '../layout';
+import { foregroundTrees } from './foregroundTrees';
 
 /** Size range per species, in painting units, before perspective scaling. */
 const SIZE: Record<string, [number, number]> = { pine: [30, 60], round: [33, 66], tall: [50, 95] };
@@ -41,7 +42,8 @@ registerFeature({
   name: 'trees',
   label: 'Trees',
   order: 20,
-  run: ({ bp, dims, params, rng, noise, newStroke }) => {
+  run: (ctx) => {
+    const { bp, dims, params, rng, noise, newStroke } = ctx;
     const td = Math.max(0, Math.min(1, params.treeDensity));
     if (td <= 0) return;
     const { planes, u } = artOf(bp);
@@ -67,7 +69,7 @@ registerFeature({
     // Ground groves are occasional: sparser and in wider-spaced clumps than on the ridges.
     const keepGround = (x: number) => {
       const n = noise.n2(u.artToUnit(x) / 160, 991.7);
-      return n * n * n < thr * 0.3;
+      return n * n * n < thr * 0.08;
     };
     const keepFace = (x: number, salt: number) => {
       const n = noise.n2(u.artToUnit(x) / 70, salt);
@@ -109,7 +111,7 @@ registerFeature({
     if (bank) {
       line++;
       const nearBuf = planes[PLANE.NEAR].buf;
-      const yMin = (groundTop(dims.h) - 2) * K;
+      const yMin = Math.floor((DEPTH.floor * dims.h - 4) * K);
       for (let x = 0; x < u.artW; x += step) {
         let y = yMin;
         while (y < u.artH && nearBuf.own[y * u.artW + x] !== bank.id) y++;
@@ -147,5 +149,6 @@ registerFeature({
       if (!cells) bp.registry.strokes.delete(id);
       else if (info) info.bbox = cells;
     }
+    foregroundTrees(ctx);
   },
 });

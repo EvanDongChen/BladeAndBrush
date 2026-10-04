@@ -3,7 +3,8 @@ import { createNoise } from '../core/noise';
 import type { GenParams } from '../core/params';
 import { hashSeed, Rng } from '../core/rng';
 import { artOf } from './artState';
-import type { Units } from './units';
+import { DEPTH } from './layout';
+import { SCROLL_H, type Units } from './units';
 
 export type Depth = 'near' | 'mid' | 'far';
 
@@ -11,6 +12,8 @@ export type Depth = 'near' | 'mid' | 'far';
 export interface Placement {
   kind: string;
   x: number;
+  /** Foot of the object on the page (painting units, y down): the farther away, the smaller y. */
+  y: number;
   halfWidth: number;
   height: number;
   depth: Depth;
@@ -19,8 +22,6 @@ export interface Placement {
 
 const STEP = 10; // planning grid, painting units
 const EDGE = 60; // keep peak centers this far from the scroll ends
-/** Most of the scroll the near + mid mountains may cover together. */
-const COVER_MAX = 0.55;
 
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 
@@ -40,82 +41,78 @@ export function makePlan(seed: number, params: GenParams, u: Units): Placement[]
   const rng = new Rng(hashSeed(seed, 'plan'));
   const noise = createNoise(hashSeed(seed, 'plan', 'noise'));
   const W = u.widthUnits;
-  const gap = minGap(params.spacing);
-  const out: Placement[] = [];
-
-  // Union of the near + mid footprints on a STEP grid: mountains are part of the painting, not
-  // all of it, so together they may cover at most COVER_MAX of the scroll.
-  const cells = Math.ceil(W / STEP) + 1;
-  const covered = new Uint8Array(cells);
-  let coveredCount = 0;
-  const span = (x: number, hw: number): [number, number] => [
-    Math.max(0, Math.floor((x - hw) / STEP)),
-    Math.min(cells - 1, Math.ceil((x + hw) / STEP)),
-  ];
-  const wouldCover = (x: number, hw: number) => {
-    const [a, b] = span(x, hw);
-    let n = 0;
-    for (let i = a; i <= b; i++) if (!covered[i]) n++;
-    return n;
-  };
-  const cover = (x: number, hw: number) => {
-    const [a, b] = span(x, hw);
-    for (let i = a; i <= b; i++) if (!covered[i]) (covered[i] = 1), coveredCount++;
-  };
-  // Open land between neighbours in a row grows with the spacing slider.
+  const H = SCROLL_H;
+  const mh = Math.max(0, params.mountainHeight);
   const sp = Math.min(1, Math.max(0, params.spacing));
-  const landGap = lerp(20, 450, sp);
-  // Tight spacing packs more, slimmer mountains; loose spacing fewer, broader ones.
-  const widthScale = lerp(0.45, 1, sp);
+  const gap = minGap(sp);
+  const out: Placement[] = [];
+  if (mh <= 0) return out;
 
-  const row = (depth: Depth, rowGap: number, offset: number, heightScale: number) => {
-    const xs: number[] = [];
-    for (let x = EDGE; x <= W - EDGE; x += STEP) xs.push(x);
-    const raw = (x: number) => noise.fbm1(x / 400 + offset, 3);
-    let lo = Infinity;
-    let hi = -Infinity;
-    for (const x of xs) {
-      lo = Math.min(lo, raw(x));
-      hi = Math.max(hi, raw(x));
-    }
-    // Stretch to 0..1 so peak heights use the whole range, whatever this seed's noise spread.
-    const score = (x: number) => (hi > lo ? (raw(x) - lo) / (hi - lo) : 1);
-    xs.sort((a, b) => score(b) - score(a) || a - b);
-    const kept: { x: number; hw: number }[] = [];
-    for (const x of xs) {
-      const height = params.mountainHeight * lerp(300, 1000, score(x)) * heightScale;
-      // Width from noise at x (not the rng), so rejected candidates do not shift later draws.
-      const hw = height * lerp(0.5, 0.85, noise.n1(x * 0.37 + offset)) * widthScale + 30;
-      if (kept.some((k) => Math.abs(k.x - x) < Math.max(rowGap, k.hw + hw + landGap))) continue;
-      if (coveredCount > 0 && coveredCount + wouldCover(x, hw) > COVER_MAX * cells) continue;
-      kept.push({ x, hw });
-      cover(x, hw);
-      // The best spot in a row is always a peak; lower ones are sometimes plateaus.
-      const kind = kept.length > 1 && rng.chance(0.25) ? 'flat' : 'peak';
-      out.push({ kind, x, halfWidth: hw, height: kind === 'flat' ? height * 0.6 : height, depth, seed: 0 });
-    }
-  };
-  row('near', gap, 0, 1);
-  row('mid', 0.7 * gap, 1000, 0.75);
+  // 1. Cluster centres: the best-scoring x positions of a slow noise curve, at least `gap` apart.
+  const xs: number[] = [];
+  for (let x = EDGE; x <= W - EDGE; x += STEP) xs.push(x);
+  const raw = (x: number) => noise.fbm1(x / 400, 3);
+  let lo = Infinity;
+  let hi = -Infinity;
+  for (const x of xs) {
+    lo = Math.min(lo, raw(x));
+    hi = Math.max(hi, raw(x));
+  }
+  const score = (x: number) => (hi > lo ? (raw(x) - lo) / (hi - lo) : 1);
+  xs.sort((a, b) => score(b) - score(a) || a - b);
+  const centres: number[] = [];
+  for (const x of xs) if (!centres.some((c) => Math.abs(c - x) < gap)) centres.push(x);
 
-  // Far row (background plane): overlapping low ridges across the whole scroll. Its own rng, so
-  // adding or tuning it never moves the near/mid mountains.
+  // 2. Each centre is a cluster of mountains at several depths (feet at different y), jittered in
+  //    x, so nearer ones overlap farther ones: that overlap is what reads as depth.
+  const spread = 160 + 140 * sp;
+  for (const c of centres) {
+    const s = score(c);
+    const n = 2 + rng.int(2) + (s > 0.6 ? 1 : 0);
+    for (let j = 0; j < n; j++) {
+      const t = (j + rng.next()) / n; // 0 = farthest back in the cluster, 1 = nearest
+      const y = lerp(DEPTH.mountTop, DEPTH.mountBottom, t) * H;
+      const height = mh * lerp(260, 900, s) * rng.range(0.55, 1.05) * (0.8 + 0.3 * t);
+      if (height < 4) continue;
+      const kind = j > 0 && rng.chance(0.2) ? 'flat' : 'peak';
+      out.push({
+        kind,
+        x: Math.min(W, Math.max(0, c + rng.range(-1, 1) * spread)),
+        y,
+        halfWidth: height * rng.range(0.55, 0.9) + 60,
+        height: kind === 'flat' ? height * 0.55 : height,
+        depth: y > DEPTH.split * H ? 'near' : 'mid',
+        seed: 0,
+      });
+    }
+  }
+
+  // 3. Low flat mountains in the wide gaps between clusters, toward the front.
+  const sorted = [...centres].sort((a, b) => a - b);
+  for (let i = 0; i + 1 < sorted.length; i++) {
+    const a = sorted[i];
+    const b = sorted[i + 1];
+    if (b - a < 1.4 * gap || !rng.chance(0.6)) continue;
+    const y = rng.range(0.8, 0.92) * H;
+    out.push({ kind: 'flat', x: (a + b) / 2 + rng.range(-60, 60), y, halfWidth: rng.range(220, 380), height: mh * rng.range(110, 200), depth: 'near', seed: 0 });
+  }
+
+  // 4. Distant ridges, high on the page, across the whole scroll (background plane).
   const farRng = new Rng(hashSeed(seed, 'plan', 'far'));
-  for (let x = farRng.range(-100, 150); x < W + 200; x += farRng.range(280, 520)) {
-    const score = noise.fbm1(x / 400 + 2000, 3);
+  for (let x = farRng.range(-100, 150); x < W + 200; x += farRng.range(380, 760)) {
     out.push({
       kind: 'far',
       x: Math.min(W, Math.max(0, x)),
-      halfWidth: farRng.range(260, 420),
-      height: params.mountainHeight * lerp(260, 560, Math.min(1, Math.max(0, (score - 0.25) * 2))),
+      y: farRng.range(DEPTH.farTop, DEPTH.farBottom) * H,
+      halfWidth: farRng.range(320, 560),
+      height: mh * farRng.range(170, 330),
       depth: 'far',
       seed: 0,
     });
   }
 
-  const kept = out.filter((q) => q.height >= 4);
-  kept.forEach((q, i) => (q.seed = hashSeed(seed, 'mount', i)));
-  return kept;
+  out.forEach((q, i) => (q.seed = hashSeed(seed, 'mount', i)));
+  return out;
 }
 
 const cache = new WeakMap<Blueprint, Placement[]>();

@@ -35,8 +35,13 @@ const load = (path: string): Promise<any> => server.ssrLoadModule(path);
 
 /** A 2D context that accepts every call; createImageData returns real pixel storage. */
 function fakeContext() {
+  const gradient = () => ({ addColorStop: () => {} });
   const target: Record<string | symbol, unknown> = {
     createImageData: (w: number, h: number) => ({ width: w, height: h, data: new Uint8ClampedArray(w * h * 4) }),
+    createRadialGradient: gradient,
+    createLinearGradient: gradient,
+    createConicGradient: gradient,
+    createPattern: () => null,
   };
   return new Proxy(target, {
     get: (t, k) => (k in t ? t[k] : () => {}),

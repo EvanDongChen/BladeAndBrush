@@ -130,6 +130,9 @@ export class Frontier {
       stats: {},
       group: s.group ?? 0,
     });
-    if (s.spawn) placers.get(s.spawn.el)?.place(world, s.anchor[0], s.anchor[1], { obj: s.id, variant: s.spawn.variant, face: s.spawn.face });
+    if (!s.spawn) return;
+    const placer = placers.get(s.spawn.el);
+    // no room after all (or nobody can place it): it was never there, so it is not tracked either
+    if (!placer?.place(world, s.anchor[0], s.anchor[1], { obj: s.id, variant: s.spawn.variant, face: s.spawn.face })) world.objects.delete(s.id);
   }
 }

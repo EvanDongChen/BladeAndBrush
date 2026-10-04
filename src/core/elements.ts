@@ -48,6 +48,12 @@ export interface ElementDef {
    * with nothing under it (e.g. the moon in the sky). Default false.
    */
   anchored?: boolean;
+  /**
+   * With `anchored`: hangs in the air only while each object made of it is still one connected
+   * piece. Once it is cut into two or more pieces they all come loose and fall as rigid bodies
+   * (e.g. the moon). Default false.
+   */
+  hanging?: boolean;
   /** Packed RGBA (see rgba()). May use aux/life/owner for variation. */
   color: (cell: CellView) => number;
 }

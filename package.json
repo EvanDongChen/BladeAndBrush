@@ -11,6 +11,7 @@
     "lint": "eslint .",
     "test": "npm run typecheck && npm run lint && vitest run",
     "test:watch": "vitest",
+    "test:quality": "vitest run tests/art.test.ts tests/shaders.test.ts tests/artFrame.test.ts tests/shaderGolden.test.ts",
     "db:migrate": "node db/migrate.mjs",
     "server": "tsx watch server/index.ts",
     "start": "tsx server/index.ts",

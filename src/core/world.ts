@@ -1,5 +1,5 @@
-import { Flag, type LevelDims } from './constants';
-import { El } from './elements';
+import { BEHIND_LAYERS, Flag, NO_PLANE, type LevelDims } from './constants';
+import { El, hash3, IS_STATIC } from './elements';
 import { EventBus } from './events';
 import { Hasher } from './hash';
 import { defaultParams, type GenParams } from './params';
@@ -46,6 +46,23 @@ export class World {
   readonly owner: Uint16Array; // stroke id (0 = none). Links cell -> Blueprint registry entry
   readonly flags: Uint8Array; // see Flag in constants.ts
 
+  /**
+   * Which blueprint plane the front cell came from (NO_PLANE for anything painted or spawned).
+   * Rendering uses it to pick the art that belongs to the cell.
+   */
+  readonly plane: Uint8Array;
+
+  /**
+   * Layered pixels: material stacked BEHIND the front cell, nearest first, compact (no gaps).
+   * When a front cell's static material is destroyed, the next one moves forward (applyPending).
+   * Only positions flagged HAS_BEHIND have anything here. Static between promotions.
+   */
+  readonly behindEl: Uint8Array[] = [];
+  readonly behindOwner: Uint16Array[] = [];
+  readonly behindPlane: Uint8Array[] = [];
+  private readonly pending: Int32Array;
+  private pendingCount = 0;
+
   /** Active water sources. The frontier reveal adds them; B's emitter pass reads them. */
   sources: WaterSource[] = [];
 
@@ -62,6 +79,13 @@ export class World {
     this.vy = new Int8Array(this.size);
     this.owner = new Uint16Array(this.size);
     this.flags = new Uint8Array(this.size);
+    this.plane = new Uint8Array(this.size).fill(NO_PLANE);
+    for (let d = 0; d < BEHIND_LAYERS; d++) {
+      this.behindEl.push(new Uint8Array(this.size));
+      this.behindOwner.push(new Uint16Array(this.size));
+      this.behindPlane.push(new Uint8Array(this.size).fill(NO_PLANE));
+    }
+    this.pending = new Int32Array(this.size);
   }
 
   idx(x: number, y: number): number {
@@ -96,6 +120,8 @@ export class World {
       }
     }
     this.el[i] = el;
+    if (this.flags[i] & Flag.HAS_BEHIND) this.noteChange(i, el);
+    this.plane[i] = NO_PLANE; // painted or spawned cells belong to no blueprint plane
     this.life[i] = opts?.life ?? 0;
     this.vx[i] = opts?.vx ?? 0;
     this.vy[i] = opts?.vy ?? 0;
@@ -116,8 +142,52 @@ export class World {
     swapIn(this.vx, a, b);
     swapIn(this.vy, a, b);
     swapIn(this.owner, a, b);
+    swapIn(this.plane, a, b);
+    if (this.flags[a] & Flag.HAS_BEHIND) this.noteChange(a, this.el[a]);
+    if (this.flags[b] & Flag.HAS_BEHIND) this.noteChange(b, this.el[b]);
     this.flags[a] |= Flag.UPDATED;
     this.flags[b] |= Flag.UPDATED;
+  }
+
+  /** A position with material behind it just got `el` in front: queue a promotion unless it is still solid or burning. */
+  private noteChange(i: number, el: number): void {
+    if (IS_STATIC[el] || el === El.FIRE || this.flags[i] & Flag.QUEUED) return;
+    this.flags[i] |= Flag.QUEUED;
+    this.pending[this.pendingCount++] = i;
+  }
+
+  /**
+   * Layered pixels: for every position whose front material was destroyed this tick, move the next
+   * layer forward and shift the stack (any ash, smoke or other residue left in front is dropped).
+   * Called once at the end of every step, in the order the changes happened, so replays match.
+   */
+  applyPending(): void {
+    const { el, owner, aux, life, vx, vy, plane, flags, w } = this;
+    for (let n = 0; n < this.pendingCount; n++) {
+      const i = this.pending[n];
+      flags[i] &= ~Flag.QUEUED;
+      const front = el[i];
+      if (front !== El.EMPTY && (IS_STATIC[front] || front === El.FIRE)) continue; // solid again, or still burning
+      const next = this.behindEl[0][i];
+      el[i] = next;
+      owner[i] = this.behindOwner[0][i];
+      plane[i] = next === El.EMPTY ? NO_PLANE : this.behindPlane[0][i];
+      life[i] = 0;
+      vx[i] = 0;
+      vy[i] = 0;
+      if (next !== El.EMPTY) aux[i] = hash3(i % w, (i / w) | 0, 0);
+      for (let d = 0; d < BEHIND_LAYERS - 1; d++) {
+        this.behindEl[d][i] = this.behindEl[d + 1][i];
+        this.behindOwner[d][i] = this.behindOwner[d + 1][i];
+        this.behindPlane[d][i] = this.behindPlane[d + 1][i];
+      }
+      const last = BEHIND_LAYERS - 1;
+      this.behindEl[last][i] = El.EMPTY;
+      this.behindOwner[last][i] = 0;
+      this.behindPlane[last][i] = NO_PLANE;
+      if (this.behindEl[0][i] === El.EMPTY) flags[i] &= ~Flag.HAS_BEHIND;
+    }
+    this.pendingCount = 0;
   }
 
   /** Inclusive rectangle, clipped to the grid. */
@@ -158,7 +228,7 @@ export class World {
 
   /** Deterministic hash of all cell state, the tick and the RNG state. UPDATED bits are ignored. */
   hash(): number {
-    return new Hasher()
+    const h = new Hasher()
       .int(this.w)
       .int(this.h)
       .int(this.tick)
@@ -170,8 +240,10 @@ export class World {
       .bytes(this.vx)
       .bytes(this.vy)
       .u16(this.owner)
-      .bytes(this.flags, 0xff & ~Flag.UPDATED)
-      .digest();
+      .bytes(this.plane)
+      .bytes(this.flags, 0xff & ~Flag.UPDATED & ~Flag.QUEUED);
+    for (let d = 0; d < BEHIND_LAYERS; d++) h.bytes(this.behindEl[d]).u16(this.behindOwner[d]).bytes(this.behindPlane[d]);
+    return h.digest();
   }
 }
 

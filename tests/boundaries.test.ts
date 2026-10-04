@@ -7,6 +7,9 @@ import { describe, expect, it } from 'vitest';
 const root = fileURLToPath(new URL('..', import.meta.url));
 const eslint = new ESLint({ cwd: root });
 
+// ESLint's first run loads the TS parser; that can take >5s on slow mounts (e.g. WSL /mnt/c).
+const SLOW = { timeout: 30_000 };
+
 /** Lint a fixture's text as if it were the file at `asPath` (relative to the repo root). */
 async function lint(fixture: string, asPath: string) {
   const code = readFileSync(join(root, 'tests/fixtures', fixture), 'utf8');
@@ -14,7 +17,7 @@ async function lint(fixture: string, asPath: string) {
   return result.messages.map((m) => m.ruleId);
 }
 
-describe('import boundaries (section 12.1)', () => {
+describe('import boundaries (section 12.1)', SLOW, () => {
   it('fails when a gen/ file imports from sim/', async () => {
     expect(await lint('gen-imports-sim.ts', 'src/gen/badFixture.ts')).toContain('no-restricted-imports');
   });
@@ -33,7 +36,7 @@ describe('import boundaries (section 12.1)', () => {
   });
 });
 
-describe('determinism lint (section 9)', () => {
+describe('determinism lint (section 9)', SLOW, () => {
   it('flags Math.random, Date.now, performance.now and new Date() in sim/', async () => {
     const rules = await lint('sim-nondeterminism.ts', 'src/sim/badFixture.ts');
     expect(rules.filter((r) => r === 'no-restricted-properties')).toHaveLength(3);

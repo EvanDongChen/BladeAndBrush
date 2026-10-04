@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
 
 const page = (name: string) => fileURLToPath(new URL(`./${name}.html`, import.meta.url));
+const onWindowsDriveInWsl = process.platform === 'linux' && /^\/mnt\/[a-z]\//.test(process.cwd());
 
 export default defineConfig({
   // Project pages (EvanDongChen/BladeAndBrush) serve under /BladeAndBrush/;
@@ -12,6 +13,7 @@ export default defineConfig({
     proxy: {
       '/api': 'http://localhost:3001',
     },
+    watch: onWindowsDriveInWsl ? { usePolling: true, interval: 300, ignored: ['**/docs/**'] } : undefined,
   },
   build: {
     rollupOptions: {
@@ -20,6 +22,7 @@ export default defineConfig({
         generator: page('generator'),
         sandbox: page('sandbox'),
         gallery: page('gallery'),
+        level: page('level'),
       },
     },
   },

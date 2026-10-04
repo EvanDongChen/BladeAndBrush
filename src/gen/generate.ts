@@ -1,4 +1,4 @@
-import { createBlueprint, type Blueprint } from '../core/blueprint';
+import { createBlueprint, flattenPlanes, type Blueprint } from '../core/blueprint';
 import { featureOn } from '../core/config';
 import { DEFAULT_DIMS, type LevelDims } from '../core/constants';
 import { features, type Feature, type FeatureCtx } from '../core/features';
@@ -6,11 +6,14 @@ import { createNoise } from '../core/noise';
 import type { GenParams } from '../core/params';
 import { byOrder } from '../core/registry';
 import { hashSeed, Rng } from '../core/rng';
+import { attachArt, DEFAULT_ART_K } from './artState';
 
 export interface GenerateOptions {
   dims?: LevelDims;
   /** Per-call feature toggles; win over core/config.ts featureToggles. */
   features?: Record<string, boolean>;
+  /** Art pixels per cell side (default DEFAULT_ART_K). */
+  k?: number;
 }
 
 /** Registered features that are switched on, in pipeline order. */
@@ -28,6 +31,7 @@ export function enabledFeatures(overrides?: Record<string, boolean>): Feature[] 
 export function generate(seed: number, params: GenParams, opts: GenerateOptions = {}): Blueprint {
   const dims = opts.dims ?? DEFAULT_DIMS;
   const bp = createBlueprint(seed, params, dims);
+  attachArt(bp, opts.k ?? DEFAULT_ART_K);
   let nextOwner = 1;
   const newStroke: FeatureCtx['newStroke'] = (info) => {
     const id = nextOwner++;
@@ -45,5 +49,6 @@ export function generate(seed: number, params: GenParams, opts: GenerateOptions 
       newStroke,
     });
   }
+  flattenPlanes(bp); // layered pixels: planes -> front cells + the stack behind them
   return bp;
 }

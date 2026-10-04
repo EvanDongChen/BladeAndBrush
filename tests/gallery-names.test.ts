@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { playerAlias, randomAlias } from '../src/gallery/names';
+import { ADJECTIVES, ZODIAC, aliasOf, randomChoice, saveChoice, savedChoice } from '../src/gallery/names';
 
 function memoryStorage(): Storage {
   const data = new Map<string, string>();
@@ -20,28 +20,52 @@ afterEach(() => {
 });
 
 describe('gallery names', () => {
-  it('a name is two Chinese words, each two characters, with a space between', () => {
-    for (let i = 0; i < 50; i++) expect(randomAlias()).toMatch(/^\p{Script=Han}{2} \p{Script=Han}{2}$/u);
+  it('offers a Chinese adjective list and exactly the twelve zodiac animals, in order', () => {
+    expect(ZODIAC.map((z) => z.zh).join('')).toBe('鼠牛虎兔龍蛇馬羊猴雞狗豬');
+    expect(ZODIAC).toHaveLength(12);
+    for (const a of ADJECTIVES) expect(a.zh).toMatch(/^\p{Script=Han}{2}$/u);
+    expect(new Set(ADJECTIVES.map((a) => a.zh)).size).toBe(ADJECTIVES.length);
   });
 
-  it('is repeatable from a fixed random source, and the ends of the range both work', () => {
-    expect(randomAlias(() => 0)).toBe(randomAlias(() => 0));
-    expect(randomAlias(() => 0.9999999)).toMatch(/^\p{Script=Han}{2} \p{Script=Han}{2}$/u);
+  it('a name is the adjective, 的, and the animal', () => {
+    expect(aliasOf({ adjective: 0, zodiac: 2 })).toBe('勇敢的虎');
+    expect(aliasOf({ adjective: 1, zodiac: 4 })).toBe('聰明的龍');
   });
 
-  it('different random draws give different names', () => {
-    const names = new Set(Array.from({ length: 200 }, () => randomAlias()));
-    expect(names.size).toBeGreaterThan(50);
+  it('every choice makes a distinct, well-formed name', () => {
+    const names = new Set<string>();
+    for (let a = 0; a < ADJECTIVES.length; a++) for (let z = 0; z < ZODIAC.length; z++) names.add(aliasOf({ adjective: a, zodiac: z }));
+    expect(names.size).toBe(ADJECTIVES.length * ZODIAC.length);
+    for (const n of names) expect(n).toMatch(/^\p{Script=Han}{2}的\p{Script=Han}$/u);
   });
 
-  it('a browser keeps its name between calls', () => {
+  it('out-of-range or odd indexes are clamped, never undefined', () => {
+    expect(aliasOf({ adjective: -5, zodiac: 99 })).toBe(aliasOf({ adjective: 0, zodiac: ZODIAC.length - 1 }));
+    expect(aliasOf({ adjective: Number.NaN, zodiac: 1.7 })).toBe(aliasOf({ adjective: 0, zodiac: 1 }));
+  });
+
+  it('a random choice stays in range at both ends of the random source', () => {
+    for (const r of [0, 0.5, 0.9999999]) {
+      const c = randomChoice(() => r);
+      expect(c.adjective).toBeGreaterThanOrEqual(0);
+      expect(c.adjective).toBeLessThan(ADJECTIVES.length);
+      expect(c.zodiac).toBeLessThan(ZODIAC.length);
+    }
+  });
+
+  it('remembers the last choice in this browser', () => {
     vi.stubGlobal('localStorage', memoryStorage());
-    const first = playerAlias();
-    expect(first).toMatch(/^\p{Script=Han}{2} \p{Script=Han}{2}$/u);
-    expect(playerAlias()).toBe(first);
+    saveChoice({ adjective: 3, zodiac: 8 });
+    expect(savedChoice()).toEqual({ adjective: 3, zodiac: 8 });
   });
 
-  it('still gives a name when storage is blocked', () => {
+  it('starts a new browser from a random pair, and survives damaged or blocked storage', () => {
+    const storage = memoryStorage();
+    vi.stubGlobal('localStorage', storage);
+    const first = savedChoice();
+    expect(aliasOf(first)).toMatch(/^\p{Script=Han}{2}的\p{Script=Han}$/u);
+    storage.setItem('blade-and-brush.name.v1', '{not json');
+    expect(aliasOf(savedChoice())).toMatch(/的/u);
     vi.stubGlobal('localStorage', {
       getItem: () => {
         throw new Error('blocked');
@@ -50,6 +74,7 @@ describe('gallery names', () => {
         throw new Error('blocked');
       },
     });
-    expect(playerAlias()).toMatch(/^\p{Script=Han}{2} \p{Script=Han}{2}$/u);
+    expect(aliasOf(savedChoice())).toMatch(/的/u);
+    expect(() => saveChoice({ adjective: 0, zodiac: 0 })).not.toThrow();
   });
 });

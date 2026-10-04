@@ -21,11 +21,11 @@ import { aimEnd, aimTunables, chargeOf, drawAim, isLineAbility, lineColor } from
 import { step } from '../sim/step';
 import { siteHeader } from './chrome';
 import { audio } from '../audio/engine';
-import { playerAlias } from '../gallery/names';
 import { submitWin, type WinData } from '../gallery/submit';
 import { APP_VERSION } from '../gallery/version';
 import { Fx } from './fx';
 import { arsenal } from './arsenal';
+import { nameMenu } from './nameMenu';
 import { button, h, handscroll, panel, seal, soundToggle, startLoop, toCell } from './ui';
 
 /** Header for players: no links to the workshops. */
@@ -100,6 +100,7 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
   const stamp = h('div', { class: 'stamp', 'aria-hidden': 'true' }, seal('完成', 'stamp-seal'));
   let winTimer = 0;
   const submitNote = h('p', { class: 'submit-note' }); // in the completion scroll: where the painting was sent
+  const names = nameMenu((alias) => void sendToGallery(alias)); // in the completion scroll: sign the painting
   let winData: WinData | null = null;
   const mount = h('span', { class: 'mount', 'aria-hidden': 'true' }); // the silk the painting is mounted on
   // a small gold bead on the bottom silk that follows the painting's song across the scroll
@@ -118,6 +119,8 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
     clearTimeout(winTimer);
     winData = null;
     submitNote.replaceChildren();
+    names.hide();
+    names.busy(false);
     stamp.classList.remove('on');
     complete?.close();
     banner.hidden = true;
@@ -231,7 +234,7 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
     ink.setAttribute('aria-label', `Ink left: ${left} of ${level.actionBudget}`);
   };
 
-  // ---- victory: send the painting to the gallery under this browser's name ----
+  // ---- victory: the player signs the painting with a name and it goes to the gallery ----
 
   /** The finished painting as a picture, without the cursor, peak marks or ink trails drawn over it. */
   function snapshot(): string {
@@ -243,13 +246,14 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
     return out.toDataURL('image/jpeg', 0.85);
   }
 
-  async function sendToGallery(): Promise<void> {
+  async function sendToGallery(alias: string): Promise<void> {
     if (!winData) return;
-    const alias = playerAlias();
     const strokes = winData.result.strokes ?? 0;
+    names.busy(true);
     submitNote.replaceChildren(`Sending your painting to the gallery as ${alias}…`);
     try {
       await submitWin(winData, alias);
+      names.hide();
       submitNote.replaceChildren(
         'Sent to the gallery as ',
         h('b', { class: 'alias' }, alias),
@@ -257,7 +261,8 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
         h('a', { href: './gallery.html' }, 'See it'),
       );
     } catch {
-      submitNote.replaceChildren('The gallery could not be reached. ', button('Try again', () => void sendToGallery(), { class: 'home-cta' }));
+      names.busy(false);
+      submitNote.replaceChildren('The gallery could not be reached. Press Send to try again.');
     }
   }
 
@@ -269,6 +274,7 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
       { class: 'complete' },
       h('h3', {}, '完成'),
       h('p', {}, 'The landscape matches the poem.'),
+      names.node,
       submitNote,
       h(
         'p',
@@ -312,7 +318,8 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
         worldHash: world.hash(),
         appVersion: APP_VERSION,
       };
-      void sendToGallery();
+      submitNote.replaceChildren('Choose a name to sign your painting and send it to the gallery.');
+      names.show();
       stamp.classList.add('on'); // the seal lands first, then the scroll unrolls
       winTimer = window.setTimeout(() => {
         complete!.node.hidden = false;

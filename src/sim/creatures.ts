@@ -6,6 +6,8 @@
  * and holds all of its state:
  *   vx = facing (+1 right, -1 left)   vy = animation frame   owner = variant (color)
  *   life = whatever the creature's AI keeps there (a countdown, a heading...)
+ * Every cell of it also carries its object id (world.obj, core/objects.ts) if it is tracked, e.g. a
+ * generated villager, so metrics can tell which creatures are still alive.
  * Every other cell is a PART whose vx/vy point back at the anchor, so a part can tell when its
  * anchor is gone, and the anchor can tell when a part is gone. A creature that has lost a cell
  * dies: if the missing cell is burning the rest of it catches fire, otherwise it bursts into
@@ -18,6 +20,7 @@
 import { registerBehavior } from '../core/behaviors';
 import { Flag } from '../core/constants';
 import { El } from '../core/elements';
+import { registerPlacer } from '../core/objects';
 import type { World } from '../core/world';
 import { ignite } from './behaviors/fire';
 import { at, K_GAS, K_POWDER, K_STATIC, KIND, REPLACEABLE } from './physics';
@@ -61,6 +64,8 @@ export interface Creature {
   face: number;
   variant: number;
   life: number;
+  /** Tracked object id (0 = untracked). */
+  obj: number;
 }
 
 export interface CreatureDef {
@@ -79,11 +84,12 @@ export interface CreatureDef {
 
 export const CREATURES = new Map<number, CreatureDef>();
 
-/** Make a creature: registers its per-cell behavior and its brush spawner. */
+/** Make a creature: registers its per-cell behavior, its brush spawner and its placer (for the generator). */
 export function defineCreature(def: CreatureDef): CreatureDef {
   CREATURES.set(def.el, def);
   registerBehavior(def.el, (world, x, y) => updateCreature(world, x, y, def));
   registerSpawner(def.el, (world, x, y) => void spawnCreature(world, def, x, y), def.spawnSpacing ?? 12);
+  registerPlacer({ el: def.el, place: (world, x, y, o) => spawnCreature(world, def, x, y, o.variant, o.face, o.obj) });
   return def;
 }
 
@@ -126,15 +132,15 @@ function erase(world: World, def: CreatureDef, c: Creature): void {
 }
 
 /** Write a pose into the grid. All its cells are marked UPDATED so nothing acts on them again this tick. */
-function draw(world: World, def: CreatureDef, ax: number, ay: number, frame: number, face: number, variant: number, life: number): void {
+function draw(world: World, def: CreatureDef, ax: number, ay: number, frame: number, face: number, variant: number, life: number, obj: number): void {
   const { w, flags } = world;
   for (const [dx, dy, part] of def.frames[frame]) {
     const ex = face < 0 ? -dx : dx;
     const x = ax + ex;
     const y = ay + dy;
     const aux = def.paint(part, variant);
-    if (dx === 0 && dy === 0) world.set(x, y, def.el, { aux: ANCHOR | aux, owner: variant, life, vx: face, vy: frame });
-    else world.set(x, y, def.el, { aux, owner: variant, vx: -ex, vy: -dy });
+    if (dx === 0 && dy === 0) world.set(x, y, def.el, { aux: ANCHOR | aux, owner: variant, obj, life, vx: face, vy: frame });
+    else world.set(x, y, def.el, { aux, owner: variant, obj, vx: -ex, vy: -dy });
     flags[y * w + x] |= Flag.UPDATED;
   }
 }
@@ -148,7 +154,7 @@ export function relocate(world: World, def: CreatureDef, c: Creature, dx: number
   const ny = c.y + dy;
   if (!poseFree(world, def, nx, ny, frame, face, c.x, c.y)) return false;
   erase(world, def, c);
-  draw(world, def, nx, ny, frame, face, c.variant, c.life);
+  draw(world, def, nx, ny, frame, face, c.variant, c.life, c.obj);
   c.x = nx;
   c.y = ny;
   c.frame = frame;
@@ -231,7 +237,7 @@ function updatePart(world: World, x: number, y: number): void {
   perish(world, x, y, false);
 }
 
-const cur: Creature = { x: 0, y: 0, frame: 0, face: 1, variant: 0, life: 0 };
+const cur: Creature = { x: 0, y: 0, frame: 0, face: 1, variant: 0, life: 0, obj: 0 };
 
 /** The per-cell behavior of a creature element. */
 function updateCreature(world: World, x: number, y: number, def: CreatureDef): void {
@@ -247,6 +253,7 @@ function updateCreature(world: World, x: number, y: number, def: CreatureDef): v
   c.face = world.vx[i] < 0 ? -1 : 1;
   c.variant = world.owner[i];
   c.life = world.life[i];
+  c.obj = world.obj[i];
   const hurt = damage(world, def, c);
   if (hurt !== 0) {
     die(world, def, c, hurt === 2);
@@ -260,16 +267,16 @@ function updateCreature(world: World, x: number, y: number, def: CreatureDef): v
 
 /**
  * Put a creature at (x, y), nudging it upward until it fits. Returns false if there was no room.
- * Variant and facing are random (from world.rng) unless given.
+ * Variant and facing are random (from world.rng) unless given; `obj` tags it as a tracked object.
  */
-export function spawnCreature(world: World, def: CreatureDef, x: number, y: number, variant?: number, face?: number): boolean {
+export function spawnCreature(world: World, def: CreatureDef, x: number, y: number, variant?: number, face?: number, obj = 0): boolean {
   const v = variant ?? world.rng.int(def.variants);
   const f = face ?? (world.rng.chance(0.5) ? 1 : -1);
   const ax = Math.round(x);
   const ay = Math.round(y);
   for (let k = 0; k <= 24; k++) {
     if (poseFree(world, def, ax, ay - k, 0, f, -1, -1)) {
-      draw(world, def, ax, ay - k, 0, f, v, 0);
+      draw(world, def, ax, ay - k, 0, f, v, 0, obj);
       return true;
     }
   }

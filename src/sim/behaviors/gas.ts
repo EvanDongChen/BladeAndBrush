@@ -3,6 +3,7 @@ import { Flag } from '../../core/constants';
 import { El } from '../../core/elements';
 import type { World } from '../../core/world';
 import { DUST } from '../elements/dust';
+import { RAIN } from '../elements/rain';
 import { STEAM } from '../elements/steam';
 import { at, BLOCKED, canRise, FREE, moveCell, REPLACEABLE } from '../physics';
 import { defineTunables } from '../tunables';
@@ -14,7 +15,7 @@ export const gasTunables = defineTunables(
     smokeLife: 110,
     /** Average steam lifetime in ticks. */
     steamLife: 70,
-    /** Chance that expiring steam condenses back into a water drop. */
+    /** Chance that expiring steam condenses into a raindrop. */
     condense: 0.25,
     /** Chance per tick to drift sideways instead of rising. */
     drift: 0.3,
@@ -61,7 +62,7 @@ function updateGas(world: World, x: number, y: number): void {
   if (world.life[i] === 0) {
     world.life[i] = startLife(world, me === STEAM ? gasTunables.steamLife : me === DUST ? gasTunables.dustLife : gasTunables.smokeLife);
   } else if (--world.life[i] === 0) {
-    if (me === STEAM && world.rng.chance(gasTunables.condense)) world.set(x, y, El.WATER);
+    if (me === STEAM && world.rng.chance(gasTunables.condense)) world.set(x, y, RAIN, { aux: world.rng.int(256) });
     else world.set(x, y, El.EMPTY);
     world.flags[i] |= Flag.UPDATED;
     return;

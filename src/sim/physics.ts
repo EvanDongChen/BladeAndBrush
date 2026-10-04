@@ -25,7 +25,7 @@ export const FLAMMABILITY = new Float32Array(256);
 export const REPLACEABLE = new Uint8Array(256);
 /** 1 for solid material that a slash can cut and splatter (static or powder, not STAIN). */
 export const CUTTABLE = new Uint8Array(256);
-/** 1 for static solid material that holds together as rigid pieces (rock, wood, leaf; not STAIN). */
+/** 1 for static solid material that holds together as rigid pieces (rock, wood, leaf; not STAIN, not anchored). */
 export const RIGID = new Uint8Array(256);
 
 let builtVersion = -1;
@@ -40,7 +40,7 @@ export function refreshTables(): void {
     FLAMMABILITY[id] = def?.flammability ?? 0;
     REPLACEABLE[id] = kind === K_EMPTY || id === El.STAIN ? 1 : 0;
     CUTTABLE[id] = (kind === K_STATIC || kind === K_POWDER) && id !== El.STAIN ? 1 : 0;
-    RIGID[id] = kind === K_STATIC && id !== El.STAIN && def !== undefined ? 1 : 0;
+    RIGID[id] = kind === K_STATIC && id !== El.STAIN && def !== undefined && !def.anchored ? 1 : 0;
   }
   builtVersion = elements.version;
 }
@@ -77,7 +77,7 @@ export function at(world: World, x: number, y: number): number {
  * SWAP exchanges the two cells. Returns the new index.
  */
 export function moveCell(world: World, x: number, y: number, nx: number, ny: number, mode: number): number {
-  const { w, el, life, aux, vx, vy, owner, flags } = world;
+  const { w, el, life, aux, vx, vy, owner, obj, flags } = world;
   const i = y * w + x;
   const j = ny * w + nx;
   if (mode === SWAP) {
@@ -90,12 +90,14 @@ export function moveCell(world: World, x: number, y: number, nx: number, ny: num
   vx[j] = vx[i];
   vy[j] = vy[i];
   owner[j] = owner[i];
+  obj[j] = obj[i];
   flags[j] |= Flag.UPDATED;
   el[i] = El.EMPTY;
   life[i] = 0;
   vx[i] = 0;
   vy[i] = 0;
   owner[i] = 0;
+  obj[i] = 0;
   return j;
 }
 

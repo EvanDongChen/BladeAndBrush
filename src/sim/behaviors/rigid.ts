@@ -230,6 +230,7 @@ const dAux: number[] = [];
 const dVx: number[] = [];
 const dVy: number[] = [];
 const dOwner: number[] = [];
+const dObj: number[] = [];
 
 /** canShift result: the move is clear. */
 const CLEAR = 0;
@@ -276,11 +277,11 @@ function collide(a: Body, b: Body, axis: 'x' | 'y'): void {
  * cell in front is displaced to the line's tail, so nothing is destroyed.
  */
 function shift(world: World, s: State, b: Body, dx: number, dy: number): void {
-  const { w, el, life, aux, vx, vy, owner } = world;
+  const { w, el, life, aux, vx, vy, owner, obj } = world;
   const { mark } = s;
   const o = dx + dy * w;
   const cells = b.cells;
-  dTail.length = dEl.length = dLife.length = dAux.length = dVx.length = dVy.length = dOwner.length = 0;
+  dTail.length = dEl.length = dLife.length = dAux.length = dVx.length = dVy.length = dOwner.length = dObj.length = 0;
 
   // 1. remember what is in front of each line, and where that line's tail is
   for (const i of cells) {
@@ -300,6 +301,7 @@ function shift(world: World, s: State, b: Body, dx: number, dy: number): void {
     dVx.push(vx[t]);
     dVy.push(vy[t]);
     dOwner.push(owner[t]);
+    dObj.push(obj[t]);
   }
 
   // 2. move every body cell, front first
@@ -313,6 +315,7 @@ function shift(world: World, s: State, b: Body, dx: number, dy: number): void {
     vx[j] = vx[i];
     vy[j] = vy[i];
     owner[j] = owner[i];
+    obj[j] = obj[i];
   }
 
   // 3. displaced cells land on the tails
@@ -324,6 +327,7 @@ function shift(world: World, s: State, b: Body, dx: number, dy: number): void {
     vx[t] = dVx[k];
     vy[t] = dVy[k];
     owner[t] = dOwner[k];
+    obj[t] = dObj[k];
   }
 
   for (const i of cells) mark[i] = 0;
@@ -443,8 +447,8 @@ function rotate(x: number, y: number, f: RotFactors): void {
 
 // scratch for rotations (reused)
 const rPos: number[] = [];
-const rData: number[] = []; // 6 numbers per body cell: el, life, aux, vx, vy, owner
-const rForeign: number[] = []; // 6 numbers per displaced cell
+const rData: number[] = []; // 7 numbers per body cell: el, life, aux, vx, vy, owner, obj
+const rForeign: number[] = []; // 7 numbers per displaced cell
 const rVacated: number[] = [];
 let stamp = new Int32Array(0);
 let stampGen = 0;
@@ -484,38 +488,40 @@ function placeFree(world: World, s: State, b: Body): boolean {
  * cells the body left, so nothing is destroyed.
  */
 function moveOnto(world: World, s: State, b: Body): void {
-  const { el, life, aux, vx, vy, owner, size } = world;
+  const { el, life, aux, vx, vy, owner, obj, size } = world;
   const { mark } = s;
   if (stamp.length < size) stamp = new Int32Array(size);
   const gen = ++stampGen;
   for (const p of rPos) stamp[p] = gen;
 
   rData.length = rForeign.length = rVacated.length = 0;
-  for (const p of b.cells) rData.push(el[p], life[p], aux[p], vx[p], vy[p], owner[p]);
-  for (const p of rPos) if (mark[p] !== b.id) rForeign.push(el[p], life[p], aux[p], vx[p], vy[p], owner[p]);
+  for (const p of b.cells) rData.push(el[p], life[p], aux[p], vx[p], vy[p], owner[p], obj[p]);
+  for (const p of rPos) if (mark[p] !== b.id) rForeign.push(el[p], life[p], aux[p], vx[p], vy[p], owner[p], obj[p]);
   for (const p of b.cells) if (stamp[p] !== gen) rVacated.push(p);
 
   for (const p of b.cells) mark[p] = 0;
   for (let k = 0; k < rPos.length; k++) {
     const p = rPos[k];
-    const d = k * 6;
+    const d = k * 7;
     el[p] = rData[d];
     life[p] = rData[d + 1];
     aux[p] = rData[d + 2];
     vx[p] = rData[d + 3];
     vy[p] = rData[d + 4];
     owner[p] = rData[d + 5];
+    obj[p] = rData[d + 6];
     mark[p] = b.id;
   }
   for (let k = 0; k < rVacated.length; k++) {
     const p = rVacated[k];
-    const d = k * 6;
+    const d = k * 7;
     el[p] = rForeign[d];
     life[p] = rForeign[d + 1];
     aux[p] = rForeign[d + 2];
     vx[p] = rForeign[d + 3];
     vy[p] = rForeign[d + 4];
     owner[p] = rForeign[d + 5];
+    obj[p] = rForeign[d + 6];
   }
 
   // keep cells sorted (shift() relies on it), with the shape offsets aligned

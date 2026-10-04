@@ -87,6 +87,23 @@ export function scoreCurve(seed: number, spacing: number, widthUnits: number, ba
 }
 
 /**
+ * Greedy highest-first picks from a score curve: every pick at or above the
+ * bar, kept minApart apart (and away from `forced`, which are kept as-is).
+ * Pure; shared by makePlan() and the noise-graph widget.
+ */
+export function pickPeaks(curve: ScoreCurve, forced: number[] = []): number[] {
+  const { xs, score, bar, minApart } = curve;
+  const peaks: number[] = [...forced]; // free clusters keep their distance from the level's peaks
+  const order = xs.map((_, i) => i).sort((a, b) => score[b] - score[a]);
+  for (const i of order) {
+    if (score[i] < bar) break;
+    if (peaks.some((q) => Math.abs(q - xs[i]) < minApart)) continue;
+    peaks.push(xs[i]);
+  }
+  return peaks;
+}
+
+/**
  * Where the mountains go. Pure: same (seed, params, units) gives the same plan.
  * - A slow noise curve scores every x; the best-scoring xs become mountains, greedily kept at
  *   least minGap apart (near row) or 0.7 * minGap apart (mid row, its own curve), and never
@@ -120,14 +137,8 @@ export function makePlan(seed: number, params: GenParams, u: Units, hints?: Plan
 
   // 1. Where mountains rise: high points of a noise curve along x. Tighter spacing = a faster
   //    curve and a lower bar, so more of them.
-  const { xs, score, bar, minApart } = scoreCurve(seed, params.spacing, W, barOver);
-  const peaks: number[] = [...forced]; // free clusters keep their distance from the level's peaks
-  const order = xs.map((_, i) => i).sort((a, b) => score[b] - score[a]);
-  for (const i of order) {
-    if (score[i] < bar) break;
-    if (peaks.some((q) => Math.abs(q - xs[i]) < minApart)) continue;
-    peaks.push(xs[i]);
-  }
+  const curve = scoreCurve(seed, params.spacing, W, barOver);
+  const peaks = pickPeaks(curve, forced);
 
   // 2. At each, a stack of mountains at several depths (feet every 30 units from the back), jittered
   //    sideways: the nearer ones overlap the farther ones, which is what reads as depth.

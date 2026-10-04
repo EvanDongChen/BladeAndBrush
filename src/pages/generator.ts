@@ -12,6 +12,8 @@ import { DEFAULT_ART_K } from '../gen/artState';
 import { generate } from '../gen/generate';
 import { Frontier } from '../gen/frontier';
 import { scan } from '../gen/scan';
+import { units } from '../gen/units';
+import { noiseGraph } from './noiseGraph';
 import { step } from '../sim/step';
 import {
   button,
@@ -47,8 +49,26 @@ export function mountGenerator(root: HTMLElement): () => void {
   const status = h('div', { class: 'status' });
   const readout = metricReadout();
 
+  const scrollW = units(DEFAULT_DIMS, DEFAULT_ART_K).widthUnits;
+
+  // The noise graph replaces the mountain-height and spacing sliders: edits
+  // feed back into generate() as a gate override plus pinned mountain
+  // setpieces, so the wave manipulates this seed's mountains directly.
+  const graph = noiseGraph({
+    seed: () => seed,
+    params,
+    levelForced: () =>
+      setpieces.flatMap((s) => (s.type === 'mountain' && typeof s.x === 'number' ? [s.x * scrollW] : [])),
+    onChange: () => rebuild(),
+  });
+
   function rebuild(): void {
-    bp = generate(seed, params, { features: toggles, setpieces });
+    const ed = graph.edits();
+    bp = generate(seed, params, {
+      features: toggles,
+      setpieces: [...setpieces, ...ed.pins.map((x) => ({ type: 'mountain', x: x / scrollW }))],
+      ...(ed.gate === undefined ? {} : { planBar: ed.gate }),
+    });
     world = new World(DEFAULT_DIMS, seed, params);
     frontier = new Frontier(bp, columnsPerTick);
     if (!playback) frontier.revealAll(world);
@@ -62,11 +82,13 @@ export function mountGenerator(root: HTMLElement): () => void {
   const seedInput = h('input', { type: 'number', value: seed, 'data-seed': '' });
   seedInput.addEventListener('change', () => {
     seed = Number(seedInput.value) | 0;
+    graph.reset();
     rebuild();
   });
   const randomize = button('Randomize', () => {
     seed = Math.floor(Math.random() * 1e9);
     seedInput.value = String(seed);
+    graph.reset();
     rebuild();
   });
 
@@ -114,7 +136,7 @@ export function mountGenerator(root: HTMLElement): () => void {
   canvas.addEventListener('pointercancel', stopDig);
 
   // A level's setpieces (moon, village...) on top of the free painting, with its seed and params.
-  const sliders = paramSliders(params, rebuild);
+  const sliders = paramSliders(params, rebuild, { exclude: ['mountainHeight', 'spacing'] });
   const levelSelect = h(
     'select',
     {},
@@ -127,6 +149,7 @@ export function mountGenerator(root: HTMLElement): () => void {
     if (l) {
       seed = l.seed;
       seedInput.value = String(seed);
+      graph.reset();
       for (const [key, p] of Object.entries(l.params)) {
         params[key] = p.value;
         const input = sliders.querySelector<HTMLInputElement>(`[data-param="${key}"]`);
@@ -136,6 +159,7 @@ export function mountGenerator(root: HTMLElement): () => void {
         }
       }
     }
+    graph.sync();
     rebuild();
   });
 
@@ -151,6 +175,7 @@ export function mountGenerator(root: HTMLElement): () => void {
         'aside',
         { class: 'controls' },
         panel('Seed', h('div', { class: 'row' }, seedInput, randomize), h('label', { class: 'row' }, h('span', {}, 'Level'), levelSelect)),
+        panel('Mountains', graph.node, h('div', { class: 'row' }, button('Regenerate', rebuild))),
         panel('Params', sliders),
         panel('Features', featureToggles(toggles, rebuild)),
         panel(
@@ -175,6 +200,7 @@ export function mountGenerator(root: HTMLElement): () => void {
   );
 
   let frame = 0;
+  graph.sync(); // canvas has layout now; draw the wave at full column width
   const stop = startLoop(clock, () => {
     renderer.draw(world, { frontierX: frontier.done ? undefined : frontier.x, art: artView(bp) });
     if (frame++ % 10 === 0) {

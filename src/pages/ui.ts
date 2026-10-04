@@ -176,9 +176,14 @@ export function revealOnScroll(root: ParentNode, selector = '.reveal'): void {
 }
 
 /** One slider per registered param. */
-export function paramSliders(values: GenParams, onChange: (key: string) => void): HTMLElement {
+export function paramSliders(
+  values: GenParams,
+  onChange: (key: string) => void,
+  opts: { exclude?: string[] } = {},
+): HTMLElement {
   const wrap = h('div', { class: 'rows' });
   for (const p of params.all()) {
+    if (opts.exclude?.includes(p.key)) continue;
     if (values[p.key] === undefined) values[p.key] = p.default;
     const out = h('output', {}, String(values[p.key]));
     const input = h('input', {

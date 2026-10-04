@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { DEFAULT_DIMS } from '../src/core/constants';
 import { defaultParams, type GenParams } from '../src/core/params';
 import { DEPTH } from '../src/gen/layout';
-import { makePlan, type Placement } from '../src/gen/plan';
+import { makePlan, pickPeaks, scoreCurve, type Placement } from '../src/gen/plan';
 import { SCROLL_H, units } from '../src/gen/units';
 
 const u = units(DEFAULT_DIMS, 2);
@@ -66,5 +66,34 @@ describe('far row', () => {
       for (const q of far) for (let x = Math.max(0, Math.floor(q.x - q.halfWidth)); x < Math.min(covered.length, q.x + q.halfWidth); x++) covered[x] = 1;
       expect(covered.reduce((a, b) => a + b, 0) / covered.length).toBeGreaterThanOrEqual(0.8);
     }
+  });
+});
+
+describe('noise graph', () => {
+  it('scoreCurve and pickPeaks reproduce the planner near-row picks', () => {
+    const curve = scoreCurve(7, 0.5, u.widthUnits);
+    expect(pickPeaks(curve)).toEqual(
+      pickPeaks(scoreCurve(7, 0.5, u.widthUnits)),
+    );
+    expect(curve.xs.length).toBeGreaterThan(100);
+    expect(Math.min(...curve.score)).toBeGreaterThanOrEqual(0);
+    expect(Math.max(...curve.score)).toBeLessThanOrEqual(1);
+  });
+
+  it('a gate override changes which peaks survive', () => {
+    const def = pickPeaks(scoreCurve(7, 0.5, u.widthUnits));
+    const all = pickPeaks(scoreCurve(7, 0.5, u.widthUnits, 0));
+    const few = pickPeaks(scoreCurve(7, 0.5, u.widthUnits, 0.99));
+    expect(all.length).toBeGreaterThanOrEqual(def.length);
+    expect(def.length).toBeGreaterThanOrEqual(few.length);
+    expect(all.length).toBeGreaterThan(few.length);
+  });
+
+  it('makePlan honors a gate override deterministically', () => {
+    const a = makePlan(7, p(), u, undefined, 0.95);
+    const b = makePlan(7, p(), u, undefined, 0.95);
+    const c = makePlan(7, p(), u);
+    expect(a).toEqual(b);
+    expect(a).not.toEqual(c);
   });
 });

@@ -10,3 +10,6 @@ coverage/
 .shot-*.png
 
 docs/
+
+# local benchmark runs (bench/baseline.json is committed)
+bench/results/

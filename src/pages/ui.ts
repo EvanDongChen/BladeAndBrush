@@ -12,6 +12,7 @@ import { params, type GenParams } from '../core/params';
 import { ALL_REGISTRIES, byOrder } from '../core/registry';
 import { layers, type Renderer } from '../core/render';
 import { metrics, type ScanResult } from '../core/scan';
+import { perf, perfEnabled } from './perf';
 
 type Attrs = Record<string, string | number | boolean | undefined>;
 
@@ -332,16 +333,44 @@ export function registryInspector(): HTMLElement {
  * Drive a Clock from requestAnimationFrame and draw each frame (frame gets the frame time in ms).
  * If `shouldAdvance` returns false the sim does not advance that frame (hit-stop). Returns a stop function.
  */
+/**
+ * Canvas pixels per cell for a page showing a `cellsWide` grid across the window: enough for the
+ * screen's real pixels (window width x devicePixelRatio), at most `max` (the art's own k). Every
+ * per-pixel cost goes with its square, so pixels the screen cannot show are not drawn. `?k=N` in
+ * the URL overrides it (e.g. ?k=4 for full resolution).
+ */
+export function displayScale(cellsWide: number, max: number): number {
+  if (typeof location === 'undefined' || typeof innerWidth === 'undefined') return max; // no window (tests)
+  const forced = Number(new URLSearchParams(location.search).get('k'));
+  if (forced >= 1) return Math.min(max, Math.round(forced));
+  const need = (innerWidth * (globalThis.devicePixelRatio || 1)) / cellsWide;
+  return Math.max(1, Math.min(max, Math.ceil(need - 0.15)));
+}
+
 export function startLoop(clock: Clock, frame: (dtMs: number) => void, shouldAdvance?: () => boolean): () => void {
   let last = -1;
   let id = 0;
   let stopped = false;
+  // a slow frame must not be followed by a burst of catch-up ticks (that makes the next frame slow
+  // too, and the page spirals): past 4 ticks per frame the sim runs slower instead
+  clock.maxTicksPerAdvance = Math.min(clock.maxTicksPerAdvance, 4);
   const loop = (t: number) => {
     if (stopped) return;
     const dt = last < 0 ? 0 : Math.min(t - last, 250);
-    if (shouldAdvance?.() !== false) clock.advance(dt);
-    last = t;
-    frame(dt);
+    if (!perfEnabled) {
+      if (shouldAdvance?.() !== false) clock.advance(dt);
+      last = t;
+      frame(dt);
+    } else {
+      perf.frameStart(last < 0 ? 0 : t - last);
+      const s = performance.now();
+      const n = shouldAdvance?.() !== false ? clock.advance(dt) : 0;
+      const m = performance.now();
+      perf.sim(m - s, n);
+      last = t;
+      frame(dt);
+      perf.frameEnd(performance.now() - m);
+    }
     id = requestAnimationFrame(loop);
   };
   id = requestAnimationFrame(loop);
@@ -349,6 +378,29 @@ export function startLoop(clock: Clock, frame: (dtMs: number) => void, shouldAdv
     stopped = true;
     cancelAnimationFrame(id);
   };
+}
+
+const brushKeys = new WeakMap<HTMLElement, string>();
+
+/**
+ * Show the brush ring as the SYSTEM cursor (an SVG circle `radius` cells across at the canvas's
+ * current on-screen size): the OS draws it at the mouse's own rate, so it never trails the pointer
+ * however long a frame takes (a ring painted in the canvas is always a frame or more behind).
+ * Cheap to call on every pointer move: it only rebuilds the cursor when its size changes.
+ */
+export function brushCursor(canvas: HTMLCanvasElement, cellsWide: number, radius: number): void {
+  const perCell = canvas.clientWidth / Math.max(1, cellsWide);
+  const r = Math.max(2, Math.min(60, radius * perCell));
+  const size = Math.ceil(r * 2 + 4);
+  const key = `${size}`;
+  if (brushKeys.get(canvas) === key) return;
+  brushKeys.set(canvas, key);
+  const c = size / 2;
+  const svg =
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}">` +
+    `<circle cx="${c}" cy="${c}" r="${r.toFixed(2)}" fill="none" stroke="rgba(178,34,34,0.9)" stroke-width="1.2"/>` +
+    `<circle cx="${c}" cy="${c}" r="0.9" fill="rgba(178,34,34,0.9)"/></svg>`;
+  canvas.style.cursor = `url("data:image/svg+xml,${encodeURIComponent(svg)}") ${Math.round(c)} ${Math.round(c)}, crosshair`;
 }
 
 /** Pointer position in cell coordinates (`scale` = canvas pixels per cell, the renderer's scale). */

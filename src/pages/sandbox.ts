@@ -19,6 +19,7 @@ import { tunables } from '../sim/tunables';
 import {
   abilityBar,
   button,
+  displayScale,
   elementPalette,
   h,
   layerToggles,
@@ -60,7 +61,7 @@ export function mountSandbox(root: HTMLElement): () => void {
   let recording: Recording | null = null;
 
   const canvas = h('canvas', { class: 'grid paintable' });
-  const renderer = new Renderer(canvas, DEFAULT_DIMS, DEFAULT_ART_K);
+  const renderer = new Renderer(canvas, DEFAULT_DIMS, displayScale(DEFAULT_DIMS.w, DEFAULT_ART_K));
   canvas.style.imageRendering = 'auto'; // the canvas is k x the grid: smooth it, do not pixelate
   const fx = new Fx(); // blade trails, shake, hit-stop
   const status = h('div', { class: 'status' });

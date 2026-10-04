@@ -299,6 +299,19 @@ export function registryInspector(): HTMLElement {
  * Drive a Clock from requestAnimationFrame and draw each frame (frame gets the frame time in ms).
  * If `shouldAdvance` returns false the sim does not advance that frame (hit-stop). Returns a stop function.
  */
+/**
+ * Canvas pixels per cell for a page showing a `cellsWide` grid across the window: enough for the
+ * screen's real pixels (window width x devicePixelRatio), at most `max` (the art's own k). Every
+ * per-pixel cost goes with its square, so pixels the screen cannot show are not drawn. `?k=N` in
+ * the URL overrides it (e.g. ?k=4 for full resolution).
+ */
+export function displayScale(cellsWide: number, max: number): number {
+  const forced = Number(new URLSearchParams(location.search).get('k'));
+  if (forced >= 1) return Math.min(max, Math.round(forced));
+  const need = (innerWidth * (devicePixelRatio || 1)) / cellsWide;
+  return Math.max(1, Math.min(max, Math.ceil(need - 0.15)));
+}
+
 export function startLoop(clock: Clock, frame: (dtMs: number) => void, shouldAdvance?: () => boolean): () => void {
   let last = -1;
   let id = 0;

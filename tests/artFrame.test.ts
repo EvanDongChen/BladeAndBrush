@@ -96,3 +96,51 @@ describe('ArtFrame (redraws only changed tiles)', () => {
     expect(frame.tilesDrawn).toBeLessThan(6 * 4);
   });
 });
+
+describe('resampleArt (art shown smaller than generated)', () => {
+  it('k=2 from k=4 is the premultiplied 2x2 average, and k=3 keeps every cell inside its own pixels', async () => {
+    const { resampleArt } = await import('../src/core/artResample');
+    const params = defaultParams();
+    const bp = generate(2, params, { k: 4 });
+    const view = artView(bp)!;
+    const half = resampleArt(view, 2);
+    expect(half.art.k).toBe(2);
+    expect(resampleArt(view, 2)).toBe(half); // cached
+    const sw = bp.w * 4;
+    const dw = bp.w * 2;
+    const src = view.art.planes[0];
+    const dst = half.art.planes[0];
+    let checked = 0;
+    for (let oy = 100; oy < 400; oy += 7) {
+      for (let ox = 0; ox < dw; ox += 13) {
+        let a = 0;
+        let r = 0;
+        for (const [dx, dy] of [[0, 0], [1, 0], [0, 1], [1, 1]]) {
+          const c = src[(oy * 2 + dy) * sw + ox * 2 + dx];
+          a += c >>> 24;
+          r += (c & 255) * (c >>> 24);
+        }
+        const d = dst[oy * dw + ox];
+        if (a / 4 < 0.5) {
+          expect(d).toBe(0);
+          continue;
+        }
+        expect(Math.abs((d >>> 24) - a / 4)).toBeLessThanOrEqual(1);
+        expect(Math.abs((d & 255) - r / a)).toBeLessThanOrEqual(1);
+        checked++;
+      }
+    }
+    expect(checked).toBeGreaterThan(100);
+    // k=3: the ink frame on the resampled view still equals a full redraw at that k
+    const third = resampleArt(view, 3);
+    const world = new World(bp, 2, params);
+    new Frontier(bp).revealAll(world);
+    world.clearCircle(400, 150, 20, { cut: true });
+    const out = new Uint32Array(world.w * 3 * world.h * 3);
+    new ArtFrame().update(out, world, third, world.w, 3, true);
+    const ref = new Uint32Array(out.length);
+    compose(ref, world.el, world.plane, prepareArt(third), world.w);
+    shadeCells(ref, world, 3, third, world.w);
+    expect(firstDiff(out, ref)).toBe(-1);
+  });
+});

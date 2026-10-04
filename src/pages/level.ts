@@ -20,7 +20,7 @@ import { aimEnd, aimTunables, chargeOf, drawAim, isLineAbility, lineColor } from
 import { step } from '../sim/step';
 import { Fx } from './fx';
 import { arsenal } from './arsenal';
-import { button, h, handscroll, panel, seal, startLoop, toCell } from './ui';
+import { button, displayScale, h, handscroll, panel, seal, startLoop, toCell } from './ui';
 
 /** Header for players: no links to the workshops. */
 function levelHeader(sub: string): HTMLElement {
@@ -71,7 +71,7 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
   const initial = { ...params };
 
   const canvas = h('canvas', { class: 'grid paintable' });
-  const renderer = new Renderer(canvas, level.dims, DEFAULT_ART_K);
+  const renderer = new Renderer(canvas, level.dims, displayScale(level.dims.w, DEFAULT_ART_K));
   canvas.style.imageRendering = 'auto'; // the canvas is k x the grid: smooth it, do not pixelate
   const fx = new Fx();
   const status = h('div', { class: 'status' });

@@ -118,7 +118,7 @@ describe('benchmarks', () => {
     ticks('sim busy (water + ash + fire)', busy, 120);
   });
 
-  it('frame: art compose, shaders, glow, cells layer', () => {
+  it('frame: art compose, shaders, glow, cells layer', async () => {
     const bp = generate(1, params, { k: K });
     const view = artView(bp)!;
     const aw = bp.w * K;
@@ -174,6 +174,20 @@ describe('benchmarks', () => {
     artFrame('lake (10k cells, animating)', lake);
     artFrame('big lake (35k cells, animating)', big);
     artFrame('forest fire', fire);
+    {
+      // the same lake drawn at k=2 (a page whose canvas is shown ~1900 px wide)
+      const { resampleArt } = await import('../src/core/artResample');
+      const t = performance.now();
+      const v2 = resampleArt(view, 2);
+      value('resampleArt k=4 -> 2 (one time per painting)', 'ms', performance.now() - t);
+      const out2 = new Uint32Array(bp.w * 2 * bp.h * 2);
+      const f = new ArtFrame();
+      f.update(out2, lake, v2, lake.w, 2, true);
+      bench('ink frame: lake at k=2', () => f.update(out2, lake, v2, lake.w, 2, true), 20);
+      const fb = new ArtFrame();
+      fb.update(out2, big, v2, big.w, 2, true);
+      bench('ink frame: big lake at k=2', () => fb.update(out2, big, v2, big.w, 2, true), 10);
+    }
     let cutX = 60;
     artFrame('a small cut every frame', w, () => {
       w.clearCircle(cutX, 120, 4, { cut: true });

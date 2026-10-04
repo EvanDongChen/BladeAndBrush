@@ -1,4 +1,5 @@
 import { ArtFrame } from '../artFrame';
+import { resampleArt } from '../artResample';
 import { registerLayer } from '../render';
 
 let off: HTMLCanvasElement | null = null;
@@ -18,8 +19,10 @@ registerLayer({
   order: 20,
   kind: 'canvas',
   flag: 'artLayer',
-  draw: ({ g, world, art, frontierX, scale, shaded }) => {
-    if (!art && !shaded) return;
+  draw: ({ g, world, art: generated, frontierX, scale, shaded }) => {
+    if (!generated && !shaded) return;
+    // a canvas smaller than the art (pages pick their scale from the screen): use the art resampled to it
+    const art = generated && generated.art.k > scale ? resampleArt(generated, scale) : generated;
     const k = art ? art.art.k : scale;
     const aw = world.w * k;
     const ah = world.h * k;

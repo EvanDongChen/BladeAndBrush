@@ -1,0 +1,184 @@
+/* The tutorial page (tutorial.html): the lesson list, the lesson card and the praise seal. The
+   scroll frame, ability card and status line come from style.css, the same as the level page. */
+
+/* ---- the five lessons, one per stroke ---- */
+.tut-steps {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tut-step {
+  display: grid;
+  grid-template-columns: 22px 26px 1fr 16px;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: rgba(255, 252, 244, 0.5);
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background 0.2s,
+    border-color 0.2s;
+}
+
+.tut-step:hover {
+  background: rgba(255, 252, 244, 0.95);
+}
+
+.tut-step.on,
+.tut-step.on:hover {
+  border-color: rgb(var(--blade));
+  background: rgba(255, 252, 244, 0.95);
+  color: var(--ink);
+  box-shadow: inset 3px 0 0 rgb(var(--blade));
+}
+
+.tut-step-num {
+  color: var(--ink-soft);
+  font: 400 15px/1 var(--font-brush);
+}
+
+.tut-step-glyph {
+  color: rgb(var(--blade));
+  font: 400 22px/1 var(--font-brush);
+}
+
+.tut-step-name {
+  font-size: 14px;
+}
+
+/* a finished lesson gets a small red tick */
+.tut-step::after {
+  content: '';
+}
+
+.tut-step.done::after {
+  content: '✓';
+  color: var(--seal);
+  font-weight: 600;
+}
+
+/* ---- the lesson card ---- */
+.tut-title {
+  margin: 0 0 6px;
+  font: 600 19px/1.3 var(--font-serif);
+}
+
+.tut-title-num {
+  color: var(--seal);
+  font: 400 22px/1 var(--font-brush);
+}
+
+.tut-teach {
+  margin: 0 0 12px;
+  color: var(--ink);
+  font-size: 14.5px;
+  line-height: 1.6;
+}
+
+.tut-goal {
+  display: grid;
+  gap: 5px;
+  margin-bottom: 12px;
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+
+.tut-goal-bar {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--ink-faint);
+  overflow: hidden;
+}
+
+.tut-goal-fill {
+  display: block;
+  width: 0;
+  height: 100%;
+  background: var(--ink-soft);
+  transition: width 0.4s ease;
+}
+
+.tut-goal.met {
+  color: var(--verse-green, #2f7d4f);
+}
+
+.tut-goal.met .tut-goal-fill {
+  background: var(--verse-green, #2f7d4f);
+}
+
+.tut-hint {
+  margin: 8px 0 10px;
+  color: var(--ink-soft);
+  font-size: 12.5px;
+}
+
+.tut-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+/* Next waits, faint, until the lesson is done; then it is the obvious thing to press */
+.tut-next {
+  opacity: 0.45;
+  transition:
+    opacity 0.3s,
+    background 0.3s,
+    color 0.3s;
+}
+
+.tut-next.ready {
+  opacity: 1;
+  border-color: var(--seal);
+  background: var(--seal);
+  color: #fff7ee;
+}
+
+.tut-next.ready:hover {
+  background: var(--seal-dark);
+}
+
+/* ---- praise: a red 好 seal pressed onto the scroll when a lesson is done ---- */
+.tut-praise {
+  position: absolute;
+  z-index: 4;
+  top: calc(var(--mount, 24px) + 14px);
+  right: 22px;
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 4px;
+  background: var(--seal);
+  color: #fff7ee;
+  font: 400 30px/1 var(--font-brush);
+  opacity: 0;
+  transform: scale(1.6) rotate(-8deg);
+  pointer-events: none;
+  transition:
+    opacity 0.25s ease,
+    transform 0.35s cubic-bezier(0.3, 1.6, 0.5, 1);
+}
+
+.tut-praise.on {
+  opacity: 0.92;
+  transform: scale(1) rotate(-4deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tut-praise,
+  .tut-goal-fill,
+  .tut-next {
+    transition: none;
+  }
+}

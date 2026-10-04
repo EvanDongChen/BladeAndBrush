@@ -23,6 +23,7 @@ export default defineConfig({
         sandbox: page('sandbox'),
         gallery: page('gallery'),
         level: page('level'),
+        tutorial: page('tutorial'),
       },
     },
   },

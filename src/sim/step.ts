@@ -46,5 +46,6 @@ export function step(world: World): void {
   }
 
   for (const p of post) p.run(world);
+  world.applyPending(); // layered pixels: destroyed front cells let the layer behind move forward
   world.tick++;
 }

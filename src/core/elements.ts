@@ -127,6 +127,8 @@ export const elements = new ExtensionRegistry<ElementDef>('element', (e) => e.id
 export const ELEMENTS: (ElementDef | undefined)[] = new Array(256).fill(undefined);
 /** Hot-loop lookup: 1 if the element counts for heightAt()/scan. */
 export const SOLID_FOR_SCAN = new Uint8Array(256);
+/** Hot-loop lookup: 1 if the element is kind 'static' (terrain and objects that stay put). */
+export const IS_STATIC = new Uint8Array(256);
 
 const names = new Set<string>();
 
@@ -140,6 +142,7 @@ export function registerElement(def: ElementDef): ElementDef {
   names.add(def.name);
   ELEMENTS[def.id] = def;
   SOLID_FOR_SCAN[def.id] = def.solidForScan ? 1 : 0;
+  IS_STATIC[def.id] = def.kind === 'static' ? 1 : 0;
   return def;
 }
 

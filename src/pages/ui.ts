@@ -303,6 +303,9 @@ export function startLoop(clock: Clock, frame: (dtMs: number) => void, shouldAdv
   let last = -1;
   let id = 0;
   let stopped = false;
+  // a slow frame must not be followed by a burst of catch-up ticks (that makes the next frame slow
+  // too, and the page spirals): past 4 ticks per frame the sim runs slower instead
+  clock.maxTicksPerAdvance = Math.min(clock.maxTicksPerAdvance, 4);
   const loop = (t: number) => {
     if (stopped) return;
     const dt = last < 0 ? 0 : Math.min(t - last, 250);

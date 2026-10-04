@@ -62,12 +62,41 @@ export function baseOf(c: Cloud, cx: number, lobes: Lobe[]): { y: number; x0: nu
 }
 
 /**
+ * A few sparse wavy horizontal strokes across the lower half of the mass, hatched the way flat land
+ * and water are drawn elsewhere in the art: a few short lines that thin out, never a fill. Already
+ * clipped to the silhouette by the caller, so none of them can cross the outline.
+ */
+function hatchCloud(g: CanvasRenderingContext2D, c: Cloud, base: { y: number; x0: number; x1: number; top: number }, wet: number): void {
+  const span = base.x1 - base.x0;
+  g.strokeStyle = `rgba(100, 100, 100, ${0.15 + 0.1 * wet})`;
+  g.lineCap = 'round';
+  for (let k = 0; k < 4; k++) {
+    const len = span * (0.18 + 0.3 * rand(c.seed, 200 + k));
+    const x0 = base.x0 + (span - len) * rand(c.seed, 210 + k);
+    const y = base.y - (base.y - base.top) * (0.12 + 0.45 * rand(c.seed, 220 + k));
+    const amp = c.hh * 0.07 * (0.5 + rand(c.seed, 230 + k));
+    const phase = rand(c.seed, 240 + k) * 6.283;
+    g.lineWidth = 0.2 + 0.2 * rand(c.seed, 250 + k);
+    g.beginPath();
+    for (let i = 0; i <= 8; i++) {
+      const t = i / 8;
+      const px = x0 + len * t;
+      const py = y + amp * Math.sin(t * 6.283 + phase);
+      if (i === 0) g.moveTo(px, py);
+      else g.lineTo(px, py);
+    }
+    g.stroke();
+  }
+}
+
+/**
  * One cloud as an ink painter draws it (like a brush drawing of billowing cumulus): big rounded
  * lobes joined into one scalloped silhouette that is cut off flat along a base line, an ink outline
  * of varying weight along the OUTSIDE of the lobes only (where they overlap there is no line, just a
- * cusp), the base itself drawn as a line rather than left as lobes, and a few thin lines trailing out
- * past the ends. The body is flat paper: no grey fill, since any wash darkens into blobs and circles.
- * The paper tone itself greys as the cloud fills with water.
+ * cusp), the base itself drawn as a line rather than left as lobes, a weak vertical shading that
+ * deepens towards the base, a few sparse wavy strokes hatched across the lower half the way flat land
+ * and water are drawn elsewhere, and a few thin lines trailing out past the ends. The paper tone
+ * itself greys as the cloud fills with water.
  */
 function drawCloud(g: CanvasRenderingContext2D, c: Cloud, ox: number): void {
   const wet = Math.min(1, c.water / Math.max(1, cloudCapacity(c) * 0.5));
@@ -83,10 +112,22 @@ function drawCloud(g: CanvasRenderingContext2D, c: Cloud, ox: number): void {
     g.moveTo(l.x + l.rx, l.y);
     g.ellipse(l.x, l.y, l.rx, l.ry, 0, 0, Math.PI * 2);
   }
-  g.clip(); // the paper stops at the lobes, and at the base line
+  g.clip(); // the paper, the shading and the hatching all stop at the lobes, and at the base line
+  const boxX = base.x0 - c.hw;
+  const boxY = base.top;
+  const boxW = base.x1 - base.x0 + 2 * c.hw;
+  const boxH = base.y - base.top;
   g.fillStyle = `rgba(${paper[0]}, ${paper[1]}, ${paper[2]}, 0.97)`;
-  g.fillRect(base.x0 - c.hw, base.top, base.x1 - base.x0 + 2 * c.hw, base.y - base.top);
-  g.restore(); // no grey fill at all: the mass is flat paper, drawn only with ink lines
+  g.fillRect(boxX, boxY, boxW, boxH);
+  // A slight vertical shading, deeper at the base, so the mass has some depth. Kept weak and
+  // vertical on purpose: a wash shaped like the cloud turns back into a blob or a set of circles.
+  const shade = g.createLinearGradient(0, base.top, 0, base.y);
+  shade.addColorStop(0, `rgba(140, 143, 150, ${0.02 + 0.02 * wet})`);
+  shade.addColorStop(1, `rgba(140, 143, 150, ${0.1 + 0.07 * wet})`);
+  g.fillStyle = shade;
+  g.fillRect(boxX, boxY, boxW, boxH);
+  hatchCloud(g, c, base, wet);
+  g.restore();
 
   // the outline: only the arcs of each lobe that are not inside another, and none under the base line
   g.lineCap = 'round';

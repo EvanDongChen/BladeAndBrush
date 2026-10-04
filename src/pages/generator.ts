@@ -12,6 +12,7 @@ import { DEFAULT_ART_K } from '../gen/artState';
 import { generate } from '../gen/generate';
 import { Frontier } from '../gen/frontier';
 import { scan } from '../gen/scan';
+import { siteHeader, workshopTabs } from './chrome';
 import { noiseGraph } from './noiseGraph';
 import { step } from '../sim/step';
 import {
@@ -20,7 +21,6 @@ import {
   h,
   layerToggles,
   metricReadout,
-  pageHeader,
   panel,
   paramSliders,
   registryInspector,
@@ -157,10 +157,11 @@ export function mountGenerator(root: HTMLElement): () => void {
   rebuild();
 
   root.replaceChildren(
-    pageHeader('Generator'),
+    siteHeader('workshop', 'Generator'),
+    workshopTabs('generator'),
     h(
       'main',
-      { class: 'layout' },
+      { class: 'layout', id: 'main' },
       h('div', { class: 'stage' }, canvas, status),
       h(
         'aside',

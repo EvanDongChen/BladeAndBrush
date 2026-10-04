@@ -28,10 +28,29 @@ export function siteHeader(active: SiteSection, sub?: string): HTMLElement {
     h('span', { class: 'site-word' }, h('span', { class: 'site-word-en' }, 'Blade', h('i', {}, '&'), 'Brush'), sub ? h('span', { class: 'site-word-sub' }, sub) : ''),
   );
   const bar = h('header', { class: 'site-header' }, h('a', { class: 'skip-link', href: '#main' }, 'Skip to content'), brand, nav);
-  const onScroll = () => bar.classList.toggle('scrolled', window.scrollY > 24);
-  addEventListener('scroll', onScroll, { passive: true });
+  // (the guards keep the header usable where there is no window to scroll, such as the DOM test harness)
+  const onScroll = () => bar.classList.toggle('scrolled', typeof scrollY === 'number' && scrollY > 24);
+  if (typeof addEventListener === 'function') addEventListener('scroll', onScroll, { passive: true });
   onScroll();
   return bar;
+}
+
+export type WorkshopPage = 'generator' | 'sandbox';
+
+const WORKSHOP: [WorkshopPage, string, string, string][] = [
+  ['generator', '造', 'Generator', './generator.html'],
+  ['sandbox', '沙', 'Sandbox', './sandbox.html'],
+];
+
+/** The workshop's own tabs (Generator, Sandbox), shown under the site header on those two pages. */
+export function workshopTabs(active: WorkshopPage): HTMLElement {
+  const nav = h('nav', { class: 'workshop-tabs', 'aria-label': 'Workshop' }, h('span', { class: 'workshop-label' }, '工坊 Workshop'));
+  for (const [key, glyph, label, href] of WORKSHOP) {
+    const a = h('a', { href, class: 'workshop-tab' }, h('span', { class: 'workshop-tab-glyph', 'aria-hidden': 'true' }, glyph), label);
+    if (key === active) a.setAttribute('aria-current', 'page');
+    nav.append(a);
+  }
+  return nav;
 }
 
 /** The site footer: a large brushed 山水, the credits and the links. */

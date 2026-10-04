@@ -14,6 +14,7 @@ import { generate } from '../gen/generate';
 import { aimEnd, chargeOf, drawAim, isLineAbility } from '../sim/lineAbility';
 import { SCENES } from '../sim/scenes';
 import { step } from '../sim/step';
+import { siteHeader, workshopTabs } from './chrome';
 import { Fx } from './fx';
 import { tunables } from '../sim/tunables';
 import {
@@ -24,7 +25,6 @@ import {
   elementPalette,
   h,
   layerToggles,
-  pageHeader,
   panel,
   paramSliders,
   registryInspector,
@@ -243,10 +243,11 @@ export function mountSandbox(root: HTMLElement): () => void {
   const countBuf = new Uint32Array(256);
 
   root.replaceChildren(
-    pageHeader('Sandbox'),
+    siteHeader('workshop', 'Sandbox'),
+    workshopTabs('sandbox'),
     h(
       'main',
-      { class: 'layout' },
+      { class: 'layout', id: 'main' },
       h('div', { class: 'stage' }, canvas, status),
       h(
         'aside',

@@ -1249,3 +1249,48 @@ input[type='range'] {
     scroll-behavior: auto;
   }
 }
+
+/* ---------- Workshop pages: tabs under the site header ---------- */
+
+.workshop-tabs {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 22px;
+  padding: 10px 24px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.workshop-label {
+  margin-right: 8px;
+  font: 600 13px var(--font-serif);
+  letter-spacing: 0.14em;
+  color: var(--ink-soft);
+  text-transform: uppercase;
+}
+
+.workshop-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: -1px;
+  padding: 6px 4px 9px;
+  color: var(--ink-soft);
+  text-decoration: none;
+  letter-spacing: 0.04em;
+  border-bottom: 2px solid transparent;
+  transition: color 0.2s, border-color 0.2s;
+}
+
+.workshop-tab:hover {
+  color: var(--ink);
+}
+
+.workshop-tab[aria-current='page'] {
+  color: var(--seal);
+  border-bottom-color: var(--seal);
+}
+
+.workshop-tab-glyph {
+  font: 400 17px/1 var(--font-brush);
+}

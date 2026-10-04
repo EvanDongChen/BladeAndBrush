@@ -20,7 +20,7 @@ import { step } from '../sim/step';
 import { Fx } from './fx';
 import { generateAsync } from './genClient';
 import { arsenal } from './arsenal';
-import { button, displayScale, h, handscroll, panel, seal, startLoop, toCell } from './ui';
+import { brushCursor, button, displayScale, h, handscroll, panel, seal, startLoop, toCell } from './ui';
 
 /** Header for players: no links to the workshops. */
 function levelHeader(sub: string): HTMLElement {
@@ -159,6 +159,7 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
   canvas.addEventListener('pointermove', (e) => {
     const p = toCell(canvas, e, renderer.scale);
     cursor = { ...p, r: radius };
+    brushCursor(canvas, world.w, radius);
     if (!down) return;
     const now = performance.now();
     const ticks = Math.max(1e-3, ((now - last.t) / Clock.STEP_MS) * clock.speed);
@@ -200,6 +201,7 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
     radius = Math.max(1, Math.min(24, r));
     radiusInput.value = String(radius);
     radiusDot.style.setProperty('--d', `${6 + radius}px`);
+    brushCursor(canvas, level.dims.w, radius);
   };
   radiusInput.addEventListener('input', () => setRadius(Number(radiusInput.value)));
   setRadius(radius);
@@ -388,7 +390,7 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
   const stop = startLoop(
     clock,
     (dt) => {
-      renderer.draw(world, { cursor, frontierX: frontier.done ? undefined : frontier.x, art: artView(bp) });
+      renderer.draw(world, { frontierX: frontier.done ? undefined : frontier.x, art: artView(bp) });
       renderer.inCells((g) => {
         fx.draw(g);
         drawPeaks(g);
@@ -407,7 +409,7 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
         frame.style.setProperty('--p', String(frontier.x / level.dims.w));
       }
       frame.classList.toggle('ready', frontier.done);
-      status.textContent = pending
+      const text = pending
         ? 'Grinding the ink…'
         : !frontier.done
         ? 'The landscape is painting itself…'
@@ -418,6 +420,7 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
             : phase === 'won'
               ? 'The landscape matches the poem.'
               : tip;
+      if (status.textContent !== text) status.textContent = text; // an unchanged write would still force a relayout
       fx.endFrame(canvas, dt);
     },
     () => !pending && fx.shouldAdvance(), // hold the scroll rolled up until the painting has arrived

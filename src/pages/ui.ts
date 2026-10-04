@@ -346,6 +346,29 @@ export function startLoop(clock: Clock, frame: (dtMs: number) => void, shouldAdv
   };
 }
 
+const brushKeys = new WeakMap<HTMLElement, string>();
+
+/**
+ * Show the brush ring as the SYSTEM cursor (an SVG circle `radius` cells across at the canvas's
+ * current on-screen size): the OS draws it at the mouse's own rate, so it never trails the pointer
+ * however long a frame takes (a ring painted in the canvas is always a frame or more behind).
+ * Cheap to call on every pointer move: it only rebuilds the cursor when its size changes.
+ */
+export function brushCursor(canvas: HTMLCanvasElement, cellsWide: number, radius: number): void {
+  const perCell = canvas.clientWidth / Math.max(1, cellsWide);
+  const r = Math.max(2, Math.min(60, radius * perCell));
+  const size = Math.ceil(r * 2 + 4);
+  const key = `${size}`;
+  if (brushKeys.get(canvas) === key) return;
+  brushKeys.set(canvas, key);
+  const c = size / 2;
+  const svg =
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}">` +
+    `<circle cx="${c}" cy="${c}" r="${r.toFixed(2)}" fill="none" stroke="rgba(178,34,34,0.9)" stroke-width="1.2"/>` +
+    `<circle cx="${c}" cy="${c}" r="0.9" fill="rgba(178,34,34,0.9)"/></svg>`;
+  canvas.style.cursor = `url("data:image/svg+xml,${encodeURIComponent(svg)}") ${Math.round(c)} ${Math.round(c)}, crosshair`;
+}
+
 /** Pointer position in cell coordinates (`scale` = canvas pixels per cell, the renderer's scale). */
 export function toCell(canvas: HTMLCanvasElement, e: PointerEvent, scale = 1): { x: number; y: number } {
   const r = canvas.getBoundingClientRect();

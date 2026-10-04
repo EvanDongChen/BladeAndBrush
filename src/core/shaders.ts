@@ -47,7 +47,7 @@ export interface Shader {
   element: string | string[];
   /** Cells of the same family merge their edges (default: the element itself). */
   family?: string;
-  /** Compute `depth` as the position through each vertical run of the family. */
+  /** Compute `depth` as the depth below the surface of each vertical run of the family. */
   run?: boolean;
   /** The shader ignores `base` (skips the per-pixel color blending between neighbouring cells). */
   noBase?: boolean;

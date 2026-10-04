@@ -36,8 +36,8 @@ let sVal = new Uint8Array(0);
 let frameId = 0;
 let runPos = new Int16Array(0);
 let runLen = new Int16Array(0);
-const occ5 = new Float32Array(25);
 const col9 = new Uint32Array(9);
+const FAM_CODE = new Uint16Array(256);
 const nb9 = new Int16Array(9);
 
 function ensure(size: number): void {
@@ -231,6 +231,8 @@ export function shadeCells(
 ): void {
   resolveShaders();
   if (!anyShader) return;
+  // per element: 0 = not shaded, else its family + 1 (the occupancy test is one table read)
+  for (let e = 0; e < 256; e++) FAM_CODE[e] = SHADER[e] ? FAMILY[e] + 1 : 0;
   const { w, h, el, aux, life } = world;
   const aw = w * k;
   const fxEnd = Math.min(w, Math.ceil(frontierX));
@@ -318,26 +320,30 @@ export function shadeCells(
     if (!sh) continue;
     if (region?.animated && !sh.static) region.animated[((cy / region.size) | 0) * region.cols + ((cx / region.size) | 0)] = 1;
 
-    const fam = FAMILY[e];
-    // 5x5 occupancy of this family (the left, right and bottom world edges are walls)
+    const code = FAM_CODE[e];
+    // 5x5 occupancy of this family as 25 bits (the left, right and bottom world edges are walls)
     let key = 0;
-    for (let oy = -2; oy <= 2; oy++) {
-      for (let ox = -2; ox <= 2; ox++) {
-        const nx = cx + ox;
-        const ny = cy + oy;
-        let o: number;
-        if (ny < 0) o = 0;
-        else if (nx < 0 || nx >= w || ny >= h) o = 1;
-        else {
-          const ne = el[ny * w + nx];
-          o = SHADER[ne] && FAMILY[ne] === fam ? 1 : 0;
+    if (cx >= 2 && cy >= 2 && cx < w - 2 && cy < h - 2) {
+      let bit = 0;
+      for (let ny = cy - 2; ny <= cy + 2; ny++) {
+        const row = ny * w;
+        for (let nx = cx - 2; nx <= cx + 2; nx++, bit++) if (FAM_CODE[el[row + nx]] === code) key |= 1 << bit;
+      }
+    } else {
+      for (let oy = -2; oy <= 2; oy++) {
+        for (let ox = -2; ox <= 2; ox++) {
+          const nx = cx + ox;
+          const ny = cy + oy;
+          let o: number;
+          if (ny < 0) o = 0;
+          else if (nx < 0 || nx >= w || ny >= h) o = 1;
+          else o = FAM_CODE[el[ny * w + nx]] === code ? 1 : 0;
+          key |= o << ((oy + 2) * 5 + ox + 2);
         }
-        occ5[(oy + 2) * 5 + ox + 2] = o;
-        key |= o << ((oy + 2) * 5 + ox + 2);
       }
     }
     const cov = coverFor(k, key);
-    const selfOcc = occ5[12];
+
     const useBase = !sh.noBase;
     if (useBase) {
       for (let dy = -1; dy <= 1; dy++) {
@@ -345,7 +351,7 @@ export function shadeCells(
           const nx = cx + dx;
           const ny = cy + dy;
           const inb = nx >= 0 && ny >= 0 && nx < w && ny < h;
-          col9[(dy + 1) * 3 + dx + 1] = inb && occ5[(dy + 2) * 5 + dx + 2] > 0 ? colorAt(world, ny * w + nx) : 0;
+          col9[(dy + 1) * 3 + dx + 1] = inb && (key >>> ((dy + 2) * 5 + dx + 2)) & 1 ? colorAt(world, ny * w + nx) : 0;
         }
       }
     }
@@ -355,7 +361,7 @@ export function shadeCells(
     px.i = ref;
     px.cx = cx;
     px.cy = cy;
-    px.topEdge = selfOcc > 0 && occ5[7] < 1;
+    px.topEdge = (key & (1 << 12)) !== 0 && (key & (1 << 7)) === 0;
     const isRun = haveRuns && RUN[e] === 1;
     const pos = isRun ? runPos[ref] : 0;
     const len = isRun ? Math.max(MIN_RUN, runLen[ref]) : 1;

@@ -5,6 +5,8 @@ import { shadeCells, type ShadeRegion } from './shadeCells';
 import { shaders } from './shaders';
 import type { World } from './world';
 
+/** More upload rectangles than this become one bounding box (each putImageData call costs). */
+const MAX_RECTS = 6;
 /** Tile side, in cells. */
 export const TILE = 16;
 /** A changed cell can change the look of cells this far away (the shaders read a 5x5 neighbourhood). */
@@ -167,42 +169,54 @@ export class ArtFrame {
   }
 
   /**
-   * Merge each row's runs of redrawn tiles into rectangles of art pixels, and a run into the
-   * rectangle above it when they span the same columns (fewer, larger uploads).
+   * The rectangles to upload. The buffer is current everywhere, so uploading a few unchanged pixels
+   * is harmless, while every putImageData call has a fixed cost: each tile row gives one span from
+   * its first to its last redrawn tile, rows with the same span merge, and past MAX_RECTS everything
+   * becomes one bounding box.
    */
   private collectRects(w: number, h: number, k: number): void {
     const { dirty, cols, rows, rects } = this;
     let n = 0;
+    let bx0 = cols;
+    let bx1 = -1;
+    let by0 = rows;
+    let by1 = -1;
     for (let r = 0; r < rows; r++) {
-      let t = 0;
-      while (t < cols) {
-        if (!dirty[r * cols + t]) {
-          t++;
-          continue;
-        }
-        const t0 = t;
-        while (t < cols && dirty[r * cols + t]) t++;
-        const x = t0 * TILE * k;
-        const y = r * TILE * k;
-        const rw = Math.min(w * k, t * TILE * k) - x;
-        const rh = Math.min(h * k, (r + 1) * TILE * k) - y;
-        let merged = false;
-        for (let q = 0; q < n; q++) {
-          const above = rects[q];
-          if (above.x === x && above.w === rw && above.y + above.h === y) {
-            above.h += rh;
-            merged = true;
-            break;
-          }
-        }
-        if (merged) continue;
-        const rect = rects[n] ?? (rects[n] = { x: 0, y: 0, w: 0, h: 0 });
-        rect.x = x;
-        rect.y = y;
-        rect.w = rw;
-        rect.h = rh;
-        n++;
+      let t0 = -1;
+      let t1 = -1;
+      for (let t = 0; t < cols; t++) {
+        if (!dirty[r * cols + t]) continue;
+        if (t0 < 0) t0 = t;
+        t1 = t;
       }
+      if (t0 < 0) continue;
+      bx0 = Math.min(bx0, t0);
+      bx1 = Math.max(bx1, t1);
+      by0 = Math.min(by0, r);
+      by1 = r;
+      const x = t0 * TILE * k;
+      const y = r * TILE * k;
+      const rw = Math.min(w * k, (t1 + 1) * TILE * k) - x;
+      const rh = Math.min(h * k, (r + 1) * TILE * k) - y;
+      const last = n > 0 ? rects[n - 1] : null;
+      if (last && last.x === x && last.w === rw && last.y + last.h === y) {
+        last.h += rh;
+        continue;
+      }
+      const rect = rects[n] ?? (rects[n] = { x: 0, y: 0, w: 0, h: 0 });
+      rect.x = x;
+      rect.y = y;
+      rect.w = rw;
+      rect.h = rh;
+      n++;
+    }
+    if (n > MAX_RECTS) {
+      const rect = rects[0];
+      rect.x = bx0 * TILE * k;
+      rect.y = by0 * TILE * k;
+      rect.w = Math.min(w * k, (bx1 + 1) * TILE * k) - rect.x;
+      rect.h = Math.min(h * k, (by1 + 1) * TILE * k) - rect.y;
+      n = 1;
     }
     this.rectCount = n;
     dirty.fill(0);

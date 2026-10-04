@@ -3,8 +3,9 @@
  * right, with clouds drifting and birds crossing the sky. Presentation only (no input); it runs the
  * same sim as the levels.
  *
- * It waits until the page has painted before generating (a hand-drawn placeholder shows until
- * then), stops stepping while off screen, and stays still for visitors who prefer reduced motion.
+ * It waits until the page has painted before generating (the paper stays blank until then, and the
+ * painting fades in), stops stepping while off screen, and stays still for visitors who prefer
+ * reduced motion.
  */
 import { artView, type Blueprint } from '../core/blueprint';
 import { Clock } from '../core/clock';
@@ -25,10 +26,10 @@ export interface HeroScene {
   destroy(): void;
 }
 
-export function heroScene(placeholder: Node): HeroScene {
+export function heroScene(): HeroScene {
   const dims = DEFAULT_DIMS;
   const canvas = h('canvas', { class: 'hero-canvas', role: 'img', 'aria-label': 'A shan shui landscape painting itself, with drifting clouds and birds' });
-  const node = h('div', { class: 'hero-scene' }, h('div', { class: 'hero-placeholder', 'aria-hidden': 'true' }, placeholder), canvas);
+  const node = h('div', { class: 'hero-scene' }, canvas);
   const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
   const params = { ...defaultParams(), mountainHeight: 0.62, spacing: 0.45, cloudiness: 0.65, wildlife: 0.7, wanderers: 0.35, wind: 0.4 };
   // a new painting on every visit (pages may use the wall clock and Math.random; the sim never does)

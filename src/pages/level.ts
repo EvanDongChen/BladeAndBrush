@@ -1,6 +1,7 @@
 import './bootstrap';
 import { activeAbilities, type AbilityId } from '../core/abilities';
 import { Clock } from '../core/clock';
+import { TICK_HZ } from '../core/constants';
 import { describeGoal, evaluateGoal } from '../core/goals';
 import { levels, type LevelDef } from '../core/levels';
 import { defaultParams, params as paramDefs, type GenParams } from '../core/params';
@@ -15,7 +16,6 @@ import { scan } from '../gen/scan';
 import type { Blueprint } from '../core/blueprint';
 import type { GoalSpec } from '../core/goals';
 import type { Peak } from '../core/scan';
-import { bodyCount } from '../sim/behaviors/rigid';
 import { aimEnd, aimTunables, chargeOf, drawAim, isLineAbility, lineColor } from '../sim/lineAbility';
 import { step } from '../sim/step';
 import { siteHeader } from './chrome';
@@ -35,10 +35,8 @@ function levelHeader(sub: string): HTMLElement {
   return h('header', { class: 'top' }, h('h1', {}, brand), h('nav', {}, h('a', { href: './index.html' }, 'All levels')));
 }
 
-/** Ticks the painting gets to settle after the last stroke (or the seal) before it is judged. */
-const SETTLE = 240;
-/** ...and at most this many more while pieces are still falling. */
-const SETTLE_MAX = 600;
+/** A flat two seconds the painting gets after the last stroke (or the seal) before it is judged, whatever is still moving. */
+const SETTLE = 2 * TICK_HZ;
 
 /** Does the level ask about mountains (so the page marks the peaks it counts)? */
 function aboutPeaks(goals: GoalSpec[]): boolean {
@@ -252,7 +250,6 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
     }
     for (const v of verses) if (!v.goal) v.row.classList.toggle('met', all && started);
     if (phase !== 'settling' || world.tick < judgeAt) return;
-    if (bodyCount(world) > 0 && world.tick < judgeAt + SETTLE_MAX - SETTLE) return; // still falling
     if (all && started) {
       phase = 'won';
       stamp.classList.add('on'); // the seal lands first, then the scroll unrolls
@@ -315,7 +312,7 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
     paramRows.append(h('label', { class: 'row' }, h('span', {}, rule.label ?? def.label), input, out));
   }
   const sealButton = button('Seal the painting', () => {
-    if (phase === 'play' && frontier.done && used > 0) finish(60);
+    if (phase === 'play' && frontier.done && used > 0) finish();
   });
 
   stage.append(frame, status, complete.node);

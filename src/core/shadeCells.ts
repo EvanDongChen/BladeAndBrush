@@ -38,6 +38,7 @@ let runPos = new Int16Array(0);
 let runLen = new Int16Array(0);
 const col9 = new Uint32Array(9);
 const FAM_CODE = new Uint16Array(256);
+let colMask = new Uint8Array(0);
 const nb9 = new Int16Array(9);
 
 function ensure(size: number): void {
@@ -171,10 +172,11 @@ function subFor(k: number): { f: Float64Array; cell: Uint8Array; w: Float64Array
 }
 
 /** For `run` shaders: where each cell sits in its vertical run of the same family. */
-function computeRuns(world: World): boolean {
+function computeRuns(world: World, cols?: Uint8Array): boolean {
   const { w, h, el } = world;
   let any = false;
   for (let x = 0; x < w; x++) {
+    if (cols && !cols[x]) continue;
     let y = 0;
     while (y < h) {
       const e = el[y * w + x];
@@ -238,7 +240,19 @@ export function shadeCells(
   const fxEnd = Math.min(w, Math.ceil(frontierX));
   ensure(world.size);
   frameId++;
-  const haveRuns = computeRuns(world);
+  let runCols: Uint8Array | undefined;
+  if (region) {
+    // runs only where something is drawn: the region's columns, and one more each side (spill donors)
+    if (colMask.length < w) colMask = new Uint8Array(w);
+    runCols = colMask;
+    runCols.fill(0, 0, w);
+    for (let t = 0; t < region.tiles.length; t++) {
+      if (!region.tiles[t]) continue;
+      const x0 = (t % region.cols) * region.size;
+      runCols.fill(1, Math.max(0, x0 - 1), Math.min(w, x0 + region.size + 1));
+    }
+  }
+  const haveRuns = computeRuns(world, runCols);
   px.tick = world.tick;
   cellView.tick = world.tick;
 

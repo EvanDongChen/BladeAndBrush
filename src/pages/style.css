@@ -1539,6 +1539,27 @@ input[type='number'] {
   left: var(--edge);
 }
 
+/* where the painting's song is: a small gold bead on the bottom silk, only while it plays */
+.music-mark {
+  position: absolute;
+  z-index: 2;
+  bottom: calc(var(--mount) / 2);
+  left: calc(3px + (100% - 6px) * var(--music, 0));
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  transform: translate(-50%, 50%);
+  background: rgba(233, 201, 138, 0.75);
+  box-shadow: 0 0 4px rgba(233, 201, 138, 0.35);
+  opacity: 0;
+  transition: opacity 0.8s ease;
+  pointer-events: none;
+}
+
+.music-mark.on {
+  opacity: 1;
+}
+
 /* the paper curls into the leading roller: a soft shadow on its left side */
 .frame::before {
   content: '';

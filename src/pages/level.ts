@@ -92,7 +92,9 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
   const stamp = h('div', { class: 'stamp', 'aria-hidden': 'true' }, seal('完成', 'stamp-seal'));
   let winTimer = 0;
   const mount = h('span', { class: 'mount', 'aria-hidden': 'true' }); // the silk the painting is mounted on
-  const frame = h('div', { class: 'frame' }, mount, canvas, hudTool, banner, stamp, rollLeft, rollLead);
+  // a small gold bead on the bottom silk that follows the painting's song across the scroll
+  const musicMark = h('span', { class: 'music-mark', 'aria-hidden': 'true' });
+  const frame = h('div', { class: 'frame' }, mount, canvas, hudTool, banner, stamp, rollLeft, rollLead, musicMark);
   let tip = '';
 
   function regenerate(): void {
@@ -364,6 +366,9 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
       banner.hidden = phase !== 'failed';
       sealButton.toggleAttribute('disabled', phase !== 'play' || used === 0);
       frame.style.setProperty('--p', String(frontier.x / level.dims.w));
+      const at = audio.playhead();
+      musicMark.classList.toggle('on', at !== null);
+      if (at !== null) frame.style.setProperty('--music', at.toFixed(4));
       frame.classList.toggle('ready', frontier.done);
       status.textContent = !frontier.done
         ? 'The landscape is painting itself…'

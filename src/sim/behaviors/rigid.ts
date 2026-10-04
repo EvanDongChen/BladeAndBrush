@@ -98,6 +98,8 @@ interface State {
   lastCheck: number;
   /** world.promotions when last seen: a layer brought forward may have nothing under it. */
   promotions: number;
+  /** Hanging objects (the moon) that have been cut apart: what is left of them never hangs again. */
+  broken: Set<number>;
 }
 
 const states = new WeakMap<World, State>();
@@ -105,7 +107,7 @@ const states = new WeakMap<World, State>();
 function state(world: World): State {
   let s = states.get(world);
   if (!s) {
-    s = { mark: new Int32Array(world.size), bodies: [], byId: new Map(), nextId: 1, dirty: false, lastCheck: -1e9, promotions: 0 };
+    s = { mark: new Int32Array(world.size), bodies: [], byId: new Map(), nextId: 1, dirty: false, lastCheck: -1e9, promotions: 0, broken: new Set() };
     states.set(world, s);
   }
   return s;
@@ -215,7 +217,7 @@ function detect(world: World, s: State): void {
   // 1. everything solid connected to the bottom row, or to where generated land stands on its
   //    ground (Flag.FOOT: the painting has no ground strip), is anchored
   for (let i = (h - 1) * w; i < size; i++) if (cell[i] === 1) flood(i, null);
-  for (let i = 0; i < size; i++) if (cell[i] === 1 && flags[i] & Flag.FOOT) flood(i, null);
+  for (let i = 0; i < size; i++) if (cell[i] === 1 && flags[i] & Flag.FOOT && !HANGING[el[i]]) flood(i, null); // (the moon is marked FOOT too, so that it stays painted; it holds itself up, see 1b)
   //    and so is generated material that clings (Flag.CLING): to anchored material within 2 cells,
   //    or to anchored material of its own object or of what it stands on within CLING_REACH (a canopy
   //    or a speck of a tree painted a little apart from its trunk or mountain; in front or behind)
@@ -263,8 +265,9 @@ function detect(world: World, s: State): void {
     }
   }
 
-  // 1b. hanging material (the moon) stays up while it is one piece. Cut into two or more pieces,
-  //     however small, every piece comes loose and falls
+  // 1b. hanging material (the moon, as a tracked object) stays up while it is one piece. Cut into two or more pieces,
+  //     however small, every piece comes loose and falls. A piece held together only by thin necks
+  //     (a slash that did not quite get through) counts as cut: it breaks apart at the necks.
   const hangingParts = new Map<number, number[][]>();
   for (let i = 0; i < size; i++) {
     if (cell[i] !== 1 || !HANGING[el[i]]) continue;
@@ -274,9 +277,19 @@ function detect(world: World, s: State): void {
     if (list) list.push(part);
     else hangingParts.set(obj[i], [part]);
   }
-  for (const parts of hangingParts.values()) {
-    if (parts.length < 2) continue;
-    for (const part of parts) for (const i of part) cell[i] = 1;
+  for (const [id, parts] of hangingParts) {
+    // Once cut apart (or untracked: no object holds it together) nothing of it hangs again, even a
+    // lone piece that has come to rest on another that has since moved away.
+    if (id === 0 || s.broken.has(id) || parts.length >= 2) {
+      if (id !== 0) s.broken.add(id);
+      for (const part of parts) for (const i of part) cell[i] = 1;
+      continue;
+    }
+    const pieces = splitAtNecks(parts[0], w, size);
+    if (pieces) {
+      s.broken.add(id);
+      for (const piece of pieces) launchBody(world, piece, 0, 0); // their cells stay out of step 2 below
+    }
   }
 
   // 2. every other solid component becomes a falling body
@@ -287,6 +300,57 @@ function detect(world: World, s: State): void {
     launchBody(world, cells, 0, 0);
   }
   s.dirty = false;
+}
+
+/**
+ * One connected piece that is really several chunks joined by thin necks (one or two cells wide):
+ * the chunks, each neck cell going with its nearest chunk. Chunks are found as the connected
+ * groups of interior cells (cells whose four neighbours are all in the piece), so a neck, which has
+ * no interior, does not hold them together. Null if it is one chunk.
+ */
+function splitAtNecks(part: number[], w: number, size: number): number[][] | null {
+  const inPart = new Uint8Array(size);
+  for (const i of part) inPart[i] = 1;
+  const label = new Int32Array(size);
+  const core: number[] = [];
+  for (const i of part) {
+    const x = i % w;
+    if (x > 0 && x < w - 1 && i >= w && i < size - w && inPart[i - 1] && inPart[i + 1] && inPart[i - w] && inPart[i + w]) core.push(i);
+  }
+  const isCore = (j: number) => inPart[j] === 1 && label[j] === 0 && coreSet.has(j);
+  const coreSet = new Set(core);
+  let chunks = 0;
+  const todo: number[] = [];
+  for (const c of core) {
+    if (label[c] !== 0) continue;
+    label[c] = ++chunks;
+    todo.push(c);
+    while (todo.length > 0) {
+      const i = todo.pop()!;
+      for (const j of [i - 1, i + 1, i - w, i + w]) {
+        if (isCore(j)) {
+          label[j] = chunks;
+          todo.push(j);
+        }
+      }
+    }
+  }
+  if (chunks < 2) return null;
+  // grow the chunks over the necks and rims, nearest first
+  const queue = core.slice();
+  for (let head = 0; head < queue.length; head++) {
+    const i = queue[head];
+    const x = i % w;
+    for (const j of [x > 0 ? i - 1 : -1, x < w - 1 ? i + 1 : -1, i - w, i + w]) {
+      if (j >= 0 && j < size && inPart[j] === 1 && label[j] === 0) {
+        label[j] = label[i];
+        queue.push(j);
+      }
+    }
+  }
+  const out: number[][] = Array.from({ length: chunks }, () => []);
+  for (const i of part) if (label[i] > 0) out[label[i] - 1].push(i);
+  return out;
 }
 
 // ---------------------------------------------------------------- movement

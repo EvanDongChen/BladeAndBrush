@@ -32,7 +32,7 @@ export interface Blueprint {
    * planned height. Undefined = the plan as seeded.
    */
   planHeights?: Record<number, number>;
-  /** Vector draw commands for the art layer (empty in the Phase 0 stub). */
+  /** Vector draw commands. Always empty: the art is rasterized into `art`. */
   draw: DrawCmd[];
   /** Background plane (same size as el): FAR_ROCK or EMPTY. Never simulated or scanned. */
   bg?: Uint8Array;

@@ -10,6 +10,7 @@ import { REPLACEABLE } from '../physics';
 import { defineTunables } from '../tunables';
 
 registerParam({ key: 'wind', label: 'Wind', min: -1, max: 1, step: 0.05, default: 0.3 });
+registerParam({ key: 'windY', label: 'Updraft / downdraft', min: -1, max: 1, step: 0.05, default: 0 }); // < 0 blows up
 
 export const cloudTunables = defineTunables(
   'cloud',

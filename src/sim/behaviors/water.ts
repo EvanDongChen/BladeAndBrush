@@ -1,7 +1,7 @@
 import { registerBehavior } from '../../core/behaviors';
 import { El } from '../../core/elements';
 import type { World } from '../../core/world';
-import { at, BLOCKED, canSink, fall, fallDir, FLAMMABILITY, FREE, K_STATIC, KIND, moveCell, REPLACEABLE, slideDiagonal, windOf } from '../physics';
+import { at, BLOCKED, canSink, fall, fallDir, FLAMMABILITY, FREE, K_STATIC, KIND, moveCell, REPLACEABLE, slideDiagonal, windOf, windYOf } from '../physics';
 import { defineTunables } from '../tunables';
 
 export const waterTunables = defineTunables(
@@ -20,13 +20,26 @@ const BREEZE = 0.35;
  * Fall, else slide diagonally down, else flow sideways. The flow direction is kept in vx so a
  * stream keeps going one way instead of jittering. Sideways flow stops above a gap, so water
  * drops into grooves on its own. A strong wind blows falling drops sideways, drives the surface
- * downwind (water piles up against the far bank) and, in a gale, whips spray off the top.
+ * downwind (water piles up against the far bank) and, in a gale, whips spray off the top. An
+ * updraft lifts water into the air (a strong one carries it away upward); a downdraft only makes
+ * it fall harder, which the fall already covers.
  */
 export function updateWater(world: World, x: number, y: number): void {
   const wind = windOf(world);
   const gust = Math.abs(wind) - BREEZE;
   const down = fallDir(world);
   const wx = wind > 0 ? 1 : -1;
+  const lift = (-windYOf(world) - BREEZE) / (1 - BREEZE); // 0..1 above the breeze
+  if (lift > 0 && world.rng.chance(lift * 0.9)) {
+    // the updraft carries it up (with the wind, if that blows too), or at least holds it aloft
+    const sx = gust > 0 ? wx : 0;
+    if (REPLACEABLE[at(world, x + sx, y - 1)]) {
+      const j = moveCell(world, x, y, x + sx, y - 1, FREE);
+      world.vy[j] = 0;
+      return;
+    }
+    if (REPLACEABLE[at(world, x, y + down)]) return;
+  }
   if (gust > 0) {
     const free = REPLACEABLE[at(world, x, y + down)] === 1;
     // airborne: slant downwind as it falls

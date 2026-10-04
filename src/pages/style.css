@@ -1274,6 +1274,38 @@ input[type='number'] {
   color: var(--ink-soft);
 }
 
+.controls .wind-row {
+  align-items: center;
+}
+
+.wind-pad {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.wind-dial {
+  cursor: crosshair;
+  touch-action: none;
+  border-radius: 50%;
+  background: rgba(246, 240, 225, 0.6);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+
+.wind-dial:focus-visible {
+  outline: 2px solid var(--seal);
+  outline-offset: 2px;
+}
+
+.controls .physics .wind-readout {
+  min-width: 0;
+  text-align: left;
+  white-space: nowrap;
+  font: 13px var(--font-serif);
+  color: var(--ink-soft);
+  font-variant-numeric: tabular-nums;
+}
+
 .controls .physics output {
   min-width: 4.5em;
   text-align: right;

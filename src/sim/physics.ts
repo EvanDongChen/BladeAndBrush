@@ -110,6 +110,11 @@ export function windOf(world: World): number {
   return Math.max(-1, Math.min(1, world.params.wind ?? 0));
 }
 
+/** The wind's vertical part, -1 (an updraft, blowing up) to 1 (a downdraft). Lifts or presses water and villagers. */
+export function windYOf(world: World): number {
+  return Math.max(-1, Math.min(1, world.params.windY ?? 0));
+}
+
 /** The gravity param: above 0 things fall, 0 is weightless (things float slowly up), below 0 they fly up. */
 export function gravityOf(world: World): number {
   return world.params.gravity ?? 2;

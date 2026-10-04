@@ -1,5 +1,5 @@
 import type { World } from '../../core/world';
-import { gravityOf, windOf } from '../physics';
+import { gravityOf, windOf, windYOf } from '../physics';
 import { PERSON } from '../elements/person';
 import {
   canPose,
@@ -83,11 +83,22 @@ function fallPerson(world: World, def: CreatureDef, c: Creature): void {
 }
 
 /**
- * The wind shoves villagers downwind: up to a cell a tick in a gale, faster in the air than on
+ * The wind shoves villagers downwind (and up or down with an updraft or downdraft): up to a cell a tick in a gale, faster in the air than on
  * the ground. On the ground they are pushed up small steps, and a gale now and then lifts them
  * off their feet.
  */
 function blow(world: World, def: CreatureDef, c: Creature, airborne: boolean): void {
+  // up or down: an updraft lifts them (two cells a tick at full, so it beats normal gravity), a downdraft drags them down
+  const wy = windYOf(world);
+  const draft = Math.abs(wy) - BREEZE;
+  if (draft > 0) {
+    const r = draft / (1 - BREEZE);
+    if (wy < 0) {
+      if (world.tick % Math.max(1, Math.round(4 * (1 - r))) === 0) {
+        for (let k = r > 0.6 ? 2 : 1; k > 0; k--) if (!relocate(world, def, c, 0, -1)) break;
+      }
+    } else if (airborne && world.tick % Math.max(1, Math.round(3 * (1 - r))) === 0) relocate(world, def, c, 0, 1);
+  }
   const wind = windOf(world);
   const gust = Math.abs(wind) - BREEZE;
   if (gust <= 0) return;

@@ -27,6 +27,7 @@ import { generateAsync } from './genClient';
 import { arsenal } from './arsenal';
 import { nameMenu } from './nameMenu';
 import { noiseGraph } from './noiseGraph';
+import { windPad } from './windPad';
 import { brushCursor, button, displayScale, fixedPanel, h, handscroll, panel, seal, soundToggle, startLoop, toCell } from './ui';
 
 /** Header for players: no links to the workshops. */
@@ -58,7 +59,7 @@ function aboutPeaks(goals: GoalSpec[]): boolean {
 }
 
 /** Live physics knobs the player may turn at any time; they never repaint the painting. */
-const PHYSICS = ['gravity', 'wind'] as const;
+const PHYSICS = ['gravity', 'wind', 'windY'] as const;
 const isPhysics = (key: string) => (PHYSICS as readonly string[]).includes(key);
 
 /**
@@ -511,30 +512,29 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
   }
 
   // ---- nature: gravity and wind act on the live world (water, sand, smoke, rain, villagers) ----
+  const setPhysics = (key: string, v: number) => {
+    params[key] = v;
+    world.params[key] = v; // live: behaviors read it every tick
+  };
   const physicsRows = h('div', { class: 'rows physics' });
-  for (const key of PHYSICS) {
-    const def = paramDefs.get(key);
-    if (!def) continue;
-    const fmt = (v: number) =>
-      key === 'wind'
-        ? v === 0
-          ? 'calm'
-          : `${v < 0 ? '←' : '→'} ${Math.abs(v).toFixed(2)}`
-        : v === 0
-          ? 'float'
-          : `${v < 0 ? '↑' : '↓'} ${Math.abs(v)}`;
-    const out = h('output', {}, fmt(params[key]));
+  const gravityDef = paramDefs.get('gravity');
+  if (gravityDef) {
+    const fmt = (v: number) => (v === 0 ? 'float' : `${v < 0 ? '↑' : '↓'} ${Math.abs(v)}`);
+    const out = h('output', {}, fmt(params.gravity));
     // gravity goes below zero here: 0 is weightless, negative turns it over so things fly up
-    const min = key === 'gravity' ? -6 : def.min;
-    const input = h('input', { type: 'range', min, max: def.max, step: def.step, value: params[key], 'aria-label': def.label });
+    const input = h('input', { type: 'range', min: -6, max: gravityDef.max, step: gravityDef.step, value: params.gravity, 'aria-label': gravityDef.label });
     input.addEventListener('input', () => {
-      const v = Number(input.value);
-      params[key] = v;
-      world.params[key] = v; // live: behaviors read it every tick
-      out.textContent = fmt(v);
+      setPhysics('gravity', Number(input.value));
+      out.textContent = fmt(params.gravity);
     });
-    physicsRows.append(h('label', { class: 'row' }, h('span', {}, def.label), input, out));
+    physicsRows.append(h('label', { class: 'row' }, h('span', {}, gravityDef.label), input, out));
   }
+  // the wind compass: drag the arrow to set where the wind blows and how hard
+  const wind = windPad({ x: params.wind ?? 0, y: params.windY ?? 0 }, (x, y) => {
+    setPhysics('wind', x);
+    setPhysics('windY', y);
+  });
+  physicsRows.append(h('div', { class: 'row wind-row' }, h('span', {}, 'Wind'), wind.node));
 
   stage.append(frame, status, complete.node);
   root.replaceChildren(
@@ -577,6 +577,7 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
         renderer.inCells((g) => drawAim(g, ability, aim, radius, chargeOf(world.tick - pressedTick)));
       }
       showActions();
+      wind.frame(dt);
       if (frames++ % 10 === 0 && frontier.done && !pending) queueCheck();
       bar.setSpent(phase !== 'play');
       banner.hidden = phase !== 'failed';

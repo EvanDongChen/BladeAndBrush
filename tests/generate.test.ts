@@ -15,8 +15,8 @@ const count = (a: Uint8Array, el: number) => a.reduce((n, v) => n + (v === el ? 
 describe('stub generate()', () => {
   it('is deterministic for the same seed and params', () => {
     const p = defaultParams();
-    expect(hashBlueprint(generate(42, p))).toBe(hashBlueprint(generate(42, p)));
-    expect(hashBlueprint(generate(42, p))).not.toBe(hashBlueprint(generate(43, p)));
+    expect(hashBlueprint(generate(42, p, { k: 1 }))).toBe(hashBlueprint(generate(42, p, { k: 1 })));
+    expect(hashBlueprint(generate(42, p, { k: 1 }))).not.toBe(hashBlueprint(generate(43, p, { k: 1 })));
   });
 
   it('draws ground, rock bumps and trees with registry entries', () => {

@@ -5,8 +5,10 @@ import { DEFAULT_DIMS } from '../core/constants';
 import { El, elements } from '../core/elements';
 import { defaultParams, type GenParams } from '../core/params';
 import { Renderer } from '../core/render';
+import { DEFAULT_ART_K } from '../gen/artState';
 import { ActionDriver, type ActionLog } from '../core/replay';
 import { World } from '../core/world';
+import { artView, type Blueprint } from '../core/blueprint';
 import { Frontier } from '../gen/frontier';
 import { generate } from '../gen/generate';
 import { aimEnd, chargeOf, drawAim, isLineAbility } from '../sim/lineAbility';
@@ -58,15 +60,22 @@ export function mountSandbox(root: HTMLElement): () => void {
   let recording: Recording | null = null;
 
   const canvas = h('canvas', { class: 'grid paintable' });
-  const renderer = new Renderer(canvas, DEFAULT_DIMS);
+  const renderer = new Renderer(canvas, DEFAULT_DIMS, DEFAULT_ART_K);
+  canvas.style.imageRendering = 'auto'; // the canvas is k x the grid: smooth it, do not pixelate
   const fx = new Fx(); // blade trails, shake, hit-stop
   const status = h('div', { class: 'status' });
   const recStatus = h('div', { class: 'status' }, 'Not recording.');
 
+  /** The blueprint behind the current world (blueprint scene only): its art is drawn like in the levels. */
+  let bp: Blueprint | undefined;
+
   function buildScene(s: number, sc: Scene, p: GenParams): World {
     const w = new World(DEFAULT_DIMS, s, p);
-    if (sc === 'blueprint') new Frontier(generate(s, p)).revealAll(w);
-    else SCENES.find((x) => x.id === sc)?.build(w);
+    bp = undefined;
+    if (sc === 'blueprint') {
+      bp = generate(s, p);
+      new Frontier(bp).revealAll(w);
+    } else SCENES.find((x) => x.id === sc)?.build(w);
     return w;
   }
 
@@ -98,7 +107,7 @@ export function mountSandbox(root: HTMLElement): () => void {
 
   canvas.addEventListener('pointerdown', (e) => {
     canvas.setPointerCapture?.(e.pointerId);
-    const p = toCell(canvas, e);
+    const p = toCell(canvas, e, renderer.scale);
     down = true;
     pressedAt = p;
     pressedTick = world.tick;
@@ -107,7 +116,7 @@ export function mountSandbox(root: HTMLElement): () => void {
     driver.begin(tool.ability, { ...p, speed: 0 }, args());
   });
   canvas.addEventListener('pointermove', (e) => {
-    const p = toCell(canvas, e);
+    const p = toCell(canvas, e, renderer.scale);
     cursor = { ...p, r: radius };
     if (!down) return;
     const now = performance.now();
@@ -262,12 +271,12 @@ export function mountSandbox(root: HTMLElement): () => void {
   const stop = startLoop(
     clock,
     (dt) => {
-      renderer.draw(world, { cursor });
-      fx.draw(renderer.g);
+      renderer.draw(world, { cursor, art: bp ? artView(bp) : undefined });
+      renderer.inCells((g) => fx.draw(g));
       // skill-shot preview: drawn from live pointer input, so it shows instantly (even when paused)
       if (down && cursor && isLineAbility(tool.ability)) {
         const aim = aimEnd(pressedAt.x, pressedAt.y, cursor.x, cursor.y);
-        drawAim(renderer.g, tool.ability, aim, radius, chargeOf(world.tick - pressedTick));
+        renderer.inCells((g) => drawAim(g, tool.ability, aim, radius, chargeOf(world.tick - pressedTick)));
       }
       if (frame++ % 15 === 0) {
         world.countByElement(countBuf);

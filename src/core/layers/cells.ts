@@ -1,5 +1,6 @@
 import { El, ELEMENTS, type CellView } from '../elements';
 import { registerLayer } from '../render';
+import { resolveShaders, SHADED } from '../shaders';
 
 const view: CellView = { x: 0, y: 0, el: 0, life: 0, aux: 0, owner: 0, flags: 0, tick: 0 };
 
@@ -8,12 +9,13 @@ registerLayer({
   name: 'cells',
   order: 10,
   kind: 'pixels',
-  draw: ({ pixels, world }) => {
+  draw: ({ pixels, world, shaded }) => {
+    if (shaded) resolveShaders();
     const { el, life, aux, owner, flags, w, size } = world;
     view.tick = world.tick;
     for (let i = 0; i < size; i++) {
       const e = el[i];
-      if (e === El.EMPTY) continue;
+      if (e === El.EMPTY || (shaded && SHADED[e])) continue;
       const def = ELEMENTS[e];
       if (!def) {
         pixels[i] = 0xffff00ff; // unregistered element: loud magenta

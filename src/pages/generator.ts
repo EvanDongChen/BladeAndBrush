@@ -90,8 +90,8 @@ export function mountGenerator(root: HTMLElement): () => void {
   digInput.addEventListener('input', () => (digRadius = Number(digInput.value)));
   const dig = (e: PointerEvent) => {
     if (!digOn.checked) return;
-    const p = toCell(canvas, e);
-    world.clearCircle(p.x / DEFAULT_ART_K, p.y / DEFAULT_ART_K, digRadius, { cut: true });
+    const p = toCell(canvas, e, renderer.scale);
+    world.clearCircle(p.x, p.y, digRadius, { cut: true });
   };
   const farOn = h('input', { type: 'checkbox' });
   farOn.checked = flags.farLayerInteractive;
@@ -99,6 +99,9 @@ export function mountGenerator(root: HTMLElement): () => void {
     flags.farLayerInteractive = farOn.checked;
     rebuild();
   });
+  const shadersOn = h('input', { type: 'checkbox', checked: true });
+  shadersOn.checked = flags.shaders;
+  shadersOn.addEventListener('change', () => (flags.shaders = shadersOn.checked));
   canvas.classList.add('paintable');
   canvas.addEventListener('pointerdown', (e) => {
     digging = true;
@@ -161,6 +164,7 @@ export function mountGenerator(root: HTMLElement): () => void {
           h('label', { class: 'row' }, h('span', {}, 'Drag to dig'), digOn),
           h('label', { class: 'row' }, h('span', {}, 'Radius'), digInput),
           h('label', { class: 'row' }, h('span', {}, 'Far ridges interactive'), farOn),
+          h('label', { class: 'row' }, h('span', {}, 'Shaders (water, fire, loose pieces)'), shadersOn),
           h('p', { class: 'home-note' }, 'Breaks cells; the layer behind comes forward. Restart (or change a slider) to refill.'),
         ),
         panel('Scan', readout.node),

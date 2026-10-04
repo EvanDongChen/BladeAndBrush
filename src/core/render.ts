@@ -21,6 +21,10 @@ export interface RenderCtx extends RenderState {
   world: World;
   /** Little-endian RGBA view over the frame's ImageData, one entry per cell. */
   pixels: Uint32Array;
+  /** Canvas pixels per cell. */
+  scale: number;
+  /** Shaders draw the sim cells this frame (scale > 1 and flags.shaders): the cells layer skips shaded elements. */
+  shaded: boolean;
 }
 
 /**
@@ -86,6 +90,14 @@ export class Renderer {
     }
   }
 
+  /** Run overlay drawing on the main canvas in CELL units (the context is scaled for the call). */
+  inCells(fn: (g: CanvasRenderingContext2D) => void): void {
+    this.g.save();
+    this.g.setTransform(this.scale, 0, 0, this.scale, 0, 0);
+    fn(this.g);
+    this.g.restore();
+  }
+
   isOn(layer: Layer): boolean {
     return flagOn(layer.flag) && (this.toggles.get(layer.name) ?? !layer.debug);
   }
@@ -96,7 +108,7 @@ export class Renderer {
       this.sorted = layers.all().sort(byOrder);
       this.sortedVersion = layers.version;
     }
-    const rc: RenderCtx = { ...state, g: this.g, world, pixels: this.pixels };
+    const rc: RenderCtx = { ...state, g: this.g, world, pixels: this.pixels, scale: this.scale, shaded: this.scale > 1 && flagOn('shaders') };
     for (const l of this.sorted) if (l.kind === 'pixels' && this.isOn(l)) l.draw(rc);
     if (this.scale === 1 || !this.small || !this.smallG) {
       this.g.putImageData(this.image, 0, 0);

@@ -44,6 +44,7 @@ export function revealColumn(bp: Blueprint, world: World, x: number): void {
     world.vx[i] = 0;
     world.vy[i] = 0;
     world.flags[i] |= Flag.GENERATED;
+    if (bp.foot?.[i]) world.flags[i] |= Flag.FOOT;
   }
 }
 

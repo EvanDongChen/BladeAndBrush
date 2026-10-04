@@ -66,6 +66,8 @@ export class World {
   readonly behindPlane: Uint8Array[] = [];
   private readonly pending: Int32Array;
   private pendingCount = 0;
+  /** Static layers brought forward so far (applyPending). The sim checks support when it changes. */
+  promotions = 0;
 
   /** Active water sources. The frontier reveal adds them; B's emitter pass reads them. */
   sources: WaterSource[] = [];
@@ -159,6 +161,25 @@ export class World {
     this.flags[b] |= Flag.UPDATED;
   }
 
+  /**
+   * The front cell at i was rewritten directly in the arrays (a moving cell or rigid piece left it):
+   * if there is material behind it, bring that forward unless the front is still solid.
+   */
+  changed(i: number): void {
+    if (this.flags[i] & Flag.HAS_BEHIND) this.noteChange(i, this.el[i]);
+  }
+
+  /** A cut through the whole painting at i: drop everything stacked behind the front cell. */
+  clearBehind(i: number): void {
+    if (!(this.flags[i] & Flag.HAS_BEHIND)) return;
+    for (let d = 0; d < BEHIND_LAYERS; d++) {
+      this.behindEl[d][i] = El.EMPTY;
+      this.behindOwner[d][i] = 0;
+      this.behindPlane[d][i] = NO_PLANE;
+    }
+    this.flags[i] &= ~Flag.HAS_BEHIND;
+  }
+
   /** A position with material behind it just got `el` in front: queue a promotion unless it is still solid or burning. */
   private noteChange(i: number, el: number): void {
     if (IS_STATIC[el] || el === El.FIRE || this.flags[i] & Flag.QUEUED) return;
@@ -187,6 +208,7 @@ export class World {
       vx[i] = 0;
       vy[i] = 0;
       if (next !== El.EMPTY) aux[i] = hash3(i % w, (i / w) | 0, 0);
+      if (IS_STATIC[next]) this.promotions++;
       for (let d = 0; d < BEHIND_LAYERS - 1; d++) {
         this.behindEl[d][i] = this.behindEl[d + 1][i];
         this.behindOwner[d][i] = this.behindOwner[d + 1][i];

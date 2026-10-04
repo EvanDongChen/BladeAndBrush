@@ -98,6 +98,7 @@ export function moveCell(world: World, x: number, y: number, nx: number, ny: num
   vy[i] = 0;
   owner[i] = 0;
   obj[i] = 0;
+  world.changed(i); // layered pixels: what was behind the cell that left comes forward
   return j;
 }
 

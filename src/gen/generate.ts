@@ -2,12 +2,14 @@ import { createBlueprint, flattenPlanes, type Blueprint } from '../core/blueprin
 import { featureOn } from '../core/config';
 import { DEFAULT_DIMS, type LevelDims } from '../core/constants';
 import { features, type Feature, type FeatureCtx } from '../core/features';
+import { IS_STATIC } from '../core/elements';
 import { createNoise } from '../core/noise';
 import type { GenParams } from '../core/params';
 import { byOrder } from '../core/registry';
 import { hashSeed, Rng } from '../core/rng';
 import { setpieceOf, type SetpieceSpec } from '../core/setpieces';
 import { attachArt, DEFAULT_ART_K } from './artState';
+import { mountainsOf } from './mountainStore';
 
 export interface GenerateOptions {
   dims?: LevelDims;
@@ -72,6 +74,69 @@ export function generate(seed: number, params: GenParams, opts: GenerateOptions 
       newStroke,
     });
   }
+  markFeet(bp);
   flattenPlanes(bp); // layered pixels: planes -> front cells + the stack behind them
+  anchorLoose(bp);
   return bp;
+}
+
+/**
+ * The painting has no ground strip: mountains and plateaus stand on land that is only implied. Mark
+ * the bottom cell of each of their columns (bp.foot, revealed as Flag.FOOT) so the sim knows they
+ * rest on something; anything cut loose above that still falls.
+ */
+function markFeet(bp: Blueprint): void {
+  const planes = bp.planes;
+  if (!planes) return;
+  const foot = (bp.foot = new Uint8Array(bp.w * bp.h));
+  for (const m of mountainsOf(bp)) {
+    const info = bp.registry.strokes.get(m.id);
+    if (!info) continue;
+    const g = planes[m.plane];
+    const [x0, y0, x1, y1] = info.bbox;
+    for (let x = Math.max(0, x0); x <= Math.min(bp.w - 1, x1); x++) {
+      for (let y = Math.min(bp.h - 1, y1); y >= Math.max(0, y0); y--) {
+        const i = y * bp.w + x;
+        if (g.owner[i] === m.id && g.el[i] !== 0) {
+          foot[i] = 1;
+          break;
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Bits of the painting that are not joined to any foot as generated (a canopy the rasterizer left
+ * apart from its trunk, a sliver of rock) are part of the picture, not loose: mark them as feet too,
+ * so only what the player cuts or burns free ever falls.
+ */
+function anchorLoose(bp: Blueprint): void {
+  const foot = bp.foot;
+  if (!foot) return;
+  const { w, h, el } = bp;
+  const size = w * h;
+  const seen = new Uint8Array(size);
+  const stack = new Int32Array(size);
+  let top = 0;
+  const solid = (i: number) => el[i] !== 0 && IS_STATIC[el[i]] === 1;
+  const visit = (i: number) => {
+    if (!seen[i] && solid(i)) {
+      seen[i] = 1;
+      stack[top++] = i;
+    }
+  };
+  const flood = () => {
+    while (top > 0) {
+      const i = stack[--top];
+      const x = i % w;
+      if (x > 0) visit(i - 1);
+      if (x < w - 1) visit(i + 1);
+      if (i >= w) visit(i - w);
+      if (i < size - w) visit(i + w);
+    }
+  };
+  for (let i = 0; i < size; i++) if (foot[i] || i >= (h - 1) * w) visit(i);
+  flood();
+  for (let i = 0; i < size; i++) if (solid(i) && !seen[i]) foot[i] = 1;
 }

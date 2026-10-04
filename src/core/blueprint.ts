@@ -28,15 +28,10 @@ export interface Blueprint {
   /** What the level asked the generator to put in (core/setpieces.ts). Empty for a free painting. */
   setpieces: SetpieceSpec[];
   /**
-   * Editorial acceptance-bar override for the mountain picker (the noise-graph gate).
-   * Undefined = the bar follows spacing, exactly as always.
+   * Per-mountain height edits (the mountain graph): planned placement index -> multiple of its
+   * planned height. Undefined = the plan as seeded.
    */
-  planBar?: number;
-  /**
-   * Painted score offsets for the picker curve (the noise-graph brush), keyed
-   * by sample index. Undefined/empty = the seeded curve, exactly as always.
-   */
-  planScore?: Record<number, number>;
+  planHeights?: Record<number, number>;
   /** Vector draw commands for the art layer (empty in the Phase 0 stub). */
   draw: DrawCmd[];
   /** Background plane (same size as el): FAR_ROCK or EMPTY. Never simulated or scanned. */
@@ -168,8 +163,7 @@ export function createBlueprint(
   params: GenParams,
   dims: LevelDims,
   setpieces: SetpieceSpec[] = [],
-  planBar?: number,
-  planScore?: Record<number, number>,
+  planHeights?: Record<number, number>,
 ): Blueprint {
   return {
     seed,
@@ -181,8 +175,7 @@ export function createBlueprint(
     registry: { strokes: new Map(), waterSources: [] },
     setpieces: setpieces.map((s) => ({ ...s })),
     draw: [],
-    ...(planBar === undefined ? {} : { planBar }),
-    ...(planScore === undefined ? {} : { planScore }),
+    ...(planHeights === undefined ? {} : { planHeights }),
   };
 }
 

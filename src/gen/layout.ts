@@ -20,3 +20,6 @@ export const DEPTH = {
   /** A thin floor along the bottom (physics needs somewhere for things to land). */
   floor: 0.985,
 } as const;
+
+/** Painting units a mountain's occluder dips below its foot at the middle (where the scanner measures from). */
+export const FOOT_SKIRT = 22;

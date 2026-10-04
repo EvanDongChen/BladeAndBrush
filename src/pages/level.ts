@@ -18,7 +18,6 @@ import type { Peak } from '../core/scan';
 import { bodyCount } from '../sim/behaviors/rigid';
 import { aimEnd, aimTunables, chargeOf, drawAim, isLineAbility, lineColor } from '../sim/lineAbility';
 import { step } from '../sim/step';
-import { units } from '../gen/units';
 import { Fx } from './fx';
 import { arsenal } from './arsenal';
 import { button, h, handscroll, panel, seal, startLoop, toCell } from './ui';
@@ -71,27 +70,22 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
   let heights: Int16Array | null = null;
   const markPeaks = aboutPeaks(level.goals);
   const initial = { ...params };
-  /** Session shaping through the noise graph: free, but marks the painting changed. */
+  /** Session shaping through the mountain graph: free, but marks the painting changed. */
   let shaped = false;
-  const scrollW = units(level.dims, DEFAULT_ART_K).widthUnits;
 
-  // The noise graph replaces the height/spacing rows below (when the level
-  // offers them): edits feed back into generate() as a gate override, score
-  // offsets, and pinned mountain setpieces.
+  // The mountain graph replaces the height and spacing rows below (when the level offers either).
+  // Its edits are staged in the graph and only repaint when its Redraw button is pressed.
   const mhRule = level.params.mountainHeight;
   const spRule = level.params.spacing;
-  const showGraph =
-    (mhRule !== undefined && mhRule.visible !== false) || (spRule !== undefined && spRule.visible !== false);
+  const offered = (r: typeof mhRule) => r !== undefined && r.visible !== false;
+  const showGraph = offered(mhRule) || offered(spRule);
   const graph = noiseGraph({
     seed: () => level.seed,
     params,
     dims: level.dims,
     setpieces: () => level.setpieces ?? [],
-    locks: {
-      height: mhRule === undefined || mhRule.visible === false || mhRule.locked === true,
-      spacing: spRule === undefined || spRule.visible === false || spRule.locked === true,
-    },
-    onChange: () => {
+    locks: { height: !offered(mhRule) || mhRule?.locked === true, spacing: !offered(spRule) || spRule?.locked === true },
+    onRedraw: () => {
       shaped = true;
       regenerate();
     },
@@ -121,13 +115,12 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
   let tip = '';
 
   function regenerate(): void {
-    const ed = graph.edits();
     bp = generate(level.seed, params, {
       features: level.featuresEnabled,
-      setpieces: [...(level.setpieces ?? []), ...ed.pins.map((p) => ({ type: 'mountain', x: p.x / scrollW, ...(p.h === undefined ? {} : { height: p.h }) }))],
-      ...(ed.gate === undefined ? {} : { planBar: ed.gate }),
-      ...(Object.keys(ed.offsets).length === 0 ? {} : { planScore: ed.offsets }),
+      setpieces: level.setpieces,
+      planHeights: graph.edits().heights,
     });
+    if (showGraph) graph.sync(); // other sliders reshape the planned mountains too
     world = new World(level.dims, level.seed, { ...params });
     frontier = new Frontier(bp);
     driver = new ActionDriver();
@@ -374,7 +367,7 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
   );
 
   bar.selectIndex(0); // start with the first ability selected
-  if (showGraph) graph.sync(); // canvas has layout now; draw the wave at full width
+  if (showGraph) graph.sync(); // canvas has layout now; draw at full width
   let frames = 0;
   const stop = startLoop(
     clock,

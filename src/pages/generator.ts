@@ -12,7 +12,6 @@ import { DEFAULT_ART_K } from '../gen/artState';
 import { generate } from '../gen/generate';
 import { Frontier } from '../gen/frontier';
 import { scan } from '../gen/scan';
-import { units } from '../gen/units';
 import { noiseGraph } from './noiseGraph';
 import { step } from '../sim/step';
 import {
@@ -49,29 +48,20 @@ export function mountGenerator(root: HTMLElement): () => void {
   const status = h('div', { class: 'status' });
   const readout = metricReadout();
 
-  const scrollW = units(DEFAULT_DIMS, DEFAULT_ART_K).widthUnits;
-
-  // The noise graph replaces the mountain-height and spacing sliders: edits
-  // feed back into generate() as a gate override plus pinned mountain
-  // setpieces, so the wave manipulates this seed's mountains directly.
+  // The mountain graph replaces the mountain-height and spacing sliders: its edits are staged in the graph
+  // and only reach generate() when its Redraw button is pressed.
   const graph = noiseGraph({
     seed: () => seed,
     params,
     setpieces: () => setpieces,
-    onChange: () => rebuild(),
+    onRedraw: () => rebuild(),
   });
 
   function rebuild(): void {
-    const ed = graph.edits();
-    const pins = ed.pins.map((p) => ({ type: 'mountain', x: p.x / scrollW, ...(p.h === undefined ? {} : { height: p.h }) }));
-    bp = generate(seed, params, {
-      features: toggles,
-      setpieces: [...setpieces, ...pins],
-      ...(ed.gate === undefined ? {} : { planBar: ed.gate }),
-      ...(Object.keys(ed.offsets).length === 0 ? {} : { planScore: ed.offsets }),
-    });
+    bp = generate(seed, params, { features: toggles, setpieces, planHeights: graph.edits().heights });
     world = new World(DEFAULT_DIMS, seed, params);
     frontier = new Frontier(bp, columnsPerTick);
+    graph.sync(); // other sliders reshape the planned mountains too
     if (!playback) frontier.revealAll(world);
   }
 
@@ -176,7 +166,7 @@ export function mountGenerator(root: HTMLElement): () => void {
         'aside',
         { class: 'controls' },
         panel('Seed', h('div', { class: 'row' }, seedInput, randomize), h('label', { class: 'row' }, h('span', {}, 'Level'), levelSelect)),
-        panel('Mountains', graph.node, h('div', { class: 'row' }, button('Regenerate', rebuild))),
+        panel('Mountains', graph.node),
         panel('Params', sliders),
         panel('Features', featureToggles(toggles, rebuild)),
         panel(
@@ -201,7 +191,7 @@ export function mountGenerator(root: HTMLElement): () => void {
   );
 
   let frame = 0;
-  graph.sync(); // canvas has layout now; draw the wave at full column width
+  graph.sync(); // canvas has layout now; draw at full column width
   const stop = startLoop(clock, () => {
     renderer.draw(world, { frontierX: frontier.done ? undefined : frontier.x, art: artView(bp) });
     if (frame++ % 10 === 0) {

@@ -55,6 +55,19 @@ export function minGap(spacing: number): number {
   return lerp(150, 700, Math.min(1, Math.max(0, spacing)));
 }
 
+const APART_MIN = 260;
+const APART_MAX = 700;
+
+/** Least distance between mountain-group centres for a 0..1 spacing, painting units. */
+export function groupApart(spacing: number): number {
+  return lerp(APART_MIN, APART_MAX, Math.min(1, Math.max(0, spacing)));
+}
+
+/** The spacing (0..1) that keeps mountain groups `apart` painting units apart; groupApart's inverse. */
+export function spacingForApart(apart: number): number {
+  return Math.min(1, Math.max(0, (apart - APART_MIN) / (APART_MAX - APART_MIN)));
+}
+
 /** Step-1 inputs of the near-row picker, as pure data. */
 export interface ScoreCurve {
   /** Sample positions, painting units. */
@@ -68,19 +81,10 @@ export interface ScoreCurve {
 }
 
 /**
- * The soundwave the planner picks peaks from. Pure: same (seed, spacing,
- * width) gives the same curve, and makePlan() below consumes exactly this,
- * so pages can draw the same curve the mountains come from. Editorial
- * overrides (the noise-graph gate) pass barOver; otherwise the bar follows
- * spacing, exactly as before.
+ * The noise curve the planner picks peaks from. Pure: same (seed, spacing,
+ * width) gives the same curve, and makePlan() below consumes exactly this.
  */
-export function scoreCurve(
-  seed: number,
-  spacing: number,
-  widthUnits: number,
-  barOver?: number,
-  scoreOver?: Record<number, number>,
-): ScoreCurve {
+export function scoreCurve(seed: number, spacing: number, widthUnits: number): ScoreCurve {
   const noise = createNoise(hashSeed(seed, 'plan', 'noise'));
   const sp = Math.min(1, Math.max(0, spacing));
   const samp = 0.03 * lerp(1.35, 0.7, sp);
@@ -93,21 +97,14 @@ export function scoreCurve(
     lo = Math.min(lo, v);
     hi = Math.max(hi, v);
   }
-  // Painted offsets (the noise-graph brush) nudge samples after normalize,
-  // clamped to the same 0..1 range. Keyed by sample index; the grid depends
-  // only on the scroll width, so keys stay stable while spacing changes.
-  const score = raw.map((v, i) => {
-    const s = hi > lo ? (v - lo) / (hi - lo) : 0;
-    const d = scoreOver?.[i] ?? 0;
-    return Math.min(1, Math.max(0, s + d));
-  });
-  return { xs, score, bar: barOver ?? lerp(0.72, 0.86, sp), minApart: lerp(260, 700, sp) };
+  const score = raw.map((v) => (hi > lo ? (v - lo) / (hi - lo) : 0));
+  return { xs, score, bar: lerp(0.72, 0.86, sp), minApart: groupApart(sp) };
 }
 
 /**
  * Greedy highest-first picks from a score curve: every pick at or above the
  * bar, kept minApart apart (and away from `forced`, which are kept as-is).
- * Pure; shared by makePlan() and the noise-graph widget.
+ * Pure.
  */
 export function pickPeaks(curve: ScoreCurve, forced: number[] = []): number[] {
   const { xs, score, bar, minApart } = curve;
@@ -133,8 +130,7 @@ export function makePlan(
   params: GenParams,
   u: Units,
   hints?: PlanHints,
-  barOver?: number,
-  scoreOver?: Record<number, number>,
+  heights?: Record<number, number>,
 ): Placement[] {
   const rng = new Rng(hashSeed(seed, 'plan'));
   const noise = createNoise(hashSeed(seed, 'plan', 'noise'));
@@ -162,7 +158,7 @@ export function makePlan(
 
   // 1. Where mountains rise: high points of a noise curve along x. Tighter spacing = a faster
   //    curve and a lower bar, so more of them.
-  const curve = scoreCurve(seed, params.spacing, W, barOver, scoreOver);
+  const curve = scoreCurve(seed, params.spacing, W);
   const peaks = pickPeaks(curve, forced);
 
   // 2. At each, a stack of mountains at several depths (feet every 30 units from the back), jittered
@@ -238,9 +234,19 @@ export function makePlan(
     });
   }
 
-  out.forEach((q, i) => (q.seed = hashSeed(seed, 'mount', i)));
+  out.forEach((q, i) => {
+    q.seed = hashSeed(seed, 'mount', i);
+    // Per-mountain height edits (the mountain graph). Applied last so nothing above (which only
+    // reads widths and positions) moves: the other mountains stay exactly where they were.
+    const scale = heights?.[i];
+    if (scale !== undefined) q.height *= Math.min(MAX_HEIGHT_SCALE, Math.max(MIN_HEIGHT_SCALE, scale));
+  });
   return out;
 }
+
+/** Range of a per-mountain height edit, as a multiple of the planned height. */
+export const MIN_HEIGHT_SCALE = 0.1;
+export const MAX_HEIGHT_SCALE = 4;
 
 const cache = new WeakMap<Blueprint, Placement[]>();
 
@@ -248,7 +254,7 @@ const cache = new WeakMap<Blueprint, Placement[]>();
 export function planOf(bp: Blueprint): Placement[] {
   let pl = cache.get(bp);
   if (!pl) {
-    pl = makePlan(bp.seed, bp.params, artOf(bp).u, hintsOf(bp), bp.planBar, bp.planScore);
+    pl = makePlan(bp.seed, bp.params, artOf(bp).u, hintsOf(bp), bp.planHeights);
     cache.set(bp, pl);
   }
   return pl;

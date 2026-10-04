@@ -69,7 +69,7 @@ describe('far row', () => {
   });
 });
 
-describe('noise graph', () => {
+describe('mountain graph', () => {
   it('scoreCurve and pickPeaks reproduce the planner near-row picks', () => {
     const curve = scoreCurve(7, 0.5, u.widthUnits);
     expect(pickPeaks(curve)).toEqual(
@@ -80,31 +80,15 @@ describe('noise graph', () => {
     expect(Math.max(...curve.score)).toBeLessThanOrEqual(1);
   });
 
-  it('a gate override changes which peaks survive', () => {
-    const def = pickPeaks(scoreCurve(7, 0.5, u.widthUnits));
-    const all = pickPeaks(scoreCurve(7, 0.5, u.widthUnits, 0));
-    const few = pickPeaks(scoreCurve(7, 0.5, u.widthUnits, 0.99));
-    expect(all.length).toBeGreaterThanOrEqual(def.length);
-    expect(def.length).toBeGreaterThanOrEqual(few.length);
-    expect(all.length).toBeGreaterThan(few.length);
-  });
-
-  it('makePlan honors a gate override deterministically', () => {
-    const a = makePlan(7, p(), u, undefined, 0.95);
-    const b = makePlan(7, p(), u, undefined, 0.95);
-    const c = makePlan(7, p(), u);
-    expect(a).toEqual(b);
-    expect(a).not.toEqual(c);
-  });
-
-  it('painted score offsets reshape the picks deterministically', () => {
-    const base = scoreCurve(7, 0.5, u.widthUnits);
-    const over = scoreCurve(7, 0.5, u.widthUnits, undefined, { 10: 0.5, 11: 0.5 });
-    expect(over.score[10]).toBeGreaterThan(base.score[10]);
-    expect(over.score[200]).toBe(base.score[200]);
-    const a = makePlan(7, p(), u, undefined, undefined, { 10: 0.5 });
-    const b = makePlan(7, p(), u, undefined, undefined, { 10: 0.5 });
-    expect(a).toEqual(b);
-    expect(a).not.toEqual(makePlan(7, p(), u));
+  it('a height edit scales one mountain and moves nothing else', () => {
+    const base = makePlan(7, p(), u);
+    const i = base.findIndex((q) => q.kind === 'peak');
+    const edited = makePlan(7, p(), u, undefined, { [i]: 2 });
+    expect(edited).toEqual(makePlan(7, p(), u, undefined, { [i]: 2 }));
+    expect(edited[i].height).toBeCloseTo(base[i].height * 2);
+    edited.forEach((q, j) => {
+      expect(q.x).toBe(base[j].x);
+      if (j !== i) expect(q.height).toBe(base[j].height);
+    });
   });
 });

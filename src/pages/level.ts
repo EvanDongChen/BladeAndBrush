@@ -47,7 +47,7 @@ function withSoundToggle(header: HTMLElement): HTMLElement {
   return header;
 }
 
-/** A flat two seconds the painting gets after the last stroke (or the seal) before it is judged, whatever is still moving. */
+/** A flat two seconds the painting gets after the last stroke (or once every goal is met) before it is judged, whatever is still moving. */
 const SETTLE = 2 * TICK_HZ;
 
 /** Does the level ask about mountains (so the page marks the peaks it counts)? */
@@ -57,10 +57,14 @@ function aboutPeaks(goals: GoalSpec[]): boolean {
   );
 }
 
+/** Live physics knobs the player may turn at any time; they never repaint the painting. */
+const PHYSICS = ['gravity', 'wind'] as const;
+const isPhysics = (key: string) => (PHYSICS as readonly string[]).includes(key);
+
 /**
  * Player-facing level page: ?level=<id>. The player tunes the few sliders the level offers (the
- * painting repaints when one is let go), then spends the ink. When the ink is gone (or the player
- * seals the painting early) the painting settles and is judged against the poem.
+ * painting repaints when one is let go), then spends actions. When every goal is met (or the
+ * actions run out) the painting settles and is judged against the poem.
  */
 export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
   const params: GenParams = defaultParams();
@@ -73,7 +77,7 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
   let ability: AbilityId = '';
   let radius = 4;
   let used = 0; // strokes released this round
-  /** play: strokes left; settling: ink spent or sealed, waiting for things to come to rest; then judged. */
+  /** play: actions left; settling: goals met or actions spent, waiting for things to come to rest; then judged. */
   let phase: 'play' | 'settling' | 'won' | 'failed' = 'play';
   let judgeAt = 0;
   /** The peaks the scanner counts, each placed on the rock summit of its mountain (not on a tree growing there). */
@@ -107,12 +111,23 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
   const fx = new Fx();
   const status = h('div', { class: 'status' });
   const stage = h('div', { class: 'stage' });
-  // on-canvas HUD: the selected blade, the scroll rollers, and the retry banner when the ink runs out
+  // on-canvas HUD: actions left and the selected blade, the scroll rollers, and the retry banner
   const hudGlyph = h('span', { class: 'hud-glyph', 'aria-hidden': 'true' });
   const hudName = h('strong', {});
   const hudTool = h('div', { class: 'hud-tool' }, hudGlyph, hudName);
+  const actionsLeft = h('span', { class: 'actions-num' });
+  const actionsOf = h('span', { class: 'actions-of' });
+  const pips = Array.from({ length: level.actionBudget }, () => h('i', { class: 'pip' }));
+  const actions = h(
+    'div',
+    { class: 'hud-actions', role: 'status' },
+    h('span', { class: 'actions-label' }, 'Actions left'),
+    h('span', { class: 'actions-count' }, actionsLeft, actionsOf),
+    h('span', { class: 'pips' }, ...pips),
+  );
+  const hud = h('div', { class: 'hud-left' }, actions, hudTool);
   const retry = button('Try again', () => regenerate(), { class: 'hud-retry' });
-  const bannerText = h('p', {}, 'Out of ink.');
+  const bannerText = h('p', {}, 'Out of actions.');
   const banner = h('div', { class: 'hud-banner', hidden: true, role: 'status' }, bannerText, retry);
   // two rollers: one fixed at the left edge, one riding the frontier so the paper unrolls as the landscape draws
   const rollLeft = h('span', { class: 'roll', 'aria-hidden': 'true' });
@@ -126,7 +141,7 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
   const mount = h('span', { class: 'mount', 'aria-hidden': 'true' }); // the silk the painting is mounted on
   // a small gold bead on the bottom silk that follows the painting's song across the scroll
   const musicMark = h('span', { class: 'music-mark', 'aria-hidden': 'true' });
-  const frame = h('div', { class: 'frame' }, mount, canvas, hudTool, banner, stamp, rollLeft, rollLead, musicMark);
+  const frame = h('div', { class: 'frame' }, mount, canvas, hud, banner, stamp, rollLeft, rollLead, musicMark);
   let tip = '';
 
   /** Generation runs on a worker: until it answers, the old painting (or an empty scroll) stays. */
@@ -138,8 +153,9 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
     if (showGraph) graph.sync(); // other sliders reshape the planned mountains too
     const planHeights = graph.edits().heights;
     const heightsKey = JSON.stringify(planHeights);
-    // "Try again" with the same sliders (and the same mountain graph edits) reuses the painting
-    if (painted && paintedHeights === heightsKey && paramDefs.all().every((d) => painted![d.key] === params[d.key])) {
+    // "Try again" with the same sliders (and the same mountain graph edits) reuses the painting;
+    // gravity and wind only change how things move, so they never force a repaint
+    if (painted && paintedHeights === heightsKey && paramDefs.all().every((d) => isPhysics(d.key) || painted![d.key] === params[d.key])) {
       restart(bp);
       return;
     }
@@ -223,7 +239,7 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
     if (!down) return;
     driver.end();
     down = false;
-    // ink is spent when a stroke is actually made (a line too short to fire costs nothing)
+    // an action is spent when a stroke is actually made (a line too short to fire costs nothing)
     const fired = !isLineAbility(ability) || (cursor !== null && Math.hypot(cursor.x - pressedAt.x, cursor.y - pressedAt.y) >= aimTunables.minLength);
     if (!fired) return;
     used++;
@@ -253,7 +269,7 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
   radiusInput.addEventListener('input', () => setRadius(Number(radiusInput.value)));
   setRadius(radius);
 
-  // ---- poem, goals, ink ----
+  // ---- poem, goals, actions ----
   // Each poem line is a verse tied to the goal at the same position. A line with no goal of its own lights
   // up when every goal is met, and a goal with no line is listed by its description.
   const verses = Array.from({ length: Math.max(level.poem.length, level.goals.length) }, (_, i) => {
@@ -270,17 +286,23 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
   });
   // the goals are written on the painting itself, top right
   frame.append(h('ol', { class: 'inscription', 'aria-label': 'Goals' }, ...verses.map((v) => v.row)));
-  const pips = Array.from({ length: level.actionBudget }, () => h('i', { class: 'pip' }));
-  const inkCount = h('span', { class: 'ink-count' });
-  const ink = h('div', { class: 'ink', role: 'img' }, h('span', { class: 'ink-label' }, 'Ink'), h('span', { class: 'pips' }, ...pips), inkCount);
-  let shownInk = -1;
-  const showInk = () => {
+  let shownActions = -1;
+  const showActions = () => {
     const left = Math.max(0, level.actionBudget - used);
-    if (left === shownInk) return;
-    shownInk = left;
+    if (left === shownActions) return;
+    if (left < shownActions) {
+      // a short pulse each time one is spent
+      actions.classList.remove('bump');
+      void actions.offsetWidth;
+      actions.classList.add('bump');
+    }
+    shownActions = left;
     pips.forEach((p, i) => p.classList.toggle('spent', i >= left));
-    inkCount.textContent = `${left} / ${level.actionBudget}`;
-    ink.setAttribute('aria-label', `Ink left: ${left} of ${level.actionBudget}`);
+    actionsLeft.textContent = String(left);
+    actionsOf.textContent = ` / ${level.actionBudget}`;
+    actions.classList.toggle('low', left === 1);
+    actions.classList.toggle('out', left === 0);
+    actions.setAttribute('aria-label', `Actions left: ${left} of ${level.actionBudget}`);
   };
 
   // ---- victory: the player signs the painting with a name and it goes to the gallery ----
@@ -336,7 +358,7 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
   complete.node.hidden = true;
 
   /** Has the player changed anything yet? Goals the fresh painting already meets do not count. */
-  const changed = () => used > 0 || shaped || Object.keys(initial).some((k) => params[k] !== initial[k]);
+  const changed = () => used > 0 || shaped || Object.keys(initial).some((k) => !isPhysics(k) && params[k] !== initial[k]);
 
   let lastScan: ReturnType<typeof scan> | null = null;
   let lastScanWorld: World | null = null;
@@ -377,6 +399,11 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
       v.row.style.setProperty('--p', `${Math.round(progress * 100)}%`);
     }
     for (const v of verses) if (!v.goal) v.row.classList.toggle('met', all && started);
+    // every goal met: let the painting settle, then judge it (no need to spend the rest of the actions)
+    if (phase === 'play' && all && started && used > 0 && !down) {
+      finish();
+      return;
+    }
     if (phase !== 'settling' || world.tick < judgeAt) return;
     if (all && started) {
       phase = 'won';
@@ -399,10 +426,12 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
         complete!.node.hidden = false;
         complete!.open();
       }, 1100);
+    } else if (used < level.actionBudget) {
+      phase = 'play'; // it came apart while settling, but there are actions left: keep going
     } else {
       phase = 'failed';
       world.events.emit('levelFail', { levelId: level.id });
-      bannerText.textContent = used >= level.actionBudget ? 'Out of ink: the painting does not match the poem yet.' : 'The painting does not match the poem yet.';
+      bannerText.textContent = 'Out of actions: the painting does not match the poem yet.';
     }
   }
 
@@ -463,6 +492,7 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
     const rule = level.params[def.key];
     if (!rule || rule.visible === false) continue;
     if (showGraph && (def.key === 'mountainHeight' || def.key === 'spacing')) continue; // the graph covers these
+    if (isPhysics(def.key)) continue; // gravity and wind live with the abilities
     const out = h('output', {}, String(params[def.key]));
     const input = h('input', {
       type: 'range',
@@ -479,9 +509,23 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
     input.addEventListener('change', () => regenerate());
     paramRows.append(h('label', { class: 'row' }, h('span', {}, rule.label ?? def.label), input, out));
   }
-  const sealButton = button('Seal the painting', () => {
-    if (phase === 'play' && frontier.done && used > 0) finish();
-  });
+
+  // ---- nature: gravity and wind act on the live world (water, sand, smoke, rain, villagers) ----
+  const physicsRows = h('div', { class: 'rows physics' });
+  for (const key of PHYSICS) {
+    const def = paramDefs.get(key);
+    if (!def) continue;
+    const fmt = (v: number) => (key === 'wind' ? (v === 0 ? 'calm' : `${v < 0 ? '←' : '→'} ${Math.abs(v).toFixed(2)}`) : String(v));
+    const out = h('output', {}, fmt(params[key]));
+    const input = h('input', { type: 'range', min: def.min, max: def.max, step: def.step, value: params[key], 'aria-label': def.label });
+    input.addEventListener('input', () => {
+      const v = Number(input.value);
+      params[key] = v;
+      world.params[key] = v; // live: behaviors read it every tick
+      out.textContent = fmt(v);
+    });
+    physicsRows.append(h('label', { class: 'row' }, h('span', {}, def.label), input, out));
+  }
 
   stage.append(frame, status, complete.node);
   root.replaceChildren(
@@ -497,10 +541,11 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
         fixedPanel(
           'Abilities',
           bar.node,
-          ink,
           h('label', { class: 'row brush-row' }, h('span', {}, 'Brush size'), radiusInput, radiusDot),
-          // Start over wipes every cut and stroke and gives the ink back (the graph's edits stay).
-          h('div', { class: 'row' }, sealButton, button('Start over', regenerate)),
+          h('h3', { class: 'sub-head' }, 'Nature'),
+          physicsRows,
+          // Start over wipes every cut and stroke and gives the actions back (the graph's edits stay).
+          h('div', { class: 'row' }, button('Start over', regenerate)),
         ),
       ),
     ),
@@ -522,11 +567,10 @@ export function mountLevel(root: HTMLElement, level: LevelDef): () => void {
         const aim = aimEnd(pressedAt.x, pressedAt.y, cursor.x, cursor.y);
         renderer.inCells((g) => drawAim(g, ability, aim, radius, chargeOf(world.tick - pressedTick)));
       }
-      showInk();
+      showActions();
       if (frames++ % 10 === 0 && frontier.done && !pending) queueCheck();
       bar.setSpent(phase !== 'play');
       banner.hidden = phase !== 'failed';
-      sealButton.toggleAttribute('disabled', phase !== 'play' || used === 0);
       if (frontier.x !== shownX) {
         shownX = frontier.x;
         frame.style.setProperty('--p', String(frontier.x / level.dims.w));

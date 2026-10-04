@@ -1,4 +1,5 @@
 import type { World } from '../../core/world';
+import { windOf } from '../physics';
 import { PERSON } from '../elements/person';
 import {
   canPose,
@@ -59,13 +60,27 @@ const TOGETHER: Pixel[] = [...BODY, [0, 1, LEG]];
 const IDLE = 2;
 
 /**
+ * Fall: one cell per tick at the default gravity, faster when gravity is turned up, and a
+ * strong wind (stronger than the default breeze) blows a falling villager sideways.
+ */
+function fallPerson(world: World, def: CreatureDef, c: Creature): void {
+  const steps = Math.max(1, Math.round((world.params.gravity ?? 2) / 2));
+  for (let k = 0; k < steps; k++) {
+    if (groundedAt(world, def, c.x, c.y, c.frame, c.face) || !relocate(world, def, c, 0, 1)) break;
+  }
+  const wind = windOf(world);
+  const every = Math.round(6 - 5 * Math.abs(wind)); // 1 (gale) .. 6 (calm) ticks per sideways cell
+  if (Math.abs(wind) > 0.4 && world.tick % every === 0) relocate(world, def, c, wind > 0 ? 1 : -1, 0);
+}
+
+/**
  * Stroll: walk a while, stand a while, now and then turn around. Falls when the ground goes,
  * steps up small steps and down short drops, turns back at cliffs and walls, and runs away from
  * nearby fire. life = (running ? 128 : 0) | timer (ticks left in the current walk or pause).
  */
 function think(world: World, c: Creature, def: CreatureDef): void {
   if (!groundedAt(world, def, c.x, c.y, c.frame, c.face)) {
-    relocate(world, def, c, 0, 1); // fall
+    fallPerson(world, def, c);
     return;
   }
   const t = creatureTunables;

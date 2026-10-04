@@ -1,7 +1,7 @@
 import { registerBehavior } from '../../core/behaviors';
 import { El } from '../../core/elements';
 import type { World } from '../../core/world';
-import { at, BLOCKED, canSink, fall, FLAMMABILITY, FREE, K_STATIC, KIND, moveCell, REPLACEABLE, slideDiagonal } from '../physics';
+import { at, BLOCKED, canSink, fall, FLAMMABILITY, FREE, K_STATIC, KIND, moveCell, REPLACEABLE, slideDiagonal, windOf } from '../physics';
 import { defineTunables } from '../tunables';
 
 export const waterTunables = defineTunables(
@@ -25,7 +25,7 @@ export function updateWater(world: World, x: number, y: number): void {
 
   const i = y * world.w + x;
   let dir = world.vx[i];
-  if (dir === 0) dir = world.rng.chance(0.5) ? 1 : -1;
+  if (dir === 0) dir = world.rng.chance(0.5 + 0.4 * windOf(world)) ? 1 : -1; // the wind pushes still water downwind
 
   const reach = waterTunables.dispersion | 0;
   let dist = 0;

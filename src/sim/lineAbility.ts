@@ -94,7 +94,8 @@ export function lineColor(id: string): string {
 
 /**
  * Skill-shot preview on the grid-resolution canvas: the strip it will hit (as wide as the charged
- * line), the path, an arrow, and a charge meter at the start that fills while you hold.
+ * line, square-ended and outlined), the path, an arrow, and a charge bar across the start (like a
+ * sword's guard) that fills outward while you hold.
  */
 export function drawAim(g: CanvasRenderingContext2D, id: string, aim: Aim, radius: number, charge = 0): void {
   const def = defs.get(id);
@@ -105,14 +106,32 @@ export function drawAim(g: CanvasRenderingContext2D, id: string, aim: Aim, radiu
   const rgb = ok ? def.color : '80, 80, 80';
   const { r } = charged(radius, charge);
   const full = charge >= 1;
+  // unit direction and normal (pointing up when the line is still just a press)
+  const ux = len > 0 ? (x1 - x0) / len : 1;
+  const uy = len > 0 ? (y1 - y0) / len : 0;
+  const nx = -uy;
+  const ny = ux;
   g.save();
-  g.lineCap = 'round';
-  g.strokeStyle = `rgba(${rgb}, ${0.16 + 0.22 * charge})`;
-  g.lineWidth = Math.max(1, r * 2);
-  g.beginPath();
-  g.moveTo(x0, y0);
-  g.lineTo(x1, y1);
-  g.stroke();
+  if (len > 0) {
+    // the strip the line will clear: a flat-ended band with crisp edges
+    const hw = Math.max(0.5, r);
+    g.fillStyle = `rgba(${rgb}, ${0.1 + 0.16 * charge})`;
+    g.beginPath();
+    g.moveTo(x0 + nx * hw, y0 + ny * hw);
+    g.lineTo(x1 + nx * hw, y1 + ny * hw);
+    g.lineTo(x1 - nx * hw, y1 - ny * hw);
+    g.lineTo(x0 - nx * hw, y0 - ny * hw);
+    g.closePath();
+    g.fill();
+    g.strokeStyle = `rgba(${rgb}, ${0.3 + 0.3 * charge})`;
+    g.lineWidth = 0.75;
+    g.beginPath();
+    g.moveTo(x0 + nx * hw, y0 + ny * hw);
+    g.lineTo(x1 + nx * hw, y1 + ny * hw);
+    g.moveTo(x0 - nx * hw, y0 - ny * hw);
+    g.lineTo(x1 - nx * hw, y1 - ny * hw);
+    g.stroke();
+  }
   g.strokeStyle = `rgba(${rgb}, 0.9)`;
   g.lineWidth = full ? 2 : 1;
   g.setLineDash(full ? [] : [4, 3]);
@@ -122,28 +141,31 @@ export function drawAim(g: CanvasRenderingContext2D, id: string, aim: Aim, radiu
   g.stroke();
   g.setLineDash([]);
   if (ok) {
-    const ux = (x1 - x0) / len;
-    const uy = (y1 - y0) / len;
-    const s = Math.max(4, r * 1.5);
+    const s = Math.max(4, Math.min(r * 1.2, len * 0.35));
     g.fillStyle = `rgba(${rgb}, 0.9)`;
     g.beginPath();
-    g.moveTo(x1, y1);
-    g.lineTo(x1 - ux * s - uy * s * 0.6, y1 - uy * s + ux * s * 0.6);
-    g.lineTo(x1 - ux * s + uy * s * 0.6, y1 - uy * s - ux * s * 0.6);
+    g.moveTo(x1 + ux * 2, y1 + uy * 2);
+    g.lineTo(x1 - ux * s + nx * s * 0.5, y1 - uy * s + ny * s * 0.5);
+    g.lineTo(x1 - ux * s - nx * s * 0.5, y1 - uy * s - ny * s * 0.5);
     g.closePath();
     g.fill();
   }
-  // charge meter: a ring around the start that fills clockwise
-  const ring = Math.max(4, radius + 2);
-  g.lineWidth = 2;
-  g.strokeStyle = 'rgba(40, 40, 40, 0.25)';
+  // charge bar: a guard across the start of the line that fills from the middle outward
+  const guard = Math.max(4, r + 3);
+  g.lineCap = 'butt';
+  g.lineWidth = 2.5;
+  g.strokeStyle = 'rgba(40, 40, 40, 0.3)';
   g.beginPath();
-  g.arc(x0, y0, ring, 0, Math.PI * 2);
+  g.moveTo(x0 + nx * guard, y0 + ny * guard);
+  g.lineTo(x0 - nx * guard, y0 - ny * guard);
   g.stroke();
   if (charge > 0) {
+    const c = guard * charge;
+    g.lineWidth = full ? 3.5 : 2.5;
     g.strokeStyle = `rgba(${rgb}, ${full ? 1 : 0.85})`;
     g.beginPath();
-    g.arc(x0, y0, ring, -Math.PI / 2, -Math.PI / 2 + charge * Math.PI * 2);
+    g.moveTo(x0 + nx * c, y0 + ny * c);
+    g.lineTo(x0 - nx * c, y0 - ny * c);
     g.stroke();
   }
   g.restore();

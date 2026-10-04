@@ -84,7 +84,7 @@ function poemRibbon(): HTMLElement {
 const STEPS: [string, string, string, string][] = [
   ['一', 'yī', 'Read the poem', 'Each scroll opens with a few lines of verse. Every line is a goal: a lone peak, a broken moon, rain on a thirsty village.'],
   ['二', 'èr', 'Shape the painting', 'Tune the mountains, the forest and the wind. The landscape repaints itself as you let go of each slider.'],
-  ['三', 'sān', 'Take up the blade', 'Your ink is measured in strokes. Slash, burn, pour and push until the painting matches the poem, then seal it.'],
+  ['三', 'sān', 'Take up the blade', 'Every level gives you a handful of actions. Slash, burn, pour and push until the painting matches the poem.'],
 ];
 
 function howTo(): HTMLElement {

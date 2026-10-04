@@ -105,6 +105,11 @@ export function moveCell(world: World, x: number, y: number, nx: number, ny: num
   return j;
 }
 
+/** The wind, -1 (blowing left) to 1 (blowing right). Clouds, gas, rain, water and falling people lean with it. */
+export function windOf(world: World): number {
+  return Math.max(-1, Math.min(1, world.params.wind ?? 0));
+}
+
 /**
  * Accelerating fall: vy grows by 1 per tick up to world.params.gravity, and the cell drops up to
  * vy cells through free space (or one cell through a lighter fluid). Returns true if it moved.

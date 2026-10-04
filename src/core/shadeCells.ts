@@ -16,8 +16,18 @@ export interface ShadeRegion {
   animated?: Uint8Array;
 }
 
-/** A run shorter than this still gets a gentle gradient (a puddle does not go black at once). */
-const MIN_RUN = 24;
+/**
+ * Cells below the surface at which a `run` body reaches full depth. The same for every column, so
+ * neighbouring columns of one body at the same depth get the same shade (a column's own length
+ * would band the body wherever its bottom is uneven).
+ */
+const RUN_DEPTH = 32;
+/**
+ * Depth is measured from the body's surface averaged over this many columns each side: the sim
+ * leaves a water surface stepped by a cell or two, and a gradient restarting at every step would
+ * draw a vertical band down the whole body.
+ */
+const SURF_REACH = 6;
 
 const px: ShadePx = {
   x: 0, y: 0, cx: 0, cy: 0, fx: 0, fy: 0, cover: 1, v: 1, depth: 0, topEdge: false,
@@ -35,7 +45,6 @@ let sStamp = new Uint32Array(0); // isSource() answer is from this frame
 let sVal = new Uint8Array(0);
 let frameId = 0;
 let runPos = new Int16Array(0);
-let runLen = new Int16Array(0);
 const col9 = new Uint32Array(9);
 const FAM_CODE = new Uint16Array(256);
 let colMask = new Uint8Array(0);
@@ -188,21 +197,38 @@ function computeRuns(world: World, cols?: Uint8Array): boolean {
         any = true;
         if (runPos.length < world.size) {
           runPos = new Int16Array(world.size);
-          runLen = new Int16Array(world.size);
         }
       }
       const fam = FAMILY[e];
       let y1 = y;
       while (y1 + 1 < h && FAMILY[el[(y1 + 1) * w + x]] === fam && RUN[el[(y1 + 1) * w + x]]) y1++;
-      const len = y1 - y + 1;
       for (let yy = y; yy <= y1; yy++) {
         runPos[yy * w + x] = yy - y;
-        runLen[yy * w + x] = len;
       }
       y = y1 + 1;
     }
   }
   return any;
+}
+
+/**
+ * Cells below the surface for the run cell `ref`, the surface being the mean surface row of the
+ * runs of this family in the columns around it (same row), so a stepped surface does not band.
+ */
+function smoothedDepth(world: World, ref: number, fam: number): number {
+  const { w, el } = world;
+  const rx = ref % w;
+  const ry = (ref / w) | 0;
+  const row = ry * w;
+  let sum = 0;
+  let n = 0;
+  for (let x = Math.max(0, rx - SURF_REACH); x <= Math.min(w - 1, rx + SURF_REACH); x++) {
+    const ne = el[row + x];
+    if (!RUN[ne] || FAMILY[ne] !== fam) continue;
+    sum += ry - runPos[row + x]; // that column's surface row
+    n++;
+  }
+  return n > 0 ? Math.max(0, ry - sum / n) : runPos[ref];
 }
 
 /** True if compose() already drew this cell from the generator's art (so it needs no shading). */
@@ -242,14 +268,14 @@ export function shadeCells(
   frameId++;
   let runCols: Uint8Array | undefined;
   if (region) {
-    // runs only where something is drawn: the region's columns, and one more each side (spill donors)
+    // runs only where something is drawn: the region's columns, plus spill donors and the surface average each side
     if (colMask.length < w) colMask = new Uint8Array(w);
     runCols = colMask;
     runCols.fill(0, 0, w);
     for (let t = 0; t < region.tiles.length; t++) {
       if (!region.tiles[t]) continue;
       const x0 = (t % region.cols) * region.size;
-      runCols.fill(1, Math.max(0, x0 - 1), Math.min(w, x0 + region.size + 1));
+      runCols.fill(1, Math.max(0, x0 - 1 - SURF_REACH), Math.min(w, x0 + region.size + 1 + SURF_REACH));
     }
   }
   const haveRuns = computeRuns(world, runCols);
@@ -377,10 +403,9 @@ export function shadeCells(
     px.cy = cy;
     px.topEdge = (key & (1 << 12)) !== 0 && (key & (1 << 7)) === 0;
     const isRun = haveRuns && RUN[e] === 1;
-    const pos = isRun ? runPos[ref] : 0;
-    const len = isRun ? Math.max(MIN_RUN, runLen[ref]) : 1;
+    const pos = isRun ? smoothedDepth(world, ref, FAMILY[e]) : 0;
 
-    paintCell(out, sh, cov, subFor(k), k, aw, cx, cy, pos, len, useBase, refColor);
+    paintCell(out, sh, cov, subFor(k), k, aw, cx, cy, pos, isRun ? RUN_DEPTH : 1, useBase, refColor);
   }
 }
 
@@ -408,7 +433,7 @@ function paintCell(
     // the same for the whole pixel row
     px.y = cy * k + sy;
     px.fy = fy;
-    px.depth = len > 1 ? (pos + fy) / len : 0;
+    px.depth = len > 1 ? Math.min(1, (pos + fy) / len) : 0;
     for (let sx = 0; sx < k; sx++) {
       const s2 = (sy * k + sx) * 2;
       const cover = cov[s2 + 1];

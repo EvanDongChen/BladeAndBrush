@@ -27,7 +27,7 @@ export interface ShadePx {
   cover: number;
   /** Raw neighbour blend: ~1 deep inside a body, ~0.5 right on its edge. */
   v: number;
-  /** For `run` shaders: position through the body, 0 at the top of its vertical run to 1 at the bottom. */
+  /** For `run` shaders: how deep in its body, 0 at the open surface to 1 at RUN_DEPTH cells in or deeper. */
   depth: number;
   /** The cell above is not part of this body (it is a surface). */
   topEdge: boolean;
@@ -47,7 +47,7 @@ export interface Shader {
   element: string | string[];
   /** Cells of the same family merge their edges (default: the element itself). */
   family?: string;
-  /** Compute `depth` as the depth below the surface of each vertical run of the family. */
+  /** Compute `depth` as the distance through each connected body of the family to its open surface. */
   run?: boolean;
   /** The shader ignores `base` (skips the per-pixel color blending between neighbouring cells). */
   noBase?: boolean;
